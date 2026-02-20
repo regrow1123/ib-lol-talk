@@ -221,9 +221,8 @@ function renderLaneCanvas() {
 
   // Draw champions
   const drawChampion = (fighter, color, darkColor, label) => {
-    let x, y;
-    let x = posToX(fighter.position);
-    let y = laneY;
+    const x = posToX(fighter.position);
+    const y = laneY;
 
     const size = 18;
     const half = size / 2;
