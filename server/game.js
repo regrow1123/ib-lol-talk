@@ -1,5 +1,6 @@
 // Game state management + damage calculations
 import { LEE_SIN } from './champions.js';
+import { randomUUID } from 'crypto';
 
 // ── Create new game state ──
 export function createGame(difficulty = 'normal') {
@@ -41,7 +42,7 @@ export function createGame(difficulty = 'normal') {
   };
 
   return {
-    id: crypto.randomUUID(),
+    id: randomUUID(),
     turn: 0,
     phase: 'skillup',  // skillup -> play -> gameover
     difficulty,
