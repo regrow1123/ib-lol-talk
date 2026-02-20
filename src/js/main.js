@@ -26,23 +26,30 @@ function init() {
 }
 
 function renderAll() {
-  renderStatus();
-  renderSituation();
+  try { renderStatus(); } catch(e) { console.error('renderStatus:', e); }
+  try { renderSituation(); } catch(e) { console.error('renderSituation:', e); }
 
-  if (state.phase === 'skillup') {
-    renderSkillUp();
-    $('result-panel').classList.add('hidden');
+  try {
+    console.log('Phase:', state.phase);
+    if (state.phase === 'skillup') {
+      renderSkillUp();
+      $('result-panel').classList.add('hidden');
+      $('choices-panel').classList.remove('hidden');
+    } else if (state.phase === 'choice') {
+      renderChoices();
+      $('result-panel').classList.add('hidden');
+      $('choices-panel').classList.remove('hidden');
+    } else if (state.phase === 'result') {
+      renderResult();
+      $('choices-panel').classList.add('hidden');
+      $('result-panel').classList.remove('hidden');
+    } else if (state.phase === 'gameover') {
+      renderGameOver();
+    }
+  } catch(e) {
+    console.error('PHASE RENDER ERROR:', e);
+    $('choices-list').innerHTML = `<pre style="color:red">${e.message}\n${e.stack}</pre>`;
     $('choices-panel').classList.remove('hidden');
-  } else if (state.phase === 'choice') {
-    renderChoices();
-    $('result-panel').classList.add('hidden');
-    $('choices-panel').classList.remove('hidden');
-  } else if (state.phase === 'result') {
-    renderResult();
-    $('choices-panel').classList.add('hidden');
-    $('result-panel').classList.remove('hidden');
-  } else if (state.phase === 'gameover') {
-    renderGameOver();
   }
 }
 
