@@ -334,38 +334,41 @@ function renderCanvas() {
 
   const s = W / 1000; // scale factor
 
-  // ── Towers (LoL minimap style — pointy turret shape) ──
+  // ── Towers (LoL minimap style — turret shape, scaled to canvas) ──
   const drawTower = (mapX, mapY, col) => {
     const px = mapX * s, py = mapY * s;
+    const k = Math.max(1, W / 150); // scale factor for icon size
 
-    // Outer glow
+    ctx.save();
     ctx.shadowColor = col;
-    ctx.shadowBlur = 8;
+    ctx.shadowBlur = 6 * k;
 
-    // Tower body (trapezoid/turret shape)
+    // Tower body
     ctx.fillStyle = col;
     ctx.beginPath();
-    ctx.moveTo(px - 2, py + 6);    // bottom-left
-    ctx.lineTo(px - 4, py + 2);    // mid-left
-    ctx.lineTo(px - 3, py - 2);    // upper-left
-    ctx.lineTo(px, py - 7);        // top point
-    ctx.lineTo(px + 3, py - 2);    // upper-right
-    ctx.lineTo(px + 4, py + 2);    // mid-right
-    ctx.lineTo(px + 2, py + 6);    // bottom-right
+    ctx.moveTo(px - 2*k, py + 4*k);
+    ctx.lineTo(px - 3*k, py + 1*k);
+    ctx.lineTo(px - 2*k, py - 2*k);
+    ctx.lineTo(px, py - 5*k);
+    ctx.lineTo(px + 2*k, py - 2*k);
+    ctx.lineTo(px + 3*k, py + 1*k);
+    ctx.lineTo(px + 2*k, py + 4*k);
     ctx.closePath();
     ctx.fill();
 
-    // Battlements (small wings at top)
-    ctx.fillRect(px - 5, py - 3, 2, 4);
-    ctx.fillRect(px + 3, py - 3, 2, 4);
+    // Battlements
+    ctx.fillRect(px - 4*k, py - 2.5*k, 1.5*k, 3*k);
+    ctx.fillRect(px + 2.5*k, py - 2.5*k, 1.5*k, 3*k);
 
     ctx.shadowBlur = 0;
 
-    // Center dot (white)
+    // Center dot
     ctx.fillStyle = '#fff';
     ctx.beginPath();
-    ctx.arc(px, py, 1.5, 0, Math.PI * 2);
+    ctx.arc(px, py, 1.2*k, 0, Math.PI * 2);
     ctx.fill();
+
+    ctx.restore();
   };
   drawTower(RED_T1.x, RED_T1.y, '#ff4444');   // player tower (red)
   drawTower(BLUE_T1.x, BLUE_T1.y, '#4488ff'); // enemy tower (blue)
