@@ -98,6 +98,106 @@ function renderCooldowns(fighter, side) {
 
 function renderSituation() {
   $('situation-text').textContent = getSituationText(state);
+  renderLaneCanvas();
+}
+
+function renderLaneCanvas() {
+  const canvas = $('lane-canvas');
+  if (!canvas) return;
+  const ctx = canvas.getContext('2d');
+  const W = canvas.width;
+  const H = canvas.height;
+
+  ctx.clearRect(0, 0, W, H);
+
+  // Lane background
+  const laneY = H / 2;
+  const laneTop = laneY - 12;
+  const laneBot = laneY + 12;
+  const margin = 40;
+  const laneLeft = margin;
+  const laneRight = W - margin;
+  const laneW = laneRight - laneLeft;
+
+  // Lane road
+  ctx.fillStyle = '#1a2130';
+  ctx.fillRect(laneLeft, laneTop, laneW, laneBot - laneTop);
+
+  // Towers
+  ctx.fillStyle = '#3498db';
+  ctx.fillRect(laneLeft - 4, laneTop - 6, 16, laneBot - laneTop + 12);
+  ctx.fillStyle = '#e74c3c';
+  ctx.fillRect(laneRight - 12, laneTop - 6, 16, laneBot - laneTop + 12);
+
+  // Tower labels
+  ctx.font = '9px sans-serif';
+  ctx.fillStyle = '#6b7d8f';
+  ctx.textAlign = 'center';
+  ctx.fillText('아군탑', laneLeft + 4, laneTop - 10);
+  ctx.fillText('적탑', laneRight - 4, laneTop - 10);
+
+  // Bush areas (above and below lane at center)
+  const bushX = laneLeft + laneW * 0.45;
+  const bushW = laneW * 0.1;
+  ctx.fillStyle = 'rgba(46, 204, 113, 0.15)';
+  ctx.fillRect(bushX, laneTop - 28, bushW, 20);
+  ctx.fillRect(bushX, laneBot + 8, bushW, 20);
+  ctx.fillStyle = '#2ecc7155';
+  ctx.font = '8px sans-serif';
+  ctx.fillText('부쉬', bushX + bushW / 2, laneTop - 16);
+  ctx.fillText('부쉬', bushX + bushW / 2, laneBot + 22);
+
+  // Position to X coordinate (0-4 lane positions)
+  const posToX = (pos) => laneLeft + (pos / 4) * laneW;
+
+  // Draw minions
+  const drawMinions = (wave, color, yOffset) => {
+    if (!wave) return;
+    const alive = wave.filter(m => m.hp > 0);
+    alive.forEach((m, i) => {
+      const x = posToX(m.position ?? 2) + (i - alive.length / 2) * 6;
+      const y = laneY + yOffset;
+      ctx.beginPath();
+      ctx.arc(x, y, 3, 0, Math.PI * 2);
+      ctx.fillStyle = color;
+      ctx.fill();
+    });
+  };
+
+  // Player minions (blue, slightly above center)
+  drawMinions(state.minions.playerWave, '#3498db88', -4);
+  // Enemy minions (red, slightly below center)
+  drawMinions(state.minions.enemyWave, '#e74c3c88', 4);
+
+  // Draw champions
+  const drawChampion = (fighter, color, label) => {
+    let x, y;
+    if (fighter.inBush) {
+      x = bushX + bushW / 2;
+      y = laneTop - 20; // upper bush
+    } else {
+      x = posToX(fighter.position);
+      y = laneY;
+    }
+
+    // Circle
+    ctx.beginPath();
+    ctx.arc(x, y, 8, 0, Math.PI * 2);
+    ctx.fillStyle = color;
+    ctx.fill();
+    ctx.strokeStyle = '#f0e6d2';
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+
+    // Label
+    ctx.fillStyle = '#f0e6d2';
+    ctx.font = 'bold 8px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText(label, x, y + 3);
+  };
+
+  drawChampion(state.player, '#2980b9', '나');
+  drawChampion(state.enemy, '#c0392b', '적');
 }
 
 function renderChoices() {
