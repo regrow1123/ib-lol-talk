@@ -97,7 +97,6 @@ function renderCooldowns(fighter, side) {
 }
 
 function renderSituation() {
-  $('situation-text').textContent = getSituationText(state);
   renderLaneCanvas();
 }
 

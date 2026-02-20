@@ -55,23 +55,6 @@ body {
   color: var(--text-dim);
 }
 
-/* Situation */
-.situation-panel {
-  background: var(--bg-panel);
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  padding: 14px 16px;
-  font-size: 0.9em;
-  color: var(--text);
-  line-height: 1.7;
-  white-space: pre-line;
-}
-.situation-panel .turn-header {
-  color: var(--accent);
-  font-weight: 700;
-  text-align: center;
-}
-
 /* Lane Canvas */
 #lane-canvas {
   width: 100%;
