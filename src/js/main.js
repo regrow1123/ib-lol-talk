@@ -77,9 +77,6 @@ function renderStatus() {
   // Cooldowns
   renderCooldowns(p, 'player');
   renderCooldowns(e, 'enemy');
-
-  // Position
-  renderPositions();
 }
 
 function renderCooldowns(fighter, side) {
@@ -97,22 +94,6 @@ function renderCooldowns(fighter, side) {
       }
     }
   }
-}
-
-function renderPositions() {
-  const posEls = document.querySelectorAll('.lane-pos');
-  posEls.forEach(el => {
-    el.classList.remove('player-here', 'enemy-here');
-  });
-
-  const playerPosEl = $(`lane-${state.player.position}`);
-  const enemyPosEl = $(`lane-${state.enemy.position}`);
-  if (playerPosEl) playerPosEl.classList.add('player-here');
-  if (enemyPosEl) enemyPosEl.classList.add('enemy-here');
-
-  // Bush indicator
-  $('player-bush')?.classList.toggle('active', state.player.inBush);
-  $('enemy-bush')?.classList.toggle('active', state.enemy.inBush);
 }
 
 function renderSituation() {

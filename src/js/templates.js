@@ -106,10 +106,64 @@ export function getMoveNarrative(name, direction) {
   return `${name}이(가) ${DIR[direction]}으로 이동했다`;
 }
 
-export function getTurnSituation(turn, playerPos, enemyPos, minionInfo) {
-  const posNames = ['아군 타워 앞', '아군 쪽 라인', '라인 중앙', '적 쪽 라인', '적 타워 앞'];
-  const csInfo = minionInfo ? ` | 막타 가능 미니언: ${minionInfo}마리` : '';
-  return `— ${turn}번째 상황 — 위치: ${posNames[playerPos]}${csInfo}`;
+export function getTurnSituation(turn, playerPos, enemyPos, minionInfo, player, enemy) {
+  const lines = [];
+
+  // Turn header
+  lines.push(`— ${turn}번째 상황 —`);
+  lines.push('');
+
+  // Distance description
+  const dist = Math.abs(playerPos - enemyPos);
+  const posDesc = {
+    0: '아군 타워 바로 앞',
+    1: '아군 쪽 라인',
+    2: '라인 한가운데',
+    3: '적진 쪽 라인',
+    4: '적 타워 코앞',
+  };
+
+  lines.push(`당신은 ${posDesc[playerPos]}에 서 있다.`);
+
+  if (enemy && enemy.inBush) {
+    lines.push('적 리신의 모습이 보이지 않는다. 부쉬에 숨어 있는 것 같다.');
+  } else if (dist === 0) {
+    lines.push('적 리신이 바로 눈앞에 있다. 숨결이 느껴질 정도로 가깝다.');
+  } else if (dist === 1) {
+    lines.push(`적 리신이 ${posDesc[enemyPos]}에서 이쪽을 주시하고 있다. Q 사거리 안이다.`);
+  } else if (dist === 2) {
+    lines.push(`적 리신이 ${posDesc[enemyPos]}에서 멀찍이 자리를 잡고 있다. 스킬이 닿을까 말까 한 거리.`);
+  } else {
+    lines.push(`적 리신이 ${posDesc[enemyPos]}에 있다. 상당히 멀리 떨어져 있다.`);
+  }
+
+  if (player && player.inBush) {
+    lines.push('당신은 부쉬에 몸을 숨기고 있다. 적에게 보이지 않는다.');
+  }
+
+  // Minion info
+  if (minionInfo > 0) {
+    lines.push(`아군 미니언 웨이브 앞에서 적 미니언 ${minionInfo}마리의 체력이 위태롭다. 막타 타이밍이다.`);
+  } else {
+    lines.push('미니언들이 서로 부딪히며 싸우고 있다.');
+  }
+
+  // HP warnings
+  if (player) {
+    const pPct = player.hp / player.maxHp;
+    if (pPct < 0.3) lines.push('⚠️ 체력이 위험하다. 한 번의 콤보에 죽을 수 있다.');
+    else if (pPct < 0.5) lines.push('체력이 절반 아래로 떨어졌다. 조심해야 한다.');
+
+    if (player.energy < 50) lines.push('기력이 거의 바닥이다. 스킬을 함부로 쓸 수 없다.');
+  }
+
+  if (enemy) {
+    const ePct = enemy.hp / enemy.maxHp;
+    if (ePct < 0.3) lines.push('적 리신의 체력이 낮다. 킬 찬스일 수 있다!');
+    else if (ePct < 0.5) lines.push('적 리신도 체력이 많이 깎여 있다.');
+  }
+
+  return lines.join('\n');
 }
 
 export function getKillNarrative(killerName, victimName) {
