@@ -108,60 +108,55 @@ export function getMoveNarrative(name, direction) {
 
 export function getTurnSituation(turn, playerPos, enemyPos, minionInfo, player, enemy) {
   const lines = [];
-
-  // Turn header
-  lines.push(`— ${turn}번째 상황 —`);
-  lines.push('');
-
-  // Distance description
+  const posName = ['아군타워', '아군쪽', '중앙', '적쪽', '적타워'];
   const dist = Math.abs(playerPos - enemyPos);
-  const posDesc = {
-    0: '아군 타워 바로 앞',
-    1: '아군 쪽 라인',
-    2: '라인 한가운데',
-    3: '적진 쪽 라인',
-    4: '적 타워 코앞',
-  };
 
-  lines.push(`당신은 ${posDesc[playerPos]}에 서 있다.`);
+  lines.push(`— ${turn}턴 —`);
 
+  // 위치 + 거리
+  let posLine = `내 위치: ${posName[playerPos]}`;
+  if (player && player.inBush) posLine += ' (부쉬)';
+  posLine += ` | 적 위치: `;
   if (enemy && enemy.inBush) {
-    lines.push('적 리신의 모습이 보이지 않는다. 부쉬에 숨어 있는 것 같다.');
-  } else if (dist === 0) {
-    lines.push('적 리신이 바로 눈앞에 있다. 숨결이 느껴질 정도로 가깝다.');
-  } else if (dist === 1) {
-    lines.push(`적 리신이 ${posDesc[enemyPos]}에서 이쪽을 주시하고 있다. Q 사거리 안이다.`);
-  } else if (dist === 2) {
-    lines.push(`적 리신이 ${posDesc[enemyPos]}에서 멀찍이 자리를 잡고 있다. 스킬이 닿을까 말까 한 거리.`);
+    posLine += '부쉬 (시야 없음)';
   } else {
-    lines.push(`적 리신이 ${posDesc[enemyPos]}에 있다. 상당히 멀리 떨어져 있다.`);
+    posLine += posName[enemyPos];
+  }
+  posLine += ` | 거리: ${dist}칸`;
+  if (dist <= 1) posLine += ' (근접)';
+  else if (dist <= 2) posLine += ' (Q사거리)';
+  else posLine += ' (원거리)';
+  lines.push(posLine);
+
+  // 스탯
+  if (player && enemy) {
+    const pHp = Math.round(player.hp);
+    const eHp = Math.round(enemy.hp);
+    lines.push(`내 HP: ${pHp}/${player.maxHp} (${Math.round(pHp/player.maxHp*100)}%) | 기력: ${Math.round(player.energy)} | CS: ${player.cs} | ${player.gold}G`);
+    if (!enemy.inBush) {
+      lines.push(`적 HP: ${eHp}/${enemy.maxHp} (${Math.round(eHp/enemy.maxHp*100)}%) | CS: ${enemy.cs}`);
+    }
   }
 
-  if (player && player.inBush) {
-    lines.push('당신은 부쉬에 몸을 숨기고 있다. 적에게 보이지 않는다.');
-  }
-
-  // Minion info
-  if (minionInfo > 0) {
-    lines.push(`아군 미니언 웨이브 앞에서 적 미니언 ${minionInfo}마리의 체력이 위태롭다. 막타 타이밍이다.`);
-  } else {
-    lines.push('미니언들이 서로 부딪히며 싸우고 있다.');
-  }
-
-  // HP warnings
+  // 쿨다운
   if (player) {
-    const pPct = player.hp / player.maxHp;
-    if (pPct < 0.3) lines.push('⚠️ 체력이 위험하다. 한 번의 콤보에 죽을 수 있다.');
-    else if (pPct < 0.5) lines.push('체력이 절반 아래로 떨어졌다. 조심해야 한다.');
-
-    if (player.energy < 50) lines.push('기력이 거의 바닥이다. 스킬을 함부로 쓸 수 없다.');
+    const cds = Object.entries(player.cooldowns)
+      .map(([k, v]) => v > 0 ? `${k}:${v}턴` : `${k}:✓`)
+      .join(' ');
+    lines.push(`쿨다운: ${cds} | 포션: ${player.potions}개`);
   }
 
-  if (enemy) {
-    const ePct = enemy.hp / enemy.maxHp;
-    if (ePct < 0.3) lines.push('적 리신의 체력이 낮다. 킬 찬스일 수 있다!');
-    else if (ePct < 0.5) lines.push('적 리신도 체력이 많이 깎여 있다.');
+  // 미니언
+  if (minionInfo > 0) {
+    lines.push(`막타 가능 미니언: ${minionInfo}마리`);
+  } else {
+    lines.push('막타 가능 미니언 없음');
   }
+
+  // 경고
+  if (player && player.hp / player.maxHp < 0.3) lines.push('⚠️ 체력 위험');
+  if (player && player.energy < 50) lines.push('⚠️ 기력 부족');
+  if (enemy && !enemy.inBush && enemy.hp / enemy.maxHp < 0.3) lines.push('❗ 적 체력 낮음 — 킬 가능');
 
   return lines.join('\n');
 }
