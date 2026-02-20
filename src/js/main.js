@@ -274,10 +274,33 @@ function renderStatus() {
 }
 
 // ── Canvas ──
+// Minimap: full SR map, mid lane runs diagonal (bottom-left to top-right)
+// Grid x=0 (player tower) maps to ~bottom-left, x=60 (enemy tower) to ~top-right
+// y offset = perpendicular to the diagonal (for bush/lane width)
+
 let mapBg = null;
 const mapImg = new Image();
-mapImg.src = 'img/midlane.png';
+mapImg.src = 'img/minimap.png';
 mapImg.onload = () => { mapBg = mapImg; renderCanvas(); };
+
+// Convert game grid (x: 0-60 along mid lane, y: 0-24 perpendicular) to minimap pixel coords
+// Mid lane: from ~(190, 810) [blue tower] to ~(810, 190) [red tower] on 1000x1000
+const MID_START = { x: 190, y: 810 }; // player tower (grid x=0)
+const MID_END   = { x: 810, y: 190 }; // enemy tower (grid x=60)
+
+function gridToMap(gx, gy, mapSize) {
+  const t = gx / 60; // 0..1 along mid lane
+  // Main axis (along mid lane)
+  const mx = MID_START.x + t * (MID_END.x - MID_START.x);
+  const my = MID_START.y + t * (MID_END.y - MID_START.y);
+  // Perpendicular offset (y: 12 = center, 0 = "left" of lane, 24 = "right")
+  // Perpendicular direction to the diagonal: (1,1)/sqrt(2) normalized
+  const perpScale = 2.5; // pixels per grid unit perpendicular
+  const offset = (gy - 12) * perpScale;
+  const px = (mx + offset) * (mapSize / 1000);
+  const py = (my + offset) * (mapSize / 1000);
+  return { x: px, y: py };
+}
 
 function renderCanvas() {
   const canvas = $('lane-canvas');
@@ -286,84 +309,99 @@ function renderCanvas() {
   const W = canvas.width, H = canvas.height;
   ctx.clearRect(0, 0, W, H);
 
-  // Background: midlane minimap image
+  // Draw minimap background
   if (mapBg) {
     ctx.drawImage(mapBg, 0, 0, W, H);
-    // Slight dark overlay for readability
-    ctx.fillStyle = 'rgba(0,0,0,0.3)';
-    ctx.fillRect(0, 0, W, H);
   } else {
     ctx.fillStyle = '#0d1117';
     ctx.fillRect(0, 0, W, H);
   }
 
-  // Grid → pixel mapping (champions move on 60x24 grid)
-  const pad = 35;
-  const gx = x => pad + (x/60) * (W - pad*2);
-  const gy = y => 8 + (y/24) * (H - 16);
+  // LoL-style minimap icons
 
-  // Tower indicators (subtle)
-  const drawT = (x, y, col, lbl) => {
-    const px = gx(x), py = gy(y);
-    // Glow
-    ctx.shadowColor = col;
-    ctx.shadowBlur = 8;
+  // Tower dots
+  const drawTower = (gx, gy, col) => {
+    const p = gridToMap(gx, gy, W);
     ctx.fillStyle = col;
-    ctx.beginPath(); ctx.arc(px, py, 6, 0, Math.PI*2); ctx.fill();
-    ctx.shadowBlur = 0;
-    // Label
-    ctx.fillStyle = '#fff';
-    ctx.font = 'bold 7px sans-serif';
-    ctx.textAlign = 'center';
-    ctx.fillText(lbl, px, py - 12);
-  };
-  drawT(3, 12, '#3498db', '아군 타워');
-  drawT(57, 12, '#e74c3c', '적 타워');
-
-  // Champions (circles with glow)
-  const drawC = (f, col, lbl) => {
-    const px = gx(f.x), py = gy(f.y);
-    const r = 8;
-
-    // Outer glow
     ctx.shadowColor = col;
-    ctx.shadowBlur = 10;
-    ctx.strokeStyle = col;
-    ctx.lineWidth = 2.5;
-    ctx.beginPath(); ctx.arc(px, py, r, 0, Math.PI*2); ctx.stroke();
-    ctx.shadowBlur = 0;
-
-    // Fill
-    ctx.fillStyle = col + '44';
-    ctx.beginPath(); ctx.arc(px, py, r, 0, Math.PI*2); ctx.fill();
-
-    // HP arc
-    const pct = f.hp / f.maxHp;
-    const hpCol = pct > 0.5 ? '#2ecc71' : pct > 0.25 ? '#f39c12' : '#e74c3c';
-    ctx.strokeStyle = hpCol;
-    ctx.lineWidth = 2.5;
+    ctx.shadowBlur = 6;
+    // Tower: small filled triangle/diamond like LoL minimap
     ctx.beginPath();
-    ctx.arc(px, py, r + 4, -Math.PI/2, -Math.PI/2 + Math.PI*2*pct);
-    ctx.stroke();
-
-    // Label
-    ctx.fillStyle = '#fff';
-    ctx.font = 'bold 8px sans-serif';
-    ctx.textAlign = 'center';
-    ctx.fillText(lbl, px, py + 3);
+    ctx.moveTo(p.x, p.y - 5);
+    ctx.lineTo(p.x + 4, p.y + 3);
+    ctx.lineTo(p.x - 4, p.y + 3);
+    ctx.closePath();
+    ctx.fill();
+    ctx.shadowBlur = 0;
   };
-  drawC(state.player, '#3498db', '나');
-  drawC(state.enemy, '#e74c3c', '적');
+  drawTower(3, 12, '#00ccff');   // player tower (blue)
+  drawTower(57, 12, '#ff4444');  // enemy tower (red)
 
-  // Distance info
+  // Minion dots (small circles, like LoL minimap)
+  const drawMinion = (gx, gy, col) => {
+    const p = gridToMap(gx, gy, W);
+    ctx.fillStyle = col;
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, 1.5, 0, Math.PI * 2);
+    ctx.fill();
+  };
+
+  // Simulated minion positions (will come from server state later)
+  // Player minions (blue) cluster near clash point
+  const rng = seededRng(state.turn);
+  for (let i = 0; i < 6; i++) {
+    const mx = 28 - rng() * 4;
+    const my = 11 + rng() * 2;
+    drawMinion(mx, my, '#5599ff');
+  }
+  // Enemy minions (red)
+  for (let i = 0; i < 6; i++) {
+    const mx = 32 + rng() * 4;
+    const my = 11 + rng() * 2;
+    drawMinion(mx, my, '#ff5555');
+  }
+
+  // Champion circles (like LoL minimap champion icons)
+  const drawChamp = (f, col, borderCol) => {
+    const p = gridToMap(f.x, f.y, W);
+    const r = 6;
+
+    // Border circle
+    ctx.strokeStyle = borderCol;
+    ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.arc(p.x, p.y, r, 0, Math.PI * 2); ctx.stroke();
+
+    // Filled circle
+    ctx.fillStyle = col;
+    ctx.beginPath(); ctx.arc(p.x, p.y, r - 1, 0, Math.PI * 2); ctx.fill();
+
+    // HP ring (like LoL minimap green ring around champion)
+    const pct = f.hp / f.maxHp;
+    const hpCol = pct > 0.5 ? '#00ff44' : pct > 0.25 ? '#ffaa00' : '#ff3333';
+    ctx.strokeStyle = hpCol;
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, r + 2, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * pct);
+    ctx.stroke();
+  };
+  drawChamp(state.player, '#1166cc', '#33aaff');
+  drawChamp(state.enemy, '#cc2222', '#ff4444');
+
+  // Distance overlay (bottom-right corner)
   const dist = Math.abs(state.player.x - state.enemy.x);
-  const dl = dist <= 3 ? '근접' : dist <= 9 ? 'E사거리' : dist <= 24 ? 'Q사거리' : '원거리';
-  ctx.fillStyle = 'rgba(0,0,0,0.5)';
-  ctx.fillRect(W - 110, 2, 106, 16);
-  ctx.fillStyle = '#ddd';
+  const dl = dist <= 3 ? '근접' : dist <= 9 ? 'E' : dist <= 24 ? 'Q' : '원거리';
+  ctx.fillStyle = 'rgba(0,0,0,0.6)';
+  const tw = 70, th = 14;
+  ctx.fillRect(W - tw - 4, H - th - 4, tw, th);
+  ctx.fillStyle = '#ccc';
   ctx.font = '9px sans-serif';
   ctx.textAlign = 'right';
-  ctx.fillText(`거리 ${dist} (${dl})`, W - 6, 14);
+  ctx.fillText(`${dist} (${dl})`, W - 6, H - 6);
+}
+
+function seededRng(seed) {
+  let s = seed * 16807 + 31;
+  return () => { s = (s * 16807) % 2147483647; return (s & 0xffff) / 0xffff; };
 }
 
 // ── Mock ──
