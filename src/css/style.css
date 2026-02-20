@@ -113,17 +113,16 @@ body {
   display: flex; gap: 6px; align-items: center;
   font-size: 0.58em; color: #8a9aaa; margin-top: 2px;
 }
-.cd-group { display: flex; gap: 2px; margin-left: auto; }
-.cd {
+.info-tags { display: flex; gap: 3px; margin-left: auto; }
+.tag {
   padding: 1px 4px;
   background: #243040;
-  color: #c89b3c;
   border: 1px solid #2a3a4a;
-  border-radius: 2px;
-  font-size: 0.95em;
-  font-weight: 700;
+  border-radius: 3px;
+  font-size: 0.85em;
 }
-.cd.on-cd { color: var(--red); opacity: 0.35; }
+.tag.on-cd { opacity: 0.3; }
+.tag.rune-tag { background: #2a2040; border-color: #3a2a5a; }
 
 /* ── Chat Feed ── */
 .chat-feed {

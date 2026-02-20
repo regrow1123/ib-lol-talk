@@ -335,14 +335,22 @@ function renderStatus() {
 
   $('turn-text').textContent = `${state.turn}턴`;
 
-  for (const [pre,f] of [['p',p],['e',e]]) {
-    for (const s of ['Q','W','E','R']) {
-      const el = $(`${pre}-cd-${s.toLowerCase()}`);
-      const lv = f.skillLevels[s], cd = f.cooldowns[s];
-      if (lv === 0) { el.textContent = s; el.className = 'cd on-cd'; }
-      else if (cd > 0) { el.textContent = `${s}${lv}:${cd}`; el.className = 'cd on-cd'; }
-      else { el.textContent = `${s}${lv}`; el.className = 'cd'; }
-    }
+  const spellIcons = { flash:'⚡', ignite:'🔥', exhaust:'💨', barrier:'🛡️', tp:'🌀' };
+  const runeIcons = { conqueror:'⚔️', electrocute:'⚡', grasp:'🌿' };
+  const spellNames = { flash:'점멸', ignite:'점화', exhaust:'탈진', barrier:'방어막', tp:'순이' };
+  const runeNames = { conqueror:'정복자', electrocute:'감전', grasp:'착취' };
+
+  for (const [pre, f] of [['p', p], ['e', e]]) {
+    const tags = $(`${pre}-tags`);
+    if (!tags) continue;
+    const spell2 = f.spells?.second || 'ignite';
+    const rune = f.rune || 'conqueror';
+    const flashCd = f.spellCooldowns?.flash || 0;
+    const spellCd = f.spellCooldowns?.second || 0;
+    tags.innerHTML =
+      `<span class="tag${flashCd > 0 ? ' on-cd' : ''}">${spellIcons.flash}</span>` +
+      `<span class="tag${spellCd > 0 ? ' on-cd' : ''}">${spellIcons[spell2] || '?'}</span>` +
+      `<span class="tag rune-tag">${runeIcons[rune] || '?'}</span>`;
   }
 }
 
