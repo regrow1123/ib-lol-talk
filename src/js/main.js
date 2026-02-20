@@ -9,7 +9,7 @@ let gameId = null;
 let state = null;
 let sending = false;
 let drawerOpen = false;
-let setupChoices = { spell: null, rune: null, difficulty: 'normal' };
+let setupChoices = { spell: null, rune: null };
 
 // ── Setup Screen ──
 function initSetup() {
@@ -35,15 +35,6 @@ function initSetup() {
     };
   });
 
-  // Difficulty selection
-  document.querySelectorAll('#diff-grid .diff-card').forEach(el => {
-    el.onclick = () => {
-      document.querySelectorAll('#diff-grid .diff-card').forEach(c => c.classList.remove('selected'));
-      el.classList.add('selected');
-      setupChoices.difficulty = el.dataset.diff;
-    };
-  });
-
   $('setup-start-btn').onclick = async () => {
     $('setup-start-btn').disabled = true;
     $('setup-start-btn').textContent = '로딩...';
@@ -64,7 +55,6 @@ async function startGame() {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        difficulty: setupChoices.difficulty,
         spell: setupChoices.spell,
         rune: setupChoices.rune,
       }),
