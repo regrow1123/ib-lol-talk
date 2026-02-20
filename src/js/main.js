@@ -209,15 +209,9 @@ function renderLaneCanvas() {
       const size = isMelee ? 8 : 7;
 
       ctx.globalAlpha = 0.4 + hpRatio * 0.5;
-      ctx.fillStyle = baseColor;
-      ctx.fillRect(x - size/2, y - size/2, size, size);
-
-      // Low HP indicator (막타 가능)
-      if (m.hp <= 80) {
-        ctx.strokeStyle = '#f1c40f';
-        ctx.lineWidth = 1.5;
-        ctx.strokeRect(x - size/2, y - size/2, size, size);
-      }
+      ctx.strokeStyle = m.hp <= 80 ? '#f1c40f' : baseColor;
+      ctx.lineWidth = 1.5;
+      ctx.strokeRect(x - size/2, y - size/2, size, size);
 
       ctx.globalAlpha = 1;
     });
@@ -240,17 +234,10 @@ function renderLaneCanvas() {
     const size = 18;
     const half = size / 2;
 
-    // Shadow
-    ctx.fillStyle = 'rgba(0,0,0,0.3)';
-    ctx.fillRect(x - half + 2, y - half + 2, size, size);
-
-    // Outer (dark)
-    ctx.fillStyle = darkColor;
-    ctx.fillRect(x - half - 1, y - half - 1, size + 2, size + 2);
-
-    // Inner
-    ctx.fillStyle = color;
-    ctx.fillRect(x - half, y - half, size, size);
+    // Outer border
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 2.5;
+    ctx.strokeRect(x - half, y - half, size, size);
 
     // HP bar above
     const hpPct = fighter.hp / fighter.maxHp;
