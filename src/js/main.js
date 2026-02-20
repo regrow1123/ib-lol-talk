@@ -413,15 +413,7 @@ function renderCanvas() {
   drawChamp(state.player, '#ff3333');  // player = red team
   drawChamp(state.enemy, '#00aaff');   // enemy = blue team
 
-  // ── Distance overlay ──
-  const dist = Math.abs(state.player.x - state.enemy.x);
-  const dl = dist <= 3 ? '근접' : dist <= 9 ? 'E' : dist <= 24 ? 'Q' : '원거리';
-  ctx.fillStyle = 'rgba(0,0,0,0.6)';
-  ctx.fillRect(W - 74, H - 18, 70, 16);
-  ctx.fillStyle = '#ccc';
-  ctx.font = '9px sans-serif';
-  ctx.textAlign = 'right';
-  ctx.fillText(`${dist} (${dl})`, W - 6, H - 6);
+  // (distance info moved to status area)
 }
 
 function seededRng(seed) {
