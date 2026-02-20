@@ -39,7 +39,7 @@ export function chooseAction(actions, aiState, playerState) {
     // Movement
     if (action.type === 'move') {
       if (action.direction === 'back' && hpRatio < 0.3) w += 5;
-      if (action.direction === 'bush' && hpRatio < 0.4) w += 3;
+      // bush removed
       // Some randomness through position preference
       if (action.direction === 'left' || action.direction === 'right') w += 1;
     }

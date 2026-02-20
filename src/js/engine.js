@@ -26,7 +26,6 @@ export function createFighter(name, position) {
     q1Hit: false, e1Hit: false, w1Used: false,
     lifestealBuff: 0,
     slowed: 0,
-    inBush: false,
     items: ['doransBlade'],
   };
 }

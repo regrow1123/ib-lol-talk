@@ -13,7 +13,7 @@ export function generateActions(fighter, opponent, minions, csWave) {
   const hasCSMinion = hasLastHittable(csWave);
 
   // 1. Attack actions with direction (Q1 skillshot)
-  if (fighter.skillLevels.Q > 0 && fighter.energy >= 50 && fighter.cooldowns.Q <= 0 && dist <= 2 && !opponent.inBush) {
+  if (fighter.skillLevels.Q > 0 && fighter.energy >= 50 && fighter.cooldowns.Q <= 0 && dist <= 2) {
     for (const dir of DIRECTIONS) {
       actions.push({
         id: `Q1_${dir}`,
@@ -35,7 +35,7 @@ export function generateActions(fighter, opponent, minions, csWave) {
   }
 
   // E1 (AOE - no direction needed, hits adjacent)
-  if (fighter.skillLevels.E > 0 && fighter.energy >= 50 && fighter.cooldowns.E <= 0 && dist <= 1 && !opponent.inBush) {
+  if (fighter.skillLevels.E > 0 && fighter.energy >= 50 && fighter.cooldowns.E <= 0 && dist <= 1) {
     actions.push({
       id: 'E1',
       type: 'attack', skill: 'E1', direction: 'aoe',
@@ -55,7 +55,7 @@ export function generateActions(fighter, opponent, minions, csWave) {
   }
 
   // AA (targeted melee, no direction — auto-hits if adjacent)
-  if (dist <= 1 && !opponent.inBush) {
+  if (dist <= 1) {
     actions.push({
       id: 'AA',
       type: 'attack', skill: 'AA', direction: 'targeted',
@@ -85,7 +85,7 @@ export function generateActions(fighter, opponent, minions, csWave) {
   }
 
   // R (targeted, adjacent, level 6+)
-  if (fighter.skillLevels.R > 0 && fighter.cooldowns.R <= 0 && dist <= 1 && !opponent.inBush) {
+  if (fighter.skillLevels.R > 0 && fighter.cooldowns.R <= 0 && dist <= 1) {
     actions.push({
       id: 'R',
       type: 'attack', skill: 'R', direction: 'targeted',
@@ -116,7 +116,7 @@ export function generateActions(fighter, opponent, minions, csWave) {
   if (fighter.position < 4) moveDirs.push('forward');
   if (fighter.position > 0) moveDirs.push('back');
   moveDirs.push('left', 'right');
-  if (!fighter.inBush) moveDirs.push('bush');
+  // bush removed
 
   for (const dir of moveDirs) {
     actions.push({
@@ -176,7 +176,7 @@ function processAction(myAction, theirAction, me, them, myMicro, theirMicro, res
       // Passive trigger
       me.passiveStacks = 2;
     } else {
-      const reason = theirAction.type === 'move' && theirAction.direction === 'bush' ? 'bush' : 'dodge';
+      const reason = 'dodge';
       results.narratives.push(templates.getMissNarrative(myName, myAction.skill, reason));
       applyEnergyCost(me, myAction);
       applyCooldown(me, myAction);
@@ -200,8 +200,7 @@ function processAction(myAction, theirAction, me, them, myMicro, theirMicro, res
   } else if (myAction.type === 'move') {
     if (myAction.direction === 'forward' && me.position < 4) me.position++;
     else if (myAction.direction === 'back' && me.position > 0) me.position--;
-    else if (myAction.direction === 'bush') me.inBush = true;
-    if (myAction.direction !== 'bush') me.inBush = false;
+    // bush removed
     results.narratives.push(templates.getMoveNarrative(myName, myAction.direction));
   } else if (myAction.type === 'defense') {
     if (myAction.skill === 'W1') {
@@ -233,10 +232,7 @@ function processAction(myAction, theirAction, me, them, myMicro, theirMicro, res
 function checkHit(attackAction, defenseAction, defenderMicro) {
   const skill = attackAction.skill;
 
-  // Bush always dodges
-  if (defenseAction.type === 'move' && defenseAction.direction === 'bush') return false;
-
-  // Targeted skills (AA, R): only bush and flash dodge
+  // Targeted skills (AA, R): only flash dodges
   if (skill === 'AA' || skill === 'R' || skill === 'Q2') {
     if (defenseAction.type === 'move' && defenseAction.direction === 'back') {
       return false; // retreat out of range
@@ -246,7 +242,7 @@ function checkHit(attackAction, defenseAction, defenderMicro) {
 
   // E1 (AOE): left/right don't dodge, only back/bush
   if (skill === 'E1') {
-    if (defenseAction.type === 'move' && (defenseAction.direction === 'back' || defenseAction.direction === 'bush')) {
+    if (defenseAction.type === 'move' && defenseAction.direction === 'back') {
       return false;
     }
     return true; // AOE hits

@@ -2,7 +2,7 @@
 
 // Direction labels
 const DIR = {
-  center: '제자리', left: '왼쪽', right: '오른쪽', back: '뒤쪽', forward: '앞쪽', bush: '부쉬'
+  center: '제자리', left: '왼쪽', right: '오른쪽', back: '뒤쪽', forward: '앞쪽'
 };
 
 const DIR_PREDICTION = {
@@ -51,7 +51,6 @@ export function getMoveChoiceText(direction) {
     right: '적의 공격이 올 것 같아 오른쪽으로 몸을 뺀다',
     back: '위험을 느끼고 뒤쪽으로 물러선다',
     forward: '대담하게 앞으로 걸어가며 압박을 건다',
-    bush: '부쉬 쪽으로 이동해 시야를 끊는다',
   };
   return texts[direction] || `${DIR[direction]}으로 이동한다`;
 }
@@ -88,7 +87,6 @@ export function getMissNarrative(attackerName, skill, reason) {
   };
   const reasons = {
     dodge: '빗나갔다!',
-    bush: '부쉬에 숨은 적을 찾지 못했다!',
     range: '사거리 밖이다!',
   };
   return `${attackerName}의 ${skillText[skill] || skill} ${reasons[reason] || '빗나갔다!'}`;
@@ -115,10 +113,7 @@ export function getTurnSituation(turn, playerPos, enemyPos, minionInfo, player, 
 
   // 챔피언 위치
   let posLine = `나: ${posName[playerPos]}`;
-  if (player && player.inBush) posLine += '(부쉬)';
-  posLine += ` | 적: `;
-  if (enemy && enemy.inBush) posLine += '부쉬(시야없음)';
-  else posLine += posName[enemyPos];
+  posLine += ` | 적: ${posName[enemyPos]}`;
   posLine += ` | 거리 ${dist}칸`;
   lines.push(posLine);
 

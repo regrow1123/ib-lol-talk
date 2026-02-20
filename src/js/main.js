@@ -177,26 +177,6 @@ function renderLaneCanvas() {
   drawTower(laneLeft - 5, '#3498db', '아군 타워');
   drawTower(laneRight + 5, '#e74c3c', '적 타워');
 
-  // Bush areas
-  const drawBush = (cx, cy, w, h) => {
-    ctx.fillStyle = 'rgba(46, 204, 113, 0.08)';
-    ctx.beginPath();
-    ctx.roundRect(cx - w/2, cy - h/2, w, h, 6);
-    ctx.fill();
-    ctx.strokeStyle = 'rgba(46, 204, 113, 0.2)';
-    ctx.lineWidth = 1;
-    ctx.stroke();
-    // Grass marks
-    ctx.fillStyle = 'rgba(46, 204, 113, 0.25)';
-    ctx.font = '10px sans-serif';
-    ctx.textAlign = 'center';
-    ctx.fillText('🌿', cx, cy + 4);
-  };
-
-  const bushCX = laneLeft + laneW * 0.48;
-  drawBush(bushCX, laneY - laneHalfH - 25, laneW * 0.12, 30);
-  drawBush(bushCX, laneY + laneHalfH + 25, laneW * 0.12, 30);
-
   // Position to X coordinate (0-4)
   const posToX = (pos) => laneLeft + 20 + (pos / 4) * (laneW - 40);
 
@@ -232,13 +212,8 @@ function renderLaneCanvas() {
   // Draw champions
   const drawChampion = (fighter, color, darkColor, label) => {
     let x, y;
-    if (fighter.inBush) {
-      x = bushCX;
-      y = laneY - laneHalfH - 25;
-    } else {
-      x = posToX(fighter.position);
-      y = laneY;
-    }
+    let x = posToX(fighter.position);
+    let y = laneY;
 
     const size = 18;
     const half = size / 2;
