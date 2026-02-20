@@ -292,14 +292,14 @@ champImg.onload = () => { champIcon = champImg; renderCanvas(); };
 // Tower drawn directly on canvas (LoL minimap style)
 
 // Player = RED team (top-right), Enemy = BLUE team (bottom-left)
-// Mid lane 1st tower positions on 1000x1000 minimap
-const RED_T1  = { x: 660, y: 340 }; // player tower
-const BLUE_T1 = { x: 340, y: 660 }; // enemy tower
+// Mid lane 1st tower positions on 1000x1000 reference
+const RED_T1  = { x: 605, y: 400 }; // player tower (red mid T1)
+const BLUE_T1 = { x: 400, y: 605 }; // enemy tower (blue mid T1)
 
-// Lane endpoints: player(red) at top-right, enemy(blue) at bottom-left
-// grid x=0 = player tower (red, top-right), x=60 = enemy tower (blue, bottom-left)
-const MID_START = { x: 740, y: 260 }; // grid x=0 (player side)
-const MID_END   = { x: 260, y: 740 }; // grid x=60 (enemy side)
+// Lane endpoints: slightly beyond T1 towers
+// grid x=0 = player tower area (red), x=60 = enemy tower area (blue)
+const MID_START = { x: 650, y: 355 }; // grid x=0 (behind red T1)
+const MID_END   = { x: 355, y: 650 }; // grid x=60 (behind blue T1)
 
 // Perpendicular direction to mid lane (normalized)
 // Mid lane direction: (1, -1)/sqrt(2). Perpendicular: (1, 1)/sqrt(2)
