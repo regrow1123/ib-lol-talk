@@ -332,46 +332,43 @@ function renderCanvas() {
     ctx.fillRect(0, 0, W, H);
   }
 
-  const s = W / 1000; // scale factor
+  // Map coords are on 1000x1000 reference, canvas is WxH
+  const s = W / 1000;
 
-  // ── Towers (LoL minimap style — turret shape, scaled to canvas) ──
+  // ── Towers ──
   const drawTower = (mapX, mapY, col) => {
     const px = mapX * s, py = mapY * s;
-    const k = Math.max(1, W / 150); // scale factor for icon size
+    const r = W * 0.02; // 2% of canvas width
 
+    // Filled circle with glow
     ctx.save();
     ctx.shadowColor = col;
-    ctx.shadowBlur = 6 * k;
-
-    // Tower body
+    ctx.shadowBlur = r * 2;
     ctx.fillStyle = col;
     ctx.beginPath();
-    ctx.moveTo(px - 2*k, py + 4*k);
-    ctx.lineTo(px - 3*k, py + 1*k);
-    ctx.lineTo(px - 2*k, py - 2*k);
-    ctx.lineTo(px, py - 5*k);
-    ctx.lineTo(px + 2*k, py - 2*k);
-    ctx.lineTo(px + 3*k, py + 1*k);
-    ctx.lineTo(px + 2*k, py + 4*k);
-    ctx.closePath();
+    ctx.arc(px, py, r, 0, Math.PI * 2);
     ctx.fill();
-
-    // Battlements
-    ctx.fillRect(px - 4*k, py - 2.5*k, 1.5*k, 3*k);
-    ctx.fillRect(px + 2.5*k, py - 2.5*k, 1.5*k, 3*k);
-
-    ctx.shadowBlur = 0;
-
-    // Center dot
-    ctx.fillStyle = '#fff';
-    ctx.beginPath();
-    ctx.arc(px, py, 1.2*k, 0, Math.PI * 2);
-    ctx.fill();
-
     ctx.restore();
+
+    // White border
+    ctx.strokeStyle = '#fff';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.arc(px, py, r, 0, Math.PI * 2);
+    ctx.stroke();
+
+    // Cross/plus inside (turret look)
+    ctx.strokeStyle = '#fff';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.moveTo(px, py - r * 0.5);
+    ctx.lineTo(px, py + r * 0.5);
+    ctx.moveTo(px - r * 0.5, py);
+    ctx.lineTo(px + r * 0.5, py);
+    ctx.stroke();
   };
-  drawTower(RED_T1.x, RED_T1.y, '#ff4444');   // player tower (red)
-  drawTower(BLUE_T1.x, BLUE_T1.y, '#4488ff'); // enemy tower (blue)
+  drawTower(RED_T1.x, RED_T1.y, '#ff4444');
+  drawTower(BLUE_T1.x, BLUE_T1.y, '#4488ff');
 
   // ── Minions (tiny dots like real minimap) ──
   const rng = seededRng(state.turn);
