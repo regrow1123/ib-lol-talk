@@ -1,43 +1,37 @@
 // Vercel serverless: POST /api/turn
-import { clientState } from '../server/game.js';
+// Stateless — client sends full game state + input, server calls LLM + resolves
 import { interpretTurn } from '../server/llm.js';
 import { resolveTurn } from '../server/resolve.js';
-
-if (!globalThis.__games) globalThis.__games = new Map();
+import { fullState } from '../server/game.js';
 
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
   if (req.method === 'OPTIONS') return res.status(200).end();
+  if (req.method !== 'POST') return res.status(405).json({ error: 'POST only' });
 
-  if (req.method !== 'POST') {
-    return res.status(405).json({ error: 'POST only' });
+  const { gameState, input } = req.body || {};
+  if (!gameState || !input) {
+    return res.status(400).json({ error: 'gameState와 input이 필요합니다' });
   }
 
-  const { gameId, input } = req.body || {};
-  if (!gameId || !input) {
-    return res.status(400).json({ error: 'gameId와 input이 필요합니다' });
-  }
-
-  const game = globalThis.__games.get(gameId);
-  if (!game) {
-    return res.status(404).json({ error: '게임을 찾을 수 없습니다. 새 게임을 시작하세요.' });
-  }
-
-  if (game.phase === 'gameover') {
+  if (gameState.phase === 'gameover') {
     return res.json({
-      state: clientState(game),
+      state: gameState,
       narrative: '게임이 이미 종료되었습니다.',
       enemyAction: null,
     });
   }
 
   try {
-    const llmResult = await interpretTurn(game, input);
-    const { dmgLog, state } = resolveTurn(game, llmResult);
+    // LLM interprets player input + decides AI action
+    const llmResult = await interpretTurn(gameState, input);
 
-    console.log(`[${gameId.slice(0,8)}] Turn ${game.turn}: "${input}" → ${llmResult.playerAction.type} | AI=${llmResult.aiAction.type}`);
+    // Server validates and applies exact damage/state changes
+    const { dmgLog, state } = resolveTurn(gameState, llmResult);
+
+    console.log(`Turn ${gameState.turn}: "${input}" → ${llmResult.playerAction.type} | AI=${llmResult.aiAction.type}`);
 
     res.json({
       state,
@@ -47,7 +41,7 @@ export default async function handler(req, res) {
       aiAction: llmResult.aiAction.detail,
     });
   } catch (err) {
-    console.error(`[${gameId.slice(0,8)}] Error:`, err.message);
-    res.status(500).json({ error: '턴 처리 중 오류가 발생했습니다: ' + err.message });
+    console.error('Turn error:', err.message);
+    res.status(500).json({ error: '턴 처리 중 오류: ' + err.message });
   }
 }

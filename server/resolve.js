@@ -2,7 +2,7 @@
 import {
   calcQ1Damage, calcQ2Damage, calcE1Damage, calcRDamage, calcAADamage,
   applyDamage, applyShield, setCooldown, spendEnergy, tickEnergy,
-  tickCooldowns, restoreEnergy, grantXp, checkWinner, clientState,
+  tickCooldowns, restoreEnergy, grantXp, checkWinner, fullState,
 } from './game.js';
 import { LEE_SIN } from './champions.js';
 
@@ -129,7 +129,7 @@ export function resolveTurn(game, llmResult) {
 
   return {
     dmgLog,
-    state: clientState(game),
+    state: fullState(game),
   };
 }
 

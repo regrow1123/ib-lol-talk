@@ -76,7 +76,7 @@ async function submit() {
     const res = await fetch(`${API_BASE}/api/turn`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ gameId, input }),
+      body: JSON.stringify({ gameState: state, input }),
     });
     const data = await res.json();
     typing.remove();
@@ -226,24 +226,9 @@ function showSkillUp() {
     btn.disabled = !canLevel || rBlock;
 
     if (canLevel && !rBlock) {
-      btn.onclick = async () => {
-        try {
-          if (gameId) {
-            const res = await fetch(`${API_BASE}/api/skillup`, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ gameId, skill: s.key }),
-            });
-            const data = await res.json();
-            if (data.state) state = data.state;
-          } else {
-            state.player.skillLevels[s.key]++;
-            state.player.skillPoints--;
-          }
-        } catch {
-          state.player.skillLevels[s.key]++;
-          state.player.skillPoints--;
-        }
+      btn.onclick = () => {
+        state.player.skillLevels[s.key]++;
+        state.player.skillPoints--;
         renderStatus();
         if (state.player.skillPoints <= 0) {
           overlay.classList.add('hidden');

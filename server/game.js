@@ -233,7 +233,51 @@ export function checkWinner(game) {
   return null;
 }
 
-// ── Build state snapshot for frontend (no internal coords) ──
+// ── Full state (for stateless server round-trip) ──
+export function fullState(game) {
+  const full = (f) => ({
+    hp: Math.round(f.hp * 10) / 10,
+    maxHp: f.maxHp,
+    energy: Math.round(f.energy),
+    maxEnergy: f.maxEnergy,
+    ad: f.ad,
+    bonusAd: f.bonusAd,
+    armor: f.armor,
+    mr: f.mr,
+    cs: f.cs,
+    gold: f.gold,
+    level: f.level,
+    xp: f.xp,
+    shield: Math.round(f.shield),
+    shieldTimer: f.shieldTimer,
+    skillLevels: { ...f.skillLevels },
+    cooldowns: { ...f.cooldowns },
+    skillPoints: f.skillPoints,
+    marks: { ...f.marks },
+    potions: f.potions,
+    potionActive: f.potionActive,
+    potionTimer: f.potionTimer,
+    potionHpLeft: f.potionHpLeft,
+    recallUsed: f.recallUsed,
+    flashCooldown: f.flashCooldown,
+    igniteCooldown: f.igniteCooldown,
+    x: f.x, y: f.y,
+    inBush: f.inBush,
+  });
+  return {
+    turn: game.turn,
+    phase: game.phase,
+    difficulty: game.difficulty,
+    player: full(game.player),
+    enemy: full(game.enemy),
+    minions: JSON.parse(JSON.stringify(game.minions)),
+    minionWave: game.minionWave,
+    minionTimer: game.minionTimer,
+    winner: game.winner,
+  };
+}
+
+// ── Build state snapshot for frontend display ──
 export function clientState(game) {
   const strip = (f) => ({
     hp: Math.round(f.hp * 10) / 10,
