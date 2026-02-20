@@ -279,6 +279,7 @@ function renderStatus() {
 
 let mapBg = null;
 let champIcon = null;
+let towerIcon = null;
 
 const mapImg = new Image();
 mapImg.src = 'img/minimap.png';
@@ -288,14 +289,19 @@ const champImg = new Image();
 champImg.src = 'img/leesin.png';
 champImg.onload = () => { champIcon = champImg; renderCanvas(); };
 
-// Mid lane 1st tower positions on 1000x1000 minimap
-// Blue mid T1: approx (340, 660), Red mid T1: approx (660, 340)
-const BLUE_T1 = { x: 340, y: 660 };
-const RED_T1  = { x: 660, y: 340 };
+const towerImg = new Image();
+towerImg.src = 'img/tower.png';
+towerImg.onload = () => { towerIcon = towerImg; renderCanvas(); };
 
-// Lane endpoints (slightly beyond towers for full lane)
-const MID_START = { x: 260, y: 740 }; // grid x=0
-const MID_END   = { x: 740, y: 260 }; // grid x=60
+// Player = RED team (top-right), Enemy = BLUE team (bottom-left)
+// Mid lane 1st tower positions on 1000x1000 minimap
+const RED_T1  = { x: 660, y: 340 }; // player tower
+const BLUE_T1 = { x: 340, y: 660 }; // enemy tower
+
+// Lane endpoints: player(red) at top-right, enemy(blue) at bottom-left
+// grid x=0 = player tower (red, top-right), x=60 = enemy tower (blue, bottom-left)
+const MID_START = { x: 740, y: 260 }; // grid x=0 (player side)
+const MID_END   = { x: 260, y: 740 }; // grid x=60 (enemy side)
 
 // Perpendicular direction to mid lane (normalized)
 // Mid lane direction: (1, -1)/sqrt(2). Perpendicular: (1, 1)/sqrt(2)
@@ -330,30 +336,30 @@ function renderCanvas() {
 
   const s = W / 1000; // scale factor
 
-  // ── Towers (LoL style: small colored diamond/icon) ──
-  const drawTower = (mapX, mapY, col) => {
+  // ── Towers (actual LoL tower icon) ──
+  const drawTower = (mapX, mapY, tintCol) => {
     const px = mapX * s, py = mapY * s;
-    const sz = 5;
-    ctx.fillStyle = col;
-    ctx.strokeStyle = '#000';
-    ctx.lineWidth = 1;
-    // Diamond shape
-    ctx.beginPath();
-    ctx.moveTo(px, py - sz);
-    ctx.lineTo(px + sz, py);
-    ctx.lineTo(px, py + sz);
-    ctx.lineTo(px - sz, py);
-    ctx.closePath();
-    ctx.fill();
-    ctx.stroke();
-    // Small inner dot
-    ctx.fillStyle = '#fff';
-    ctx.beginPath();
-    ctx.arc(px, py, 1.5, 0, Math.PI * 2);
-    ctx.fill();
+    const sz = 14;
+    if (towerIcon) {
+      // Tint: draw icon then overlay color
+      ctx.save();
+      ctx.globalAlpha = 0.9;
+      ctx.drawImage(towerIcon, px - sz/2, py - sz/2, sz, sz);
+      ctx.globalCompositeOperation = 'source-atop';
+      ctx.fillStyle = tintCol;
+      ctx.globalAlpha = 0.4;
+      ctx.fillRect(px - sz/2, py - sz/2, sz, sz);
+      ctx.restore();
+    } else {
+      ctx.fillStyle = tintCol;
+      const d = 5;
+      ctx.beginPath();
+      ctx.moveTo(px, py-d); ctx.lineTo(px+d, py); ctx.lineTo(px, py+d); ctx.lineTo(px-d, py);
+      ctx.closePath(); ctx.fill();
+    }
   };
-  drawTower(BLUE_T1.x, BLUE_T1.y, '#00aaff');
-  drawTower(RED_T1.x, RED_T1.y, '#ff3333');
+  drawTower(RED_T1.x, RED_T1.y, '#ff4444');   // player tower (red)
+  drawTower(BLUE_T1.x, BLUE_T1.y, '#4488ff'); // enemy tower (blue)
 
   // ── Minions (tiny dots like real minimap) ──
   const rng = seededRng(state.turn);
@@ -364,13 +370,13 @@ function renderCanvas() {
     ctx.arc(p.x, p.y, 1.8, 0, Math.PI * 2);
     ctx.fill();
   };
-  // Blue minions (player side)
+  // Red minions (player side — closer to grid x=0, player tower)
   for (let i = 0; i < 6; i++) {
-    drawMinion(28 - rng() * 5, 10.5 + rng() * 3, '#4488ee');
+    drawMinion(28 - rng() * 5, 10.5 + rng() * 3, '#ee4444');
   }
-  // Red minions (enemy side)
+  // Blue minions (enemy side — closer to grid x=60, enemy tower)
   for (let i = 0; i < 6; i++) {
-    drawMinion(32 + rng() * 5, 10.5 + rng() * 3, '#ee4444');
+    drawMinion(32 + rng() * 5, 10.5 + rng() * 3, '#4488ee');
   }
 
   // ── Champions (circular portrait like real LoL minimap) ──
@@ -404,8 +410,8 @@ function renderCanvas() {
     ctx.stroke();
 
   };
-  drawChamp(state.player, '#00aaff');
-  drawChamp(state.enemy, '#ff3333');
+  drawChamp(state.player, '#ff3333');  // player = red team
+  drawChamp(state.enemy, '#00aaff');   // enemy = blue team
 
   // ── Distance overlay ──
   const dist = Math.abs(state.player.x - state.enemy.x);

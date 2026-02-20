@@ -91,8 +91,8 @@ body {
   font-size: 0.7em;
   margin-bottom: 3px;
 }
-.info-name.player { color: var(--blue); }
-.info-name.enemy { color: var(--red); }
+.info-name.player { color: var(--red); }
+.info-name.enemy { color: var(--blue); }
 .info-name span { color: #c89b3c; font-size: 0.9em; }
 
 .info-bar {
@@ -168,7 +168,7 @@ body {
   font-size: 0.7em; font-weight: 700;
   color: #fff;
 }
-.msg-avatar.enemy-avatar { background: var(--red); }
+.msg-avatar.enemy-avatar { background: var(--blue); }
 .msg-avatar.narrator-avatar { background: #555; }
 
 .msg-body { display: flex; flex-direction: column; gap: 2px; }
