@@ -2,106 +2,104 @@
 <html lang="ko">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>ib-lol talk</title>
   <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
-  <div class="game-container">
+  <div class="chat-app">
 
-    <!-- Canvas Minimap -->
-    <canvas id="lane-canvas" width="760" height="180"></canvas>
+    <!-- Top Bar (like KakaoTalk room header) -->
+    <div class="topbar">
+      <div class="topbar-left">
+        <span class="topbar-title">리신 vs 리신</span>
+        <span class="topbar-sub" id="turn-text">1턴</span>
+      </div>
+      <button class="topbar-btn" id="info-toggle">📊</button>
+    </div>
 
-    <!-- Status Row -->
-    <div class="status-row">
-      <div class="status-card player-side">
-        <div class="status-header">
-          <span class="champ-name player">나 (리신)</span>
-          <span class="champ-level" id="p-level">Lv.1</span>
-        </div>
-        <div class="bar hp-bar">
-          <div class="bar-fill" id="p-hp-fill" style="width:100%"></div>
-          <div class="bar-shield hidden" id="p-shield-fill"></div>
-          <span class="bar-label" id="p-hp-text">645 / 645</span>
-        </div>
-        <div class="bar energy-bar">
-          <div class="bar-fill" id="p-energy-fill" style="width:100%"></div>
-          <span class="bar-label" id="p-energy-text">200 / 200</span>
-        </div>
-        <div class="status-meta">
-          <span>CS <strong id="p-cs">0</strong></span>
-          <span><strong id="p-gold">0</strong>G</span>
-          <div class="cd-row">
-            <span class="cd" id="p-cd-q">Q</span>
-            <span class="cd" id="p-cd-w">W</span>
-            <span class="cd" id="p-cd-e">E</span>
-            <span class="cd" id="p-cd-r">R</span>
+    <!-- Game Info Drawer (collapsible) -->
+    <div class="info-drawer hidden" id="info-drawer">
+      <canvas id="lane-canvas" width="760" height="140"></canvas>
+      <div class="info-stats">
+        <div class="info-side player-info">
+          <div class="info-name player">나 <span id="p-level">Lv.1</span></div>
+          <div class="info-bar">
+            <div class="info-bar-fill hp" id="p-hp-fill" style="width:100%"></div>
+            <span class="info-bar-text" id="p-hp-text">645/645</span>
+          </div>
+          <div class="info-bar energy">
+            <div class="info-bar-fill en" id="p-energy-fill" style="width:100%"></div>
+            <span class="info-bar-text" id="p-energy-text">200/200</span>
+          </div>
+          <div class="info-row">
+            <span>CS <b id="p-cs">0</b></span>
+            <span><b id="p-gold">0</b>G</span>
+            <span class="cd-group">
+              <span class="cd" id="p-cd-q">Q</span>
+              <span class="cd" id="p-cd-w">W</span>
+              <span class="cd" id="p-cd-e">E</span>
+              <span class="cd" id="p-cd-r">R</span>
+            </span>
           </div>
         </div>
-      </div>
-
-      <div class="turn-badge" id="turn-badge">1턴</div>
-
-      <div class="status-card enemy-side">
-        <div class="status-header">
-          <span class="champ-name enemy">적 (리신)</span>
-          <span class="champ-level" id="e-level">Lv.1</span>
-        </div>
-        <div class="bar hp-bar">
-          <div class="bar-fill" id="e-hp-fill" style="width:100%"></div>
-          <div class="bar-shield hidden" id="e-shield-fill"></div>
-          <span class="bar-label" id="e-hp-text">645 / 645</span>
-        </div>
-        <div class="bar energy-bar">
-          <div class="bar-fill" id="e-energy-fill" style="width:100%"></div>
-          <span class="bar-label" id="e-energy-text">200 / 200</span>
-        </div>
-        <div class="status-meta">
-          <span>CS <strong id="e-cs">0</strong></span>
-          <span><strong id="e-gold">0</strong>G</span>
-          <div class="cd-row">
-            <span class="cd" id="e-cd-q">Q</span>
-            <span class="cd" id="e-cd-w">W</span>
-            <span class="cd" id="e-cd-e">E</span>
-            <span class="cd" id="e-cd-r">R</span>
+        <div class="info-side enemy-info">
+          <div class="info-name enemy">적 <span id="e-level">Lv.1</span></div>
+          <div class="info-bar">
+            <div class="info-bar-fill hp" id="e-hp-fill" style="width:100%"></div>
+            <span class="info-bar-text" id="e-hp-text">645/645</span>
+          </div>
+          <div class="info-bar energy">
+            <div class="info-bar-fill en" id="e-energy-fill" style="width:100%"></div>
+            <span class="info-bar-text" id="e-energy-text">200/200</span>
+          </div>
+          <div class="info-row">
+            <span>CS <b id="e-cs">0</b></span>
+            <span><b id="e-gold">0</b>G</span>
+            <span class="cd-group">
+              <span class="cd" id="e-cd-q">Q</span>
+              <span class="cd" id="e-cd-w">W</span>
+              <span class="cd" id="e-cd-e">E</span>
+              <span class="cd" id="e-cd-r">R</span>
+            </span>
           </div>
         </div>
       </div>
     </div>
 
-    <!-- Narrative Feed -->
-    <div class="narrative-feed" id="narrative-feed">
-      <div class="narrative-entry system">⚔️ 리신 vs 리신 — 라인전이 시작됩니다.</div>
-    </div>
+    <!-- Chat Feed -->
+    <div class="chat-feed" id="chat-feed"></div>
 
-    <!-- Input Area -->
-    <div class="input-area">
-      <div class="input-hint" id="input-hint">어떻게 하시겠습니까?</div>
+    <!-- Input Bar (KakaoTalk style) -->
+    <div class="input-bar">
+      <div class="quick-chips" id="quick-chips">
+        <span class="chip" data-text="미니언 막타를 먹는다">CS</span>
+        <span class="chip" data-text="적에게 Q를 쏜다">Q</span>
+        <span class="chip" data-text="뒤로 물러선다">후퇴</span>
+        <span class="chip" data-text="적의 스킬을 유도하면서 앞으로 압박한다">압박</span>
+        <span class="chip" data-text="E로 적을 때린다">E</span>
+        <span class="chip" data-text="부쉬로 숨는다">부쉬</span>
+      </div>
       <div class="input-row">
         <input type="text" id="player-input" placeholder="행동을 입력하세요..." autocomplete="off" />
-        <button id="send-btn">⏎</button>
-      </div>
-      <div class="input-examples">
-        <span class="example" data-text="미니언 막타를 먹는다">CS</span>
-        <span class="example" data-text="적에게 Q를 쏜다">Q</span>
-        <span class="example" data-text="뒤로 물러선다">후퇴</span>
-        <span class="example" data-text="적의 스킬을 유도하면서 앞으로 압박한다">압박</span>
+        <button id="send-btn">전송</button>
       </div>
     </div>
 
-    <!-- Skill Level Up (overlay) -->
+    <!-- Skill Level Up Overlay -->
     <div class="overlay hidden" id="skillup-overlay">
       <div class="overlay-box">
-        <h3>⬆️ 스킬 레벨업</h3>
+        <div class="overlay-title">⬆️ 스킬 레벨업</div>
+        <div class="overlay-sub">배울 스킬을 선택하세요</div>
         <div id="skillup-buttons"></div>
       </div>
     </div>
 
-    <!-- Game Over (overlay) -->
+    <!-- Game Over Overlay -->
     <div class="overlay hidden" id="gameover-overlay">
       <div class="overlay-box">
         <div id="gameover-text" class="gameover-text"></div>
-        <button id="restart-btn" class="primary-btn">다시 시작</button>
+        <button id="restart-btn" class="action-btn">다시 시작</button>
       </div>
     </div>
 
