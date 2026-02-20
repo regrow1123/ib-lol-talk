@@ -3,7 +3,7 @@ const $ = id => document.getElementById(id);
 
 const API_BASE = window.location.hostname === 'localhost'
   ? 'http://localhost:3001'
-  : (window.API_BASE || '');
+  : '';
 
 let gameId = null;
 let state = {
