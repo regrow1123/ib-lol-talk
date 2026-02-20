@@ -365,6 +365,104 @@ body {
 
 .gameover-text { font-size: 2em; font-weight: 700; margin-bottom: 8px; }
 
+/* ── Setup Screen ── */
+.setup-box {
+  max-width: 420px;
+  max-height: 90vh;
+  overflow-y: auto;
+  text-align: left;
+}
+.setup-box .overlay-title {
+  text-align: center;
+  font-size: 1.2em;
+  margin-bottom: 16px;
+}
+.setup-section {
+  margin-bottom: 16px;
+}
+.setup-label {
+  font-weight: 700;
+  font-size: 0.85em;
+  margin-bottom: 4px;
+}
+.setup-sub {
+  font-size: 0.7em;
+  color: #999;
+  margin-bottom: 8px;
+}
+
+.spell-grid {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.spell-card {
+  flex: 0 0 auto;
+  width: 60px;
+  padding: 8px 4px;
+  border: 2px solid #e0e0e0;
+  border-radius: 10px;
+  text-align: center;
+  cursor: pointer;
+  transition: all 0.15s;
+  background: #fafafa;
+}
+.spell-card:hover { border-color: var(--accent); background: #f0f5ff; }
+.spell-card.selected { border-color: var(--accent); background: #e0ecff; }
+.spell-card.locked { opacity: 0.7; cursor: default; border-color: #c89b3c; background: #fff8e0; }
+.spell-icon { font-size: 1.5em; }
+.spell-name { font-size: 0.65em; font-weight: 600; margin-top: 2px; }
+
+.rune-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.rune-card {
+  padding: 10px 12px;
+  border: 2px solid #e0e0e0;
+  border-radius: 10px;
+  cursor: pointer;
+  transition: all 0.15s;
+  background: #fafafa;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.rune-card:hover { border-color: var(--accent); background: #f0f5ff; }
+.rune-card.selected { border-color: var(--accent); background: #e0ecff; }
+.rune-icon { font-size: 1.4em; flex-shrink: 0; }
+.rune-name { font-weight: 700; font-size: 0.85em; }
+.rune-desc { font-size: 0.68em; color: #888; }
+.rune-card > div:last-child { display: flex; flex-direction: column; }
+
+.diff-grid {
+  display: flex;
+  gap: 6px;
+}
+.diff-card {
+  flex: 1;
+  padding: 10px 8px;
+  border: 2px solid #e0e0e0;
+  border-radius: 10px;
+  text-align: center;
+  cursor: pointer;
+  transition: all 0.15s;
+  background: #fafafa;
+}
+.diff-card:hover { border-color: var(--accent); background: #f0f5ff; }
+.diff-card.selected { border-color: var(--accent); background: #e0ecff; }
+.diff-name { font-weight: 700; font-size: 0.85em; }
+.diff-desc { font-size: 0.6em; color: #888; margin-top: 2px; }
+
+.setup-start {
+  display: block;
+  width: 100%;
+  margin-top: 16px;
+  text-align: center;
+}
+.setup-start:disabled { opacity: 0.35; cursor: not-allowed; }
+
 .hidden { display: none !important; }
 
 /* ── Mobile ── */

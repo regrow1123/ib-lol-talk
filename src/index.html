@@ -102,6 +102,81 @@
       </div>
     </div>
 
+    <!-- Setup Overlay (Spells + Runes) -->
+    <div class="overlay" id="setup-overlay">
+      <div class="overlay-box setup-box">
+        <div class="overlay-title">⚔️ 라인전 준비</div>
+
+        <div class="setup-section">
+          <div class="setup-label">🔮 소환사 주문</div>
+          <div class="setup-sub">점멸 + 하나를 선택하세요</div>
+          <div class="spell-grid" id="spell-grid">
+            <div class="spell-card selected locked" data-spell="flash">
+              <div class="spell-icon">⚡</div>
+              <div class="spell-name">점멸</div>
+            </div>
+            <div class="spell-card" data-spell="ignite">
+              <div class="spell-icon">🔥</div>
+              <div class="spell-name">점화</div>
+            </div>
+            <div class="spell-card" data-spell="exhaust">
+              <div class="spell-icon">💨</div>
+              <div class="spell-name">탈진</div>
+            </div>
+            <div class="spell-card" data-spell="barrier">
+              <div class="spell-icon">🛡️</div>
+              <div class="spell-name">방어막</div>
+            </div>
+            <div class="spell-card" data-spell="tp">
+              <div class="spell-icon">🌀</div>
+              <div class="spell-name">순간이동</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="setup-section">
+          <div class="setup-label">📜 핵심 룬</div>
+          <div class="rune-grid" id="rune-grid">
+            <div class="rune-card" data-rune="conqueror">
+              <div class="rune-icon">⚔️</div>
+              <div class="rune-name">정복자</div>
+              <div class="rune-desc">지속 교전 시 AD 증가 + 체력 회복</div>
+            </div>
+            <div class="rune-card" data-rune="electrocute">
+              <div class="rune-icon">⚡</div>
+              <div class="rune-name">감전</div>
+              <div class="rune-desc">3회 공격 시 추가 피해</div>
+            </div>
+            <div class="rune-card" data-rune="grasp">
+              <div class="rune-icon">🌿</div>
+              <div class="rune-name">착취의 손아귀</div>
+              <div class="rune-desc">4초마다 AA에 추가 피해 + 체력 회복</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="setup-section">
+          <div class="setup-label">🎯 난이도</div>
+          <div class="diff-grid" id="diff-grid">
+            <div class="diff-card" data-diff="easy">
+              <div class="diff-name">쉬움</div>
+              <div class="diff-desc">혈기왕성 — 무모하게 싸움</div>
+            </div>
+            <div class="diff-card selected" data-diff="normal">
+              <div class="diff-name">보통</div>
+              <div class="diff-desc">밸런스형 — 적절히 싸움</div>
+            </div>
+            <div class="diff-card" data-diff="hard">
+              <div class="diff-name">어려움</div>
+              <div class="diff-desc">냉정 계산 — 실수를 기다림</div>
+            </div>
+          </div>
+        </div>
+
+        <button class="action-btn setup-start" id="setup-start-btn" disabled>게임 시작</button>
+      </div>
+    </div>
+
   </div>
 
   <script type="module" src="js/main.js"></script>

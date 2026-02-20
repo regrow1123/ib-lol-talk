@@ -6,37 +6,101 @@ const API_BASE = window.location.hostname === 'localhost'
   : '';
 
 let gameId = null;
-let state = {
-  turn: 0,
-  player: { hp:645,maxHp:645,energy:200,maxEnergy:200,cs:0,gold:0,level:1,shield:0,
-            skillLevels:{Q:0,W:0,E:0,R:0},cooldowns:{Q:0,W:0,E:0,R:99},skillPoints:1 },
-  enemy:  { hp:645,maxHp:645,energy:200,maxEnergy:200,cs:0,gold:0,level:1,shield:0,
-            skillLevels:{Q:1,W:0,E:0,R:0},cooldowns:{Q:0,W:0,E:0,R:99},skillPoints:0 },
-  phase: 'skillup',
-};
+let state = null;
 let sending = false;
 let drawerOpen = false;
+let setupChoices = { spell: null, rune: null, difficulty: 'normal' };
+
+// ── Setup Screen ──
+function initSetup() {
+  const overlay = $('setup-overlay');
+
+  // Spell selection (flash is locked, pick second)
+  document.querySelectorAll('#spell-grid .spell-card:not(.locked)').forEach(el => {
+    el.onclick = () => {
+      document.querySelectorAll('#spell-grid .spell-card:not(.locked)').forEach(c => c.classList.remove('selected'));
+      el.classList.add('selected');
+      setupChoices.spell = el.dataset.spell;
+      updateStartBtn();
+    };
+  });
+
+  // Rune selection
+  document.querySelectorAll('#rune-grid .rune-card').forEach(el => {
+    el.onclick = () => {
+      document.querySelectorAll('#rune-grid .rune-card').forEach(c => c.classList.remove('selected'));
+      el.classList.add('selected');
+      setupChoices.rune = el.dataset.rune;
+      updateStartBtn();
+    };
+  });
+
+  // Difficulty selection
+  document.querySelectorAll('#diff-grid .diff-card').forEach(el => {
+    el.onclick = () => {
+      document.querySelectorAll('#diff-grid .diff-card').forEach(c => c.classList.remove('selected'));
+      el.classList.add('selected');
+      setupChoices.difficulty = el.dataset.diff;
+    };
+  });
+
+  $('setup-start-btn').onclick = async () => {
+    $('setup-start-btn').disabled = true;
+    $('setup-start-btn').textContent = '로딩...';
+    await startGame();
+    overlay.classList.add('hidden');
+  };
+}
+
+function updateStartBtn() {
+  $('setup-start-btn').disabled = !(setupChoices.spell && setupChoices.rune);
+}
 
 // ── Init ──
-async function init() {
+async function startGame() {
   // Start new game via server
   try {
     const res = await fetch(`${API_BASE}/api/start`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ difficulty: 'normal' }),
+      body: JSON.stringify({
+        difficulty: setupChoices.difficulty,
+        spell: setupChoices.spell,
+        rune: setupChoices.rune,
+      }),
     });
     const data = await res.json();
     gameId = data.gameId;
     state = data.state;
+
+    // Store player choices in state
+    state.playerSetup = { ...setupChoices };
+
+    const spellNames = { ignite: '점화', exhaust: '탈진', barrier: '방어막', tp: '순간이동' };
+    const runeNames = { conqueror: '정복자', electrocute: '감전', grasp: '착취의 손아귀' };
+    addSystemMsg(`📜 ${runeNames[setupChoices.rune]} | ⚡점멸 + ${spellNames[setupChoices.spell]}`);
     addSystemMsg(data.narrative || '⚔️ 리신 vs 리신 — 라인전 시작');
   } catch {
     addSystemMsg('⚠️ 서버 연결 실패 — 로컬 모드로 진행합니다');
     gameId = null;
+    // Fallback local state
+    state = {
+      turn: 0, phase: 'skillup',
+      player: { hp:645,maxHp:645,energy:200,maxEnergy:200,cs:0,gold:0,level:1,shield:0,
+                skillLevels:{Q:0,W:0,E:0,R:0},cooldowns:{Q:0,W:0,E:0,R:99},skillPoints:1 },
+      enemy:  { hp:645,maxHp:645,energy:200,maxEnergy:200,cs:0,gold:0,level:1,shield:0,
+                skillLevels:{Q:1,W:0,E:0,R:0},cooldowns:{Q:0,W:0,E:0,R:99},skillPoints:0 },
+    };
+    state.playerSetup = { ...setupChoices };
   }
 
   renderStatus();
   checkPhase();
+}
+
+function init() {
+  setInput(false);
+  initSetup();
 
   $('send-btn').onclick = submit;
   $('player-input').addEventListener('keydown', e => {
@@ -58,7 +122,7 @@ async function init() {
 
 // ── Submit ──
 async function submit() {
-  if (sending || state.phase !== 'play') return;
+  if (sending || !state || state.phase !== 'play') return;
   const input = $('player-input').value.trim();
   if (!input) return;
 
@@ -186,6 +250,7 @@ function setInput(on) {
 
 // ── Phase ──
 function checkPhase() {
+  if (!state) return;
   if (state.phase === 'skillup' && state.player.skillPoints > 0) {
     showSkillUp();
     setInput(false);
@@ -251,12 +316,16 @@ function showGameOver() {
   $('restart-btn').onclick = () => {
     $('gameover-overlay').classList.add('hidden');
     $('chat-feed').innerHTML = '';
-    init();
+    state = null;
+    $('setup-overlay').classList.remove('hidden');
+    $('setup-start-btn').disabled = false;
+    $('setup-start-btn').textContent = '게임 시작';
   };
 }
 
 // ── Status ──
 function renderStatus() {
+  if (!state) return;
   const p = state.player, e = state.enemy;
   $('p-hp-fill').style.width = `${(p.hp/p.maxHp)*100}%`;
   $('p-hp-text').textContent = `${Math.round(p.hp)}/${p.maxHp}`;
