@@ -115,8 +115,8 @@ export function generateActions(fighter, opponent, minions, csWave) {
   const moveDirs = [];
   if (fighter.position < 4) moveDirs.push('forward');
   if (fighter.position > 0) moveDirs.push('back');
-  moveDirs.push('left', 'right');
-  // bush removed
+  if (fighter.laneY > 0) moveDirs.push('left');
+  if (fighter.laneY < 2) moveDirs.push('right');
 
   for (const dir of moveDirs) {
     actions.push({
@@ -200,7 +200,8 @@ function processAction(myAction, theirAction, me, them, myMicro, theirMicro, res
   } else if (myAction.type === 'move') {
     if (myAction.direction === 'forward' && me.position < 4) me.position++;
     else if (myAction.direction === 'back' && me.position > 0) me.position--;
-    // bush removed
+    else if (myAction.direction === 'left' && me.laneY > 0) me.laneY--;
+    else if (myAction.direction === 'right' && me.laneY < 2) me.laneY++;
     results.narratives.push(templates.getMoveNarrative(myName, myAction.direction));
   } else if (myAction.type === 'defense') {
     if (myAction.skill === 'W1') {

@@ -13,7 +13,8 @@ export function createFighter(name, position) {
     energy: stats.energy, maxEnergy: stats.energy,
     totalAd: stats.totalAd, baseAd: stats.baseAd, bonusAd: stats.bonusAd,
     armor: stats.armor, mr: stats.mr,
-    position,
+    position,       // 0-4 horizontal (tower to tower)
+    laneY: 1,       // 0=top, 1=center, 2=bottom (vertical lane position)
     level: 1, xp: 0,
     cs: 0, gold: 500 - 450 - 50, // after buying doran + pot
     cooldowns: { Q: 0, W: 0, E: 0, R: 99 },
