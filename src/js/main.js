@@ -335,33 +335,41 @@ function renderCanvas() {
   // Map coords are on 1000x1000 reference, canvas is WxH
   const s = W / 1000;
 
-  // ── Towers (simple filled circle + border) ──
+  // ── Towers (LoL minimap turret silhouette) ──
   const drawTower = (mapX, mapY, col) => {
     const px = mapX * s, py = mapY * s;
-    const r = W * 0.03;
+    const k = W / 200; // scale
 
-    // Filled circle
+    // Main turret body
     ctx.fillStyle = col;
     ctx.beginPath();
-    ctx.arc(px, py, r, 0, Math.PI * 2);
+    // Pointed top
+    ctx.moveTo(px, py - 6*k);
+    // Left battlement
+    ctx.lineTo(px - 1.5*k, py - 3.5*k);
+    ctx.lineTo(px - 3.5*k, py - 3.5*k);
+    ctx.lineTo(px - 3.5*k, py - 1.5*k);
+    // Left body
+    ctx.lineTo(px - 2.5*k, py - 1.5*k);
+    ctx.lineTo(px - 2*k, py + 3*k);
+    // Base
+    ctx.lineTo(px - 3*k, py + 4*k);
+    ctx.lineTo(px - 3*k, py + 5*k);
+    ctx.lineTo(px + 3*k, py + 5*k);
+    ctx.lineTo(px + 3*k, py + 4*k);
+    // Right body
+    ctx.lineTo(px + 2*k, py + 3*k);
+    ctx.lineTo(px + 2.5*k, py - 1.5*k);
+    // Right battlement
+    ctx.lineTo(px + 3.5*k, py - 1.5*k);
+    ctx.lineTo(px + 3.5*k, py - 3.5*k);
+    ctx.lineTo(px + 1.5*k, py - 3.5*k);
+    ctx.closePath();
     ctx.fill();
 
-    // Dark border
+    // Dark outline
     ctx.strokeStyle = '#000';
-    ctx.lineWidth = 2;
-    ctx.beginPath();
-    ctx.arc(px, py, r, 0, Math.PI * 2);
-    ctx.stroke();
-
-    // White cross inside
-    ctx.strokeStyle = '#fff';
-    ctx.lineWidth = 2;
-    const d = r * 0.55;
-    ctx.beginPath();
-    ctx.moveTo(px - d, py - d);
-    ctx.lineTo(px + d, py + d);
-    ctx.moveTo(px + d, py - d);
-    ctx.lineTo(px - d, py + d);
+    ctx.lineWidth = 1;
     ctx.stroke();
   };
   drawTower(RED_T1.x, RED_T1.y, '#ff4444');
