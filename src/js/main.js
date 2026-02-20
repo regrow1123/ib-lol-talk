@@ -3,9 +3,9 @@ const $ = id => document.getElementById(id);
 
 let state = {
   turn: 1,
-  player: { hp:645,maxHp:645,energy:200,maxEnergy:200,cs:0,gold:0,level:1,x:10,y:12,shield:0,
+  player: { hp:645,maxHp:645,energy:200,maxEnergy:200,cs:0,gold:0,level:1,x:15,y:12,shield:0,
             skillLevels:{Q:0,W:0,E:0,R:0},cooldowns:{Q:0,W:0,E:0,R:99},skillPoints:1 },
-  enemy:  { hp:645,maxHp:645,energy:200,maxEnergy:200,cs:0,gold:0,level:1,x:50,y:12,shield:0,
+  enemy:  { hp:645,maxHp:645,energy:200,maxEnergy:200,cs:0,gold:0,level:1,x:45,y:12,shield:0,
             skillLevels:{Q:1,W:0,E:0,R:0},cooldowns:{Q:0,W:0,E:0,R:99},skillPoints:0 },
   phase: 'skillup',
 };
@@ -231,9 +231,9 @@ function showGameOver() {
     $('chat-feed').innerHTML = '';
     state = {
       turn:1,
-      player:{hp:645,maxHp:645,energy:200,maxEnergy:200,cs:0,gold:0,level:1,x:10,y:12,shield:0,
+      player:{hp:645,maxHp:645,energy:200,maxEnergy:200,cs:0,gold:0,level:1,x:15,y:12,shield:0,
               skillLevels:{Q:0,W:0,E:0,R:0},cooldowns:{Q:0,W:0,E:0,R:99},skillPoints:1},
-      enemy:{hp:645,maxHp:645,energy:200,maxEnergy:200,cs:0,gold:0,level:1,x:50,y:12,shield:0,
+      enemy:{hp:645,maxHp:645,energy:200,maxEnergy:200,cs:0,gold:0,level:1,x:45,y:12,shield:0,
              skillLevels:{Q:1,W:0,E:0,R:0},cooldowns:{Q:0,W:0,E:0,R:99},skillPoints:0},
       phase:'skillup',
     };
@@ -338,7 +338,7 @@ function renderCanvas() {
   // ── Towers ──
   const drawTower = (mapX, mapY, col) => {
     const px = mapX * s, py = mapY * s;
-    const r = W * 0.02; // 2% of canvas width
+    const r = W * 0.03; // 3% of canvas width
 
     // Filled circle with glow
     ctx.save();
@@ -359,12 +359,12 @@ function renderCanvas() {
 
     // Cross/plus inside (turret look)
     ctx.strokeStyle = '#fff';
-    ctx.lineWidth = 1.5;
+    ctx.lineWidth = 2;
     ctx.beginPath();
-    ctx.moveTo(px, py - r * 0.5);
-    ctx.lineTo(px, py + r * 0.5);
-    ctx.moveTo(px - r * 0.5, py);
-    ctx.lineTo(px + r * 0.5, py);
+    ctx.moveTo(px, py - r * 0.6);
+    ctx.lineTo(px, py + r * 0.6);
+    ctx.moveTo(px - r * 0.6, py);
+    ctx.lineTo(px + r * 0.6, py);
     ctx.stroke();
   };
   drawTower(RED_T1.x, RED_T1.y, '#ff4444');
