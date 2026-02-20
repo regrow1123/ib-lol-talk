@@ -100,6 +100,12 @@ function renderSituation() {
   renderLaneCanvas();
 }
 
+// Seeded random for consistent minion scatter per turn
+function seededRandom(seed) {
+  let s = seed;
+  return () => { s = (s * 16807 + 0) % 2147483647; return s / 2147483647; };
+}
+
 function renderLaneCanvas() {
   const canvas = $('lane-canvas');
   if (!canvas) return;
@@ -109,94 +115,179 @@ function renderLaneCanvas() {
 
   ctx.clearRect(0, 0, W, H);
 
-  // Lane background
-  const laneY = H / 2;
-  const laneTop = laneY - 12;
-  const laneBot = laneY + 12;
-  const margin = 40;
+  const margin = 50;
   const laneLeft = margin;
   const laneRight = W - margin;
   const laneW = laneRight - laneLeft;
+  const laneY = H / 2;
+  const laneHalfH = 30; // lane is 60px tall
+
+  // Ground / grass
+  ctx.fillStyle = '#0d1117';
+  ctx.fillRect(0, 0, W, H);
+
+  // River-ish edges
+  ctx.fillStyle = '#111820';
+  ctx.fillRect(0, laneY - laneHalfH - 40, W, 40);
+  ctx.fillRect(0, laneY + laneHalfH, W, 40);
 
   // Lane road
   ctx.fillStyle = '#1a2130';
-  ctx.fillRect(laneLeft, laneTop, laneW, laneBot - laneTop);
+  const roadR = 4;
+  ctx.beginPath();
+  ctx.roundRect(laneLeft - 10, laneY - laneHalfH, laneW + 20, laneHalfH * 2, roadR);
+  ctx.fill();
+
+  // Lane center line (faint)
+  ctx.strokeStyle = '#2a354522';
+  ctx.lineWidth = 1;
+  ctx.setLineDash([8, 8]);
+  ctx.beginPath();
+  ctx.moveTo(laneLeft, laneY);
+  ctx.lineTo(laneRight, laneY);
+  ctx.stroke();
+  ctx.setLineDash([]);
 
   // Towers
-  ctx.fillStyle = '#3498db';
-  ctx.fillRect(laneLeft - 4, laneTop - 6, 16, laneBot - laneTop + 12);
-  ctx.fillStyle = '#e74c3c';
-  ctx.fillRect(laneRight - 12, laneTop - 6, 16, laneBot - laneTop + 12);
+  const drawTower = (x, color, label) => {
+    // Base
+    ctx.fillStyle = color + '44';
+    ctx.fillRect(x - 10, laneY - laneHalfH - 5, 20, laneHalfH * 2 + 10);
+    // Tower body
+    ctx.fillStyle = color;
+    ctx.fillRect(x - 6, laneY - 14, 12, 28);
+    ctx.fillStyle = color + 'aa';
+    ctx.fillRect(x - 8, laneY - 16, 16, 4);
+    // Label
+    ctx.fillStyle = '#6b7d8f';
+    ctx.font = '10px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText(label, x, laneY - laneHalfH - 12);
+  };
 
-  // Tower labels
-  ctx.font = '9px sans-serif';
-  ctx.fillStyle = '#6b7d8f';
-  ctx.textAlign = 'center';
-  ctx.fillText('아군탑', laneLeft + 4, laneTop - 10);
-  ctx.fillText('적탑', laneRight - 4, laneTop - 10);
+  drawTower(laneLeft - 5, '#3498db', '아군 타워');
+  drawTower(laneRight + 5, '#e74c3c', '적 타워');
 
-  // Bush areas (above and below lane at center)
-  const bushX = laneLeft + laneW * 0.45;
-  const bushW = laneW * 0.1;
-  ctx.fillStyle = 'rgba(46, 204, 113, 0.15)';
-  ctx.fillRect(bushX, laneTop - 28, bushW, 20);
-  ctx.fillRect(bushX, laneBot + 8, bushW, 20);
-  ctx.fillStyle = '#2ecc7155';
-  ctx.font = '8px sans-serif';
-  ctx.fillText('부쉬', bushX + bushW / 2, laneTop - 16);
-  ctx.fillText('부쉬', bushX + bushW / 2, laneBot + 22);
+  // Bush areas
+  const drawBush = (cx, cy, w, h) => {
+    ctx.fillStyle = 'rgba(46, 204, 113, 0.08)';
+    ctx.beginPath();
+    ctx.roundRect(cx - w/2, cy - h/2, w, h, 6);
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(46, 204, 113, 0.2)';
+    ctx.lineWidth = 1;
+    ctx.stroke();
+    // Grass marks
+    ctx.fillStyle = 'rgba(46, 204, 113, 0.25)';
+    ctx.font = '10px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('🌿', cx, cy + 4);
+  };
 
-  // Position to X coordinate (0-4 lane positions)
-  const posToX = (pos) => laneLeft + (pos / 4) * laneW;
+  const bushCX = laneLeft + laneW * 0.48;
+  drawBush(bushCX, laneY - laneHalfH - 25, laneW * 0.12, 30);
+  drawBush(bushCX, laneY + laneHalfH + 25, laneW * 0.12, 30);
 
-  // Draw minions
-  const drawMinions = (wave, color, yOffset) => {
+  // Position to X coordinate (0-4)
+  const posToX = (pos) => laneLeft + 20 + (pos / 4) * (laneW - 40);
+
+  // Draw minions scattered naturally
+  const rng = seededRandom(state.turn * 7 + 31);
+  const drawMinions = (wave, baseColor, side) => {
     if (!wave) return;
     const alive = wave.filter(m => m.hp > 0);
+    const clashX = posToX(2); // minions clash at center
+
     alive.forEach((m, i) => {
-      const x = posToX(m.position ?? 2) + (i - alive.length / 2) * 6;
+      // Scatter: melee in front, ranged behind. Spread in Y within lane.
+      const isMelee = m.type === 'melee';
+      const xOffset = (side === 'player' ? -1 : 1) * (isMelee ? 8 + rng() * 12 : 22 + rng() * 16);
+      const yOffset = (rng() - 0.5) * (laneHalfH * 1.2);
+      const x = clashX + xOffset;
       const y = laneY + yOffset;
+
+      // HP ratio for color intensity
+      const hpRatio = m.hp / m.maxHp;
+      const radius = isMelee ? 4 : 3;
+
       ctx.beginPath();
-      ctx.arc(x, y, 3, 0, Math.PI * 2);
-      ctx.fillStyle = color;
+      ctx.arc(x, y, radius, 0, Math.PI * 2);
+      ctx.fillStyle = baseColor;
+      ctx.globalAlpha = 0.4 + hpRatio * 0.5;
       ctx.fill();
+
+      // Low HP indicator (막타 가능)
+      if (m.hp <= 80) {
+        ctx.strokeStyle = '#f1c40f';
+        ctx.lineWidth = 1.5;
+        ctx.stroke();
+      }
+
+      ctx.globalAlpha = 1;
     });
   };
 
-  // Player minions (blue, slightly above center)
-  drawMinions(state.minions.playerWave, '#3498db88', -4);
-  // Enemy minions (red, slightly below center)
-  drawMinions(state.minions.enemyWave, '#e74c3c88', 4);
+  drawMinions(state.minions.playerWave, '#5dade2', 'player');
+  drawMinions(state.minions.enemyWave, '#e74c3c', 'enemy');
 
   // Draw champions
-  const drawChampion = (fighter, color, label) => {
+  const drawChampion = (fighter, color, darkColor, label) => {
     let x, y;
     if (fighter.inBush) {
-      x = bushX + bushW / 2;
-      y = laneTop - 20; // upper bush
+      x = bushCX;
+      y = laneY - laneHalfH - 25;
     } else {
       x = posToX(fighter.position);
       y = laneY;
     }
 
-    // Circle
+    // Shadow
     ctx.beginPath();
-    ctx.arc(x, y, 8, 0, Math.PI * 2);
+    ctx.ellipse(x, y + 10, 10, 4, 0, 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(0,0,0,0.3)';
+    ctx.fill();
+
+    // Body circle
+    ctx.beginPath();
+    ctx.arc(x, y, 11, 0, Math.PI * 2);
+    ctx.fillStyle = darkColor;
+    ctx.fill();
+    ctx.beginPath();
+    ctx.arc(x, y, 9, 0, Math.PI * 2);
     ctx.fillStyle = color;
     ctx.fill();
-    ctx.strokeStyle = '#f0e6d2';
-    ctx.lineWidth = 1.5;
+
+    // HP ring
+    const hpPct = fighter.hp / fighter.maxHp;
+    ctx.beginPath();
+    ctx.arc(x, y, 12, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * hpPct);
+    ctx.strokeStyle = hpPct > 0.5 ? '#2ecc71' : hpPct > 0.25 ? '#f39c12' : '#e74c3c';
+    ctx.lineWidth = 2;
     ctx.stroke();
 
     // Label
     ctx.fillStyle = '#f0e6d2';
-    ctx.font = 'bold 8px sans-serif';
+    ctx.font = 'bold 9px sans-serif';
     ctx.textAlign = 'center';
     ctx.fillText(label, x, y + 3);
   };
 
-  drawChampion(state.player, '#2980b9', '나');
-  drawChampion(state.enemy, '#c0392b', '적');
+  drawChampion(state.player, '#3498db', '#1a5276', '나');
+  drawChampion(state.enemy, '#e74c3c', '#7b241c', '적');
+
+  // Turn indicator
+  ctx.fillStyle = '#c89b3c';
+  ctx.font = 'bold 11px sans-serif';
+  ctx.textAlign = 'left';
+  ctx.fillText(`${state.turn}턴`, 8, 16);
+
+  // Distance indicator
+  const dist = Math.abs(state.player.position - state.enemy.position);
+  const distLabel = dist <= 1 ? '근접' : dist <= 2 ? 'Q사거리' : '원거리';
+  ctx.fillStyle = '#6b7d8f';
+  ctx.font = '10px sans-serif';
+  ctx.textAlign = 'right';
+  ctx.fillText(`거리: ${dist}칸 (${distLabel})`, W - 8, 16);
 }
 
 function renderChoices() {
