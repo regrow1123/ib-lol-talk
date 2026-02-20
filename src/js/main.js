@@ -138,8 +138,11 @@ async function submit() {
     if (data.error) {
       addSystemMsg(`⚠️ ${data.error}`);
     } else {
-      if (data.enemyAction) addEnemyMsg(data.enemyAction);
-      if (data.narrative) addNarratorMsg(data.narrative);
+      // AI의 말 + 서술을 하나로 합쳐서 적 리신 메시지로 표시
+      const parts = [];
+      if (data.narrative) parts.push(data.narrative);
+      if (data.enemyAction) parts.push(data.enemyAction);
+      if (parts.length) addEnemyMsg(parts.join('\n\n'));
       if (data.state) state = data.state;
       renderStatus();
       checkPhase();
