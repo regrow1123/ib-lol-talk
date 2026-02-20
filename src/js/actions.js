@@ -185,10 +185,11 @@ function processAction(myAction, theirAction, me, them, myMicro, theirMicro, res
     // CS: stay in center → vulnerable
     const csWave = side === 'player' ? minions.playerWave : minions.enemyWave;
     if (myAction.id === 'CS') {
-      const result = lastHit(csWave);
+      const result = lastHit(csWave, me.totalAd);
       if (result.success) {
         me.cs++;
         me.gold += result.gold;
+        me.xp += result.xp || 0;
         results.narratives.push(templates.getCSNarrative(myName, result.gold));
       }
     }

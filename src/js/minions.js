@@ -1,75 +1,126 @@
-// Minion wave & CS system
+// Minion wave & CS system — LoL-accurate values
 
 const WAVE_INTERVAL = 10; // new wave every 10 turns (~30s)
+
+// LoL minion stats (early game)
+const MINION_STATS = {
+  melee:  { hp: 480, ad: 12, armor: 0, gold: 21, xp: 60 },
+  ranged: { hp: 320, ad: 23, armor: 0, gold: 14, xp: 30 },
+};
+
 const MELEE_COUNT = 3;
 const RANGED_COUNT = 3;
-const MELEE_HP = 480;
-const RANGED_HP = 320;
-const MELEE_GOLD = 21;
-const RANGED_GOLD = 14;
 
-export function createMinion(type) {
+export function createMinion(type, side) {
+  const s = MINION_STATS[type];
   return {
-    type, // 'melee' | 'ranged'
-    hp: type === 'melee' ? MELEE_HP : RANGED_HP,
-    maxHp: type === 'melee' ? MELEE_HP : RANGED_HP,
-    gold: type === 'melee' ? MELEE_GOLD : RANGED_GOLD,
+    type,
+    side, // 'player' | 'enemy'
+    hp: s.hp,
+    maxHp: s.hp,
+    ad: s.ad,
+    armor: s.armor,
+    gold: s.gold,
+    xp: s.xp,
+    target: null, // index of opposing minion being attacked
   };
 }
 
-export function createWave() {
+export function createWave(side) {
   const wave = [];
-  for (let i = 0; i < MELEE_COUNT; i++) wave.push(createMinion('melee'));
-  for (let i = 0; i < RANGED_COUNT; i++) wave.push(createMinion('ranged'));
+  for (let i = 0; i < MELEE_COUNT; i++) wave.push(createMinion('melee', side));
+  for (let i = 0; i < RANGED_COUNT; i++) wave.push(createMinion('ranged', side));
   return wave;
 }
 
 export function initMinions() {
   return {
-    playerWave: createWave(), // enemy minions in player's lane (player can CS these)
-    enemyWave: createWave(),  // player minions in enemy's lane (enemy can CS these)
+    playerWave: createWave('enemy'),   // enemy minions walking toward player (player can CS these)
+    enemyWave: createWave('player'),   // player minions walking toward enemy (enemy can CS these)
     waveTimer: WAVE_INTERVAL,
+    deadThisTurn: { player: [], enemy: [] }, // track deaths for XP
   };
 }
 
-// Simulate minion auto-fighting (reduce HP over time)
+// Minions fight each other: each minion attacks one opposing minion
 export function tickMinions(minions) {
-  // Each wave loses HP over time from opposing minions
-  const dmgPerTick = 40; // simplified
-  for (const wave of [minions.playerWave, minions.enemyWave]) {
-    if (wave.length > 0) {
-      wave[0].hp -= dmgPerTick;
-      if (wave[0].hp <= 0) wave.shift();
-    }
-  }
+  minions.deadThisTurn = { player: [], enemy: [] };
 
+  // Player's minions (enemyWave) fight enemy minions (playerWave)
+  // Each minion from one side attacks the frontmost minion of the other side
+  fightWaves(minions.enemyWave, minions.playerWave, minions.deadThisTurn);
+
+  // Remove dead minions
+  minions.playerWave = minions.playerWave.filter(m => m.hp > 0);
+  minions.enemyWave = minions.enemyWave.filter(m => m.hp > 0);
+
+  // Spawn new waves
   minions.waveTimer--;
   if (minions.waveTimer <= 0) {
-    minions.playerWave.push(...createWave());
-    minions.enemyWave.push(...createWave());
+    minions.playerWave.push(...createWave('enemy'));
+    minions.enemyWave.push(...createWave('player'));
     minions.waveTimer = WAVE_INTERVAL;
   }
 }
 
-// Check if there's a minion ready to last-hit
-export function hasLastHittable(wave) {
-  return wave.length > 0 && wave[0].hp <= 80; // low enough to last-hit
-}
-
-// Perform last hit, return gold earned
-export function lastHit(wave) {
-  if (wave.length === 0) return { gold: 0, success: false };
-  const minion = wave[0];
-  if (minion.hp <= 80) {
-    const gold = minion.gold;
-    wave.shift();
-    return { gold, success: true };
+function fightWaves(attackers, defenders, deadTracker) {
+  // Each attacker hits the front-most defender
+  // Each defender hits the front-most attacker
+  if (attackers.length > 0 && defenders.length > 0) {
+    // All attackers focus front defender
+    for (const atk of attackers) {
+      if (defenders[0] && defenders[0].hp > 0) {
+        const dmg = Math.max(1, atk.ad - defenders[0].armor);
+        defenders[0].hp -= dmg;
+        if (defenders[0].hp <= 0) {
+          deadTracker.player.push(defenders[0]); // enemy minion died (player gets XP)
+        }
+      }
+    }
+    // All defenders focus front attacker
+    for (const def of defenders) {
+      if (def.hp <= 0) continue; // already dead
+      if (attackers[0] && attackers[0].hp > 0) {
+        const dmg = Math.max(1, def.ad - attackers[0].armor);
+        attackers[0].hp -= dmg;
+        if (attackers[0].hp <= 0) {
+          deadTracker.enemy.push(attackers[0]); // player minion died (enemy gets XP)
+        }
+      }
+    }
   }
-  return { gold: 0, success: false };
 }
 
-export function getCSableCount(wave) {
-  return wave.filter(m => m.hp <= 80).length;
+// Check if there's a minion ready to last-hit (HP within one AA)
+export function hasLastHittable(wave) {
+  return wave.some(m => m.hp > 0 && m.hp <= 80);
+}
+
+// Perform last hit on lowest HP minion
+export function lastHit(wave, attackerAd) {
+  // Find the lowest HP minion that's within last-hit range
+  let target = null;
+  let lowestHp = Infinity;
+  let targetIdx = -1;
+  for (let i = 0; i < wave.length; i++) {
+    if (wave[i].hp > 0 && wave[i].hp <= (attackerAd || 80) && wave[i].hp < lowestHp) {
+      lowestHp = wave[i].hp;
+      target = wave[i];
+      targetIdx = i;
+    }
+  }
+  if (target) {
+    const gold = target.gold;
+    const xp = target.xp;
+    target.hp = 0;
+    wave.splice(targetIdx, 1);
+    return { gold, xp, success: true };
+  }
+  return { gold: 0, xp: 0, success: false };
+}
+
+export function getCSableCount(wave, attackerAd) {
+  return wave.filter(m => m.hp > 0 && m.hp <= (attackerAd || 80)).length;
 }
 
 export { WAVE_INTERVAL };
