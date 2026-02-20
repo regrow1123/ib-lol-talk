@@ -54,16 +54,14 @@ export function generateActions(fighter, opponent, minions, csWave) {
     });
   }
 
-  // AA (targeted, adjacent only)
+  // AA (targeted melee, no direction — auto-hits if adjacent)
   if (dist <= 1 && !opponent.inBush) {
-    for (const dir of DIRECTIONS) {
-      actions.push({
-        id: `AA_${dir}`,
-        type: 'attack', skill: 'AA', direction: dir,
-        text: templates.getAttackChoiceText('AA', dir),
-        microPos: 'center',
-      });
-    }
+    actions.push({
+      id: 'AA',
+      type: 'attack', skill: 'AA', direction: 'targeted',
+      text: '적에게 기본공격을 한다',
+      microPos: 'center',
+    });
   }
 
   // W1 (shield)
