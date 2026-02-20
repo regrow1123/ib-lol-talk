@@ -1,5 +1,7 @@
 // LLM system prompt for turn interpretation + AI opponent + narration
 import { LEE_SIN } from './champions.js';
+import { SPELLS } from './spells.js';
+import { RUNES } from './runes.js';
 
 const DIFFICULTY_PROFILES = {
   easy: `당신의 AI 성격: "혈기왕성"
@@ -86,11 +88,16 @@ ${diff}
   스킬: Q${game.player.skillLevels.Q} W${game.player.skillLevels.W} E${game.player.skillLevels.E} R${game.player.skillLevels.R}
   쿨다운: Q=${game.player.cooldowns.Q} W=${game.player.cooldowns.W} E=${game.player.cooldowns.E} R=${game.player.cooldowns.R}
   마크: Q마크=${game.player.marks.q > 0 ? '있음' : '없음'} E마크=${game.player.marks.e > 0 ? '있음' : '없음'}
-  쉴드: ${game.player.shield}, 포션: ${game.player.potions}개${game.player.potionActive ? ' (사용중)' : ''}
+  쉴드: ${game.player.shield}, 포션: ${game.player.potions || 0}개${game.player.potionActive ? ' (사용중)' : ''}
+  소환사주문: 점멸(쿨${game.player.spellCooldowns?.flash || 0}) + ${SPELLS[game.player.spells?.second]?.name || '점화'}(쿨${game.player.spellCooldowns?.second || 0})
+  룬: ${RUNES[game.player.rune]?.name || '정복자'}${game.player.rune === 'conqueror' ? ` (스택:${game.player.runeState?.stacks || 0}/12)` : ''}${game.player.rune === 'electrocute' ? ` (쿨:${game.player.runeState?.cooldown || 0})` : ''}${game.player.rune === 'grasp' ? ` (${game.player.runeState?.ready ? '충전됨' : '충전중'})` : ''}
+  ${game.player.ignitedBy ? '🔥 점화 피해 중!' : ''}${game.player.exhausted > 0 ? '💨 탈진 상태!' : ''}
 적(AI): HP ${Math.round(game.enemy.hp)}/${game.enemy.maxHp}, 에너지 ${game.enemy.energy}/${game.enemy.maxEnergy}, CS ${game.enemy.cs}, 레벨 ${game.enemy.level}, 위치 (${game.enemy.x},${game.enemy.y})${game.enemy.inBush ? ' [부쉬]' : ''}
   스킬: Q${game.enemy.skillLevels.Q} W${game.enemy.skillLevels.W} E${game.enemy.skillLevels.E} R${game.enemy.skillLevels.R}
   쿨다운: Q=${game.enemy.cooldowns.Q} W=${game.enemy.cooldowns.W} E=${game.enemy.cooldowns.E} R=${game.enemy.cooldowns.R}
-  마크: Q마크=${game.enemy.marks.q > 0 ? '있음' : '없음'} E마크=${game.enemy.marks.e > 0 ? '있음' : '없음'}
+  마크: Q마크=${game.enemy.marks?.q > 0 ? '있음' : '없음'} E마크=${game.enemy.marks?.e > 0 ? '있음' : '없음'}
+  소환사주문: 점멸(쿨${game.enemy.spellCooldowns?.flash || 0}) + ${SPELLS[game.enemy.spells?.second]?.name || '점화'}(쿨${game.enemy.spellCooldowns?.second || 0})
+  ${game.enemy.ignitedBy ? '🔥 점화 피해 중!' : ''}${game.enemy.exhausted > 0 ? '💨 탈진 상태!' : ''}
 미니언: 아군(근접${game.minions.player.melee} 원거리${game.minions.player.ranged}) vs 적(근접${game.minions.enemy.melee} 원거리${game.minions.enemy.ranged})
 거리: ${Math.abs(game.player.x - game.enemy.x)}칸
 
@@ -109,7 +116,7 @@ ${diff}
 \`\`\`json
 {
   "playerAction": {
-    "type": "Q1_CAST|Q2_CAST|W1_SELF|W1_MINION|W2_CAST|E1_CAST|E2_CAST|R_CAST|AA_CHAMP|CS_SAFE|CS_PUSH|PRESS|RETREAT|BUSH_IN|BUSH_OUT|ALL_IN|MV_DODGE|RECALL|FLASH|IGNITE|POTION|IDLE",
+    "type": "Q1_CAST|Q2_CAST|W1_SELF|W1_MINION|W2_CAST|E1_CAST|E2_CAST|R_CAST|AA_CHAMP|CS_SAFE|CS_PUSH|PRESS|RETREAT|BUSH_IN|BUSH_OUT|ALL_IN|MV_DODGE|RECALL|FLASH|IGNITE|EXHAUST|BARRIER|POTION|IDLE",
     "detail": "해석한 구체적 행동 설명"
   },
   "aiAction": {
@@ -132,6 +139,19 @@ ${diff}
   "aiChat": "AI 리신이 상대에게 하는 짧은 도발/반응 (선택적, 없으면 null)"
 }
 \`\`\`
+
+### 소환사 주문 규칙
+- FLASH: 즉시 이동, 모든 공격 회피 가능. 쿨다운 100턴.
+- IGNITE: 인접 거리(12칸)에서 사용. 고정 피해 + 치유 감소. 쿨다운 60턴.
+- EXHAUST: 13칸 내. 둔화 + 피해 35% 감소. 쿨다운 70턴.
+- BARRIER: 즉시 보호막. 쿨다운 60턴.
+- 소환사 주문은 다른 행동과 동시 사용 불가 (독립 행동)
+- 쿨다운이 0일 때만 사용 가능
+
+### 룬 효과 (자동 적용, LLM이 서술에 포함)
+- 정복자: 교전 시 스택 쌓임 → 최대 시 AD 증가 + 회복
+- 감전: 3회 적중 시 추가 피해 (쿨다운 있음)
+- 착취의 손아귀: 주기적으로 AA에 추가 피해 + 회복 + 영구 체력
 
 ### 중요 규칙
 - playerAction.type은 반드시 위 enum 중 하나여야 합니다

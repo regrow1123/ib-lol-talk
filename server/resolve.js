@@ -5,6 +5,8 @@ import {
   tickCooldowns, restoreEnergy, grantXp, checkWinner, fullState,
 } from './game.js';
 import { LEE_SIN } from './champions.js';
+import { SPELLS } from './spells.js';
+import { RUNES } from './runes.js';
 
 // Apply LLM resolution to game state, enforce rules
 export function resolveTurn(game, llmResult) {
@@ -16,6 +18,14 @@ export function resolveTurn(game, llmResult) {
   tickCooldowns(game.enemy);
   tickEnergy(game.player);
   tickEnergy(game.enemy);
+  tickSpellCooldowns(game.player);
+  tickSpellCooldowns(game.enemy);
+  tickIgnite(game.player);
+  tickIgnite(game.enemy);
+  tickExhaust(game.player);
+  tickExhaust(game.enemy);
+  tickRunePassive(game.player);
+  tickRunePassive(game.enemy);
 
   // ── Apply position changes ──
   if (resolution.positionChange) {
@@ -33,29 +43,43 @@ export function resolveTurn(game, llmResult) {
   // ── Process player hits ──
   const dmgLog = { playerDealt: 0, enemyDealt: 0 };
 
+  let playerHitCount = 0, enemyHitCount = 0;
+
   for (const hit of (resolution.playerHits || [])) {
     if (!hit.hit) continue;
-    const dmg = calcHitDamage(hit.skill, game.player, game.enemy);
+    let dmg = calcHitDamage(hit.skill, game.player, game.enemy);
     if (dmg > 0) {
-      // Validate: can player use this skill?
       if (!validateSkillUse(game.player, hit.skill, game.enemy)) continue;
       consumeSkillResources(game.player, hit.skill);
+      // Exhaust reduces outgoing damage
+      if (game.player.exhausted > 0) dmg *= (1 - SPELLS.exhaust.damageReduction);
+      // Conqueror bonus AD at max stacks is already in attacker.ad (applied via runeState)
       const result = applyDamage(game.enemy, dmg);
       dmgLog.playerDealt += dmg;
+      playerHitCount++;
+      // Conqueror healing at max stacks
+      applyConquerorHeal(game.player, dmg);
     }
   }
 
   // ── Process AI hits ──
   for (const hit of (resolution.aiHits || [])) {
     if (!hit.hit) continue;
-    const dmg = calcHitDamage(hit.skill, game.enemy, game.player);
+    let dmg = calcHitDamage(hit.skill, game.enemy, game.player);
     if (dmg > 0) {
       if (!validateSkillUse(game.enemy, hit.skill, game.player)) continue;
       consumeSkillResources(game.enemy, hit.skill);
+      if (game.enemy.exhausted > 0) dmg *= (1 - SPELLS.exhaust.damageReduction);
       const result = applyDamage(game.player, dmg);
       dmgLog.enemyDealt += dmg;
+      enemyHitCount++;
+      applyConquerorHeal(game.enemy, dmg);
     }
   }
+
+  // ── Rune procs ──
+  processRuneHits(game.player, game.enemy, playerHitCount, dmgLog.playerDealt);
+  processRuneHits(game.enemy, game.player, enemyHitCount, dmgLog.enemyDealt);
 
   // ── Process special actions ──
   // Player shield (W1_SELF)
@@ -86,6 +110,10 @@ export function resolveTurn(game, llmResult) {
     game.enemy.potionTimer = 5;
     game.enemy.potionHpLeft = 120;
   }
+
+  // ── Summoner Spells ──
+  processSpellAction(playerAction.type, game.player, game.enemy);
+  processSpellAction(aiAction.type, game.enemy, game.player);
 
   // ── CS ──
   const pCs = resolution.playerCs || 0;
@@ -188,6 +216,124 @@ function consumeSkillResources(fighter, skill) {
       setCooldown(fighter, 'R');
       break;
     // AA: no resource cost
+  }
+}
+
+// ── Spell helpers ──
+
+function tickSpellCooldowns(fighter) {
+  if (fighter.spellCooldowns.flash > 0) fighter.spellCooldowns.flash--;
+  if (fighter.spellCooldowns.second > 0) fighter.spellCooldowns.second--;
+}
+
+function tickIgnite(fighter) {
+  if (fighter.ignitedBy && fighter.ignitedBy.turnsLeft > 0) {
+    fighter.hp = Math.max(0, fighter.hp - fighter.ignitedBy.dmgPerTurn);
+    fighter.ignitedBy.turnsLeft--;
+    if (fighter.ignitedBy.turnsLeft <= 0) fighter.ignitedBy = null;
+  }
+}
+
+function tickExhaust(fighter) {
+  if (fighter.exhausted > 0) fighter.exhausted--;
+}
+
+function processSpellAction(actionType, caster, target) {
+  if (actionType === 'IGNITE' && caster.spells.second === 'ignite' && caster.spellCooldowns.second === 0) {
+    const dist = Math.abs(caster.x - target.x);
+    if (dist <= SPELLS.ignite.gridRange) {
+      const spell = SPELLS.ignite;
+      const totalDmg = spell.trueDamageByLevel[caster.level - 1] || 70;
+      target.ignitedBy = {
+        turnsLeft: spell.durationTurns,
+        dmgPerTurn: totalDmg / spell.durationTurns,
+      };
+      caster.spellCooldowns.second = spell.cooldownTurns;
+    }
+  }
+  if (actionType === 'EXHAUST' && caster.spells.second === 'exhaust' && caster.spellCooldowns.second === 0) {
+    const dist = Math.abs(caster.x - target.x);
+    if (dist <= SPELLS.exhaust.gridRange) {
+      target.exhausted = SPELLS.exhaust.durationTurns;
+      caster.spellCooldowns.second = SPELLS.exhaust.cooldownTurns;
+    }
+  }
+  if (actionType === 'BARRIER' && caster.spells.second === 'barrier' && caster.spellCooldowns.second === 0) {
+    const spell = SPELLS.barrier;
+    const shieldAmt = spell.shieldByLevel[caster.level - 1] || 115;
+    caster.shield += shieldAmt;
+    caster.shieldTimer = Math.max(caster.shieldTimer, spell.durationTurns);
+    caster.spellCooldowns.second = spell.cooldownTurns;
+  }
+  if (actionType === 'FLASH' && caster.spellCooldowns.flash === 0) {
+    caster.spellCooldowns.flash = SPELLS.flash.cooldownTurns;
+    // Position change handled by LLM's positionChange
+  }
+}
+
+// ── Rune helpers ──
+
+function tickRunePassive(fighter) {
+  const rs = fighter.runeState;
+  if (fighter.rune === 'conqueror' && rs.stacks > 0) {
+    rs.decayTimer--;
+    if (rs.decayTimer <= 0) rs.stacks = 0;
+  }
+  if (fighter.rune === 'electrocute' && rs.cooldown > 0) {
+    rs.cooldown--;
+  }
+  if (fighter.rune === 'grasp') {
+    rs.chargeTimer++;
+    if (rs.chargeTimer >= RUNES.grasp.chargeTurns) rs.ready = true;
+  }
+}
+
+function processRuneHits(attacker, defender, hitCount, totalDmg) {
+  if (hitCount === 0) return;
+  const rs = attacker.runeState;
+
+  if (attacker.rune === 'conqueror') {
+    rs.stacks = Math.min(RUNES.conqueror.maxStacks, rs.stacks + hitCount * RUNES.conqueror.stacksPerHit);
+    rs.decayTimer = RUNES.conqueror.stackDuration;
+  }
+
+  if (attacker.rune === 'electrocute' && rs.cooldown === 0) {
+    rs.hitCount += hitCount;
+    if (rs.hitCount >= RUNES.electrocute.hitsRequired) {
+      const rune = RUNES.electrocute;
+      const baseDmg = rune.baseDamageByLevel[attacker.level - 1] || 30;
+      const raw = baseDmg + rune.bonusAdRatio * attacker.bonusAd;
+      // Adaptive: physical for Lee Sin
+      const dmg = raw * 100 / (100 + defender.armor);
+      applyDamage(defender, dmg);
+      rs.hitCount = 0;
+      rs.cooldown = rune.cooldownTurns;
+    }
+  }
+
+  if (attacker.rune === 'grasp' && rs.ready) {
+    // Grasp procs on AA (approximated: any hit triggers it)
+    const rune = RUNES.grasp;
+    const bonusDmg = attacker.maxHp * rune.bonusDamagePercent;
+    const dmg = bonusDmg * 100 / (100 + defender.mr); // magic damage
+    applyDamage(defender, dmg);
+    // Heal
+    const heal = attacker.maxHp * rune.healPercent;
+    attacker.hp = Math.min(attacker.maxHp, attacker.hp + heal);
+    // Permanent HP
+    rs.bonusHp += rune.permanentHp;
+    attacker.maxHp += rune.permanentHp;
+    attacker.hp += rune.permanentHp;
+    rs.ready = false;
+    rs.chargeTimer = 0;
+  }
+}
+
+function applyConquerorHeal(fighter, dmgDealt) {
+  if (fighter.rune !== 'conqueror') return;
+  if (fighter.runeState.stacks >= RUNES.conqueror.maxStacks) {
+    const heal = dmgDealt * RUNES.conqueror.maxStackHealPercent;
+    fighter.hp = Math.min(fighter.maxHp, fighter.hp + heal);
   }
 }
 

@@ -3,7 +3,7 @@ import { LEE_SIN } from './champions.js';
 import { randomUUID } from 'crypto';
 
 // ── Create new game state ──
-export function createGame(difficulty = 'normal') {
+export function createGame(difficulty = 'normal', spell = 'ignite', rune = 'conqueror') {
   const mkFighter = () => {
     const b = LEE_SIN.base;
     const doran = LEE_SIN.startItems.doranBlade;
@@ -33,8 +33,16 @@ export function createGame(difficulty = 'normal') {
       potionTimer: 0,
       potionHpLeft: 0,
       recallUsed: false,
-      flashCooldown: 0,  // in turns
-      igniteCooldown: 0,
+      // Summoner spells
+      spells: { flash: 'flash', second: 'ignite' },
+      spellCooldowns: { flash: 0, second: 0 },
+      // Ignite DoT state
+      ignitedBy: null,  // null or { turnsLeft, dmgPerTurn }
+      // Exhaust state
+      exhausted: 0,     // turns remaining
+      // Rune state
+      rune: 'conqueror',
+      runeState: {},    // rune-specific state
       // Grid position (internal, server only)
       x: 15, y: 12,
       inBush: false,
@@ -46,8 +54,24 @@ export function createGame(difficulty = 'normal') {
     turn: 0,
     phase: 'skillup',  // skillup -> play -> gameover
     difficulty,
-    player: mkFighter(),
-    enemy: { ...mkFighter(), skillPoints: 0, skillLevels: { Q: 1, W: 0, E: 0, R: 0 }, x: 45 },
+    player: (() => {
+      const p = mkFighter();
+      p.spells.second = spell;
+      p.rune = rune;
+      p.runeState = initRuneState(rune);
+      return p;
+    })(),
+    enemy: (() => {
+      const e = mkFighter();
+      e.skillPoints = 0;
+      e.skillLevels = { Q: 1, W: 0, E: 0, R: 0 };
+      e.x = 45;
+      // AI gets ignite + conqueror by default
+      e.spells.second = 'ignite';
+      e.rune = 'conqueror';
+      e.runeState = initRuneState('conqueror');
+      return e;
+    })(),
     minionWave: 1,
     minionTimer: 0,
     // Minion state (simplified): count of alive minions per side
@@ -58,6 +82,16 @@ export function createGame(difficulty = 'normal') {
     winner: null,
     log: [],
   };
+}
+
+// ── Rune state initialization ──
+function initRuneState(rune) {
+  switch (rune) {
+    case 'conqueror': return { stacks: 0, decayTimer: 0 };
+    case 'electrocute': return { hitCount: 0, cooldown: 0 };
+    case 'grasp': return { chargeTimer: 0, ready: false, bonusHp: 0 };
+    default: return {};
+  }
 }
 
 // ── Damage formulas (exact LoL) ──
@@ -261,6 +295,12 @@ export function fullState(game) {
     recallUsed: f.recallUsed,
     flashCooldown: f.flashCooldown,
     igniteCooldown: f.igniteCooldown,
+    spells: { ...f.spells },
+    spellCooldowns: { ...f.spellCooldowns },
+    ignitedBy: f.ignitedBy ? { ...f.ignitedBy } : null,
+    exhausted: f.exhausted,
+    rune: f.rune,
+    runeState: JSON.parse(JSON.stringify(f.runeState)),
     x: f.x, y: f.y,
     inBush: f.inBush,
   });

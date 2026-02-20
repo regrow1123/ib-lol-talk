@@ -10,8 +10,8 @@ export default function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'POST only' });
 
   try {
-    const { difficulty = 'normal' } = req.body || {};
-    const game = createGame(difficulty);
+    const { difficulty = 'normal', spell = 'ignite', rune = 'conqueror' } = req.body || {};
+    const game = createGame(difficulty, spell, rune);
 
     res.json({
       gameId: game.id,
