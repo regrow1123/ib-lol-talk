@@ -148,6 +148,6 @@ function tickCooldowns(fighter) {
 }
 
 export function getSituationText(state) {
-  const csable = hasLastHittable(state.minions.playerWave) ? state.minions.playerWave.filter(m => m.hp <= state.player.totalAd).length : 0;
-  return templates.getTurnSituation(state.turn, state.player.position, state.enemy.position, csable, state.player, state.enemy);
+  const csable = hasLastHittable(state.minions.playerWave) ? state.minions.playerWave.filter(m => m.hp > 0 && m.hp <= state.player.totalAd).length : 0;
+  return templates.getTurnSituation(state.turn, state.player.position, state.enemy.position, csable, state.player, state.enemy, state.minions);
 }

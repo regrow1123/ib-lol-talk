@@ -106,57 +106,33 @@ export function getMoveNarrative(name, direction) {
   return `${name}이(가) ${DIR[direction]}으로 이동했다`;
 }
 
-export function getTurnSituation(turn, playerPos, enemyPos, minionInfo, player, enemy) {
+export function getTurnSituation(turn, playerPos, enemyPos, minionInfo, player, enemy, minions) {
   const lines = [];
   const posName = ['아군타워', '아군쪽', '중앙', '적쪽', '적타워'];
   const dist = Math.abs(playerPos - enemyPos);
 
   lines.push(`— ${turn}턴 —`);
 
-  // 위치 + 거리
-  let posLine = `내 위치: ${posName[playerPos]}`;
-  if (player && player.inBush) posLine += ' (부쉬)';
-  posLine += ` | 적 위치: `;
-  if (enemy && enemy.inBush) {
-    posLine += '부쉬 (시야 없음)';
-  } else {
-    posLine += posName[enemyPos];
-  }
-  posLine += ` | 거리: ${dist}칸`;
-  if (dist <= 1) posLine += ' (근접)';
-  else if (dist <= 2) posLine += ' (Q사거리)';
-  else posLine += ' (원거리)';
+  // 챔피언 위치
+  let posLine = `나: ${posName[playerPos]}`;
+  if (player && player.inBush) posLine += '(부쉬)';
+  posLine += ` | 적: `;
+  if (enemy && enemy.inBush) posLine += '부쉬(시야없음)';
+  else posLine += posName[enemyPos];
+  posLine += ` | 거리 ${dist}칸`;
   lines.push(posLine);
 
-  // 스탯
-  if (player && enemy) {
-    const pHp = Math.round(player.hp);
-    const eHp = Math.round(enemy.hp);
-    lines.push(`내 HP: ${pHp}/${player.maxHp} (${Math.round(pHp/player.maxHp*100)}%) | 기력: ${Math.round(player.energy)} | CS: ${player.cs} | ${player.gold}G`);
-    if (!enemy.inBush) {
-      lines.push(`적 HP: ${eHp}/${enemy.maxHp} (${Math.round(eHp/enemy.maxHp*100)}%) | CS: ${enemy.cs}`);
-    }
+  // 미니언 위치 + 상태
+  const minionLines = [];
+  if (minions) {
+    const pAlive = minions.playerWave ? minions.playerWave.filter(m => m.hp > 0).length : 0;
+    const eAlive = minions.enemyWave ? minions.enemyWave.filter(m => m.hp > 0).length : 0;
+    minionLines.push(`미니언: 아군 ${pAlive}마리 vs 적 ${eAlive}마리`);
   }
-
-  // 쿨다운
-  if (player) {
-    const cds = Object.entries(player.cooldowns)
-      .map(([k, v]) => v > 0 ? `${k}:${v}턴` : `${k}:✓`)
-      .join(' ');
-    lines.push(`쿨다운: ${cds} | 포션: ${player.potions}개`);
-  }
-
-  // 미니언
   if (minionInfo > 0) {
-    lines.push(`막타 가능 미니언: ${minionInfo}마리`);
-  } else {
-    lines.push('막타 가능 미니언 없음');
+    minionLines.push(`막타 가능: ${minionInfo}마리`);
   }
-
-  // 경고
-  if (player && player.hp / player.maxHp < 0.3) lines.push('⚠️ 체력 위험');
-  if (player && player.energy < 50) lines.push('⚠️ 기력 부족');
-  if (enemy && !enemy.inBush && enemy.hp / enemy.maxHp < 0.3) lines.push('❗ 적 체력 낮음 — 킬 가능');
+  if (minionLines.length > 0) lines.push(minionLines.join(' | '));
 
   return lines.join('\n');
 }
