@@ -274,31 +274,42 @@ function renderStatus() {
 }
 
 // ── Canvas ──
-// Minimap: full SR map, mid lane runs diagonal (bottom-left to top-right)
-// Grid x=0 (player tower) maps to ~bottom-left, x=60 (enemy tower) to ~top-right
-// y offset = perpendicular to the diagonal (for bush/lane width)
+// Full SR minimap. Mid lane = diagonal (bottom-left → top-right).
+// Grid x: 0-60 along mid lane. y: 0-24 perpendicular to lane.
 
 let mapBg = null;
+let champIcon = null;
+
 const mapImg = new Image();
 mapImg.src = 'img/minimap.png';
 mapImg.onload = () => { mapBg = mapImg; renderCanvas(); };
 
-// Convert game grid (x: 0-60 along mid lane, y: 0-24 perpendicular) to minimap pixel coords
-// Mid lane: from ~(190, 810) [blue tower] to ~(810, 190) [red tower] on 1000x1000
-const MID_START = { x: 190, y: 810 }; // player tower (grid x=0)
-const MID_END   = { x: 810, y: 190 }; // enemy tower (grid x=60)
+const champImg = new Image();
+champImg.src = 'img/leesin.png';
+champImg.onload = () => { champIcon = champImg; renderCanvas(); };
+
+// Mid lane 1st tower positions on 1000x1000 minimap
+// Blue mid T1: approx (340, 660), Red mid T1: approx (660, 340)
+const BLUE_T1 = { x: 340, y: 660 };
+const RED_T1  = { x: 660, y: 340 };
+
+// Lane endpoints (slightly beyond towers for full lane)
+const MID_START = { x: 260, y: 740 }; // grid x=0
+const MID_END   = { x: 740, y: 260 }; // grid x=60
+
+// Perpendicular direction to mid lane (normalized)
+// Mid lane direction: (1, -1)/sqrt(2). Perpendicular: (1, 1)/sqrt(2)
+const PERP_X = 1 / Math.SQRT2;
+const PERP_Y = 1 / Math.SQRT2;
 
 function gridToMap(gx, gy, mapSize) {
-  const t = gx / 60; // 0..1 along mid lane
-  // Main axis (along mid lane)
+  const t = gx / 60;
   const mx = MID_START.x + t * (MID_END.x - MID_START.x);
   const my = MID_START.y + t * (MID_END.y - MID_START.y);
-  // Perpendicular offset (y: 12 = center, 0 = "left" of lane, 24 = "right")
-  // Perpendicular direction to the diagonal: (1,1)/sqrt(2) normalized
-  const perpScale = 2.5; // pixels per grid unit perpendicular
-  const offset = (gy - 12) * perpScale;
-  const px = (mx + offset) * (mapSize / 1000);
-  const py = (my + offset) * (mapSize / 1000);
+  // Perpendicular offset (gy=12 is center of lane)
+  const perpOffset = (gy - 12) * 3;
+  const px = (mx + perpOffset * PERP_X) * (mapSize / 1000);
+  const py = (my + perpOffset * PERP_Y) * (mapSize / 1000);
   return { x: px, y: py };
 }
 
@@ -309,7 +320,7 @@ function renderCanvas() {
   const W = canvas.width, H = canvas.height;
   ctx.clearRect(0, 0, W, H);
 
-  // Draw minimap background
+  // Background
   if (mapBg) {
     ctx.drawImage(mapBg, 0, 0, W, H);
   } else {
@@ -317,82 +328,98 @@ function renderCanvas() {
     ctx.fillRect(0, 0, W, H);
   }
 
-  // LoL-style minimap icons
+  const s = W / 1000; // scale factor
 
-  // Tower dots
-  const drawTower = (gx, gy, col) => {
-    const p = gridToMap(gx, gy, W);
+  // ── Towers (LoL style: small colored diamond/icon) ──
+  const drawTower = (mapX, mapY, col) => {
+    const px = mapX * s, py = mapY * s;
+    const sz = 5;
     ctx.fillStyle = col;
-    ctx.shadowColor = col;
-    ctx.shadowBlur = 6;
-    // Tower: small filled triangle/diamond like LoL minimap
+    ctx.strokeStyle = '#000';
+    ctx.lineWidth = 1;
+    // Diamond shape
     ctx.beginPath();
-    ctx.moveTo(p.x, p.y - 5);
-    ctx.lineTo(p.x + 4, p.y + 3);
-    ctx.lineTo(p.x - 4, p.y + 3);
+    ctx.moveTo(px, py - sz);
+    ctx.lineTo(px + sz, py);
+    ctx.lineTo(px, py + sz);
+    ctx.lineTo(px - sz, py);
     ctx.closePath();
     ctx.fill();
-    ctx.shadowBlur = 0;
+    ctx.stroke();
+    // Small inner dot
+    ctx.fillStyle = '#fff';
+    ctx.beginPath();
+    ctx.arc(px, py, 1.5, 0, Math.PI * 2);
+    ctx.fill();
   };
-  drawTower(3, 12, '#00ccff');   // player tower (blue)
-  drawTower(57, 12, '#ff4444');  // enemy tower (red)
+  drawTower(BLUE_T1.x, BLUE_T1.y, '#00aaff');
+  drawTower(RED_T1.x, RED_T1.y, '#ff3333');
 
-  // Minion dots (small circles, like LoL minimap)
+  // ── Minions (tiny dots like real minimap) ──
+  const rng = seededRng(state.turn);
   const drawMinion = (gx, gy, col) => {
     const p = gridToMap(gx, gy, W);
     ctx.fillStyle = col;
     ctx.beginPath();
-    ctx.arc(p.x, p.y, 1.5, 0, Math.PI * 2);
+    ctx.arc(p.x, p.y, 1.8, 0, Math.PI * 2);
     ctx.fill();
   };
-
-  // Simulated minion positions (will come from server state later)
-  // Player minions (blue) cluster near clash point
-  const rng = seededRng(state.turn);
+  // Blue minions (player side)
   for (let i = 0; i < 6; i++) {
-    const mx = 28 - rng() * 4;
-    const my = 11 + rng() * 2;
-    drawMinion(mx, my, '#5599ff');
+    drawMinion(28 - rng() * 5, 10.5 + rng() * 3, '#4488ee');
   }
-  // Enemy minions (red)
+  // Red minions (enemy side)
   for (let i = 0; i < 6; i++) {
-    const mx = 32 + rng() * 4;
-    const my = 11 + rng() * 2;
-    drawMinion(mx, my, '#ff5555');
+    drawMinion(32 + rng() * 5, 10.5 + rng() * 3, '#ee4444');
   }
 
-  // Champion circles (like LoL minimap champion icons)
-  const drawChamp = (f, col, borderCol) => {
+  // ── Champions (circular portrait like real LoL minimap) ──
+  const drawChamp = (f, borderCol) => {
     const p = gridToMap(f.x, f.y, W);
-    const r = 6;
+    const r = 10;
 
-    // Border circle
+    ctx.save();
+
+    // Clip circle for portrait
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, r, 0, Math.PI * 2);
+    ctx.closePath();
+    ctx.clip();
+
+    // Draw champion portrait
+    if (champIcon) {
+      ctx.drawImage(champIcon, p.x - r, p.y - r, r * 2, r * 2);
+    } else {
+      ctx.fillStyle = '#333';
+      ctx.fill();
+    }
+
+    ctx.restore();
+
+    // Border ring (team color)
     ctx.strokeStyle = borderCol;
-    ctx.lineWidth = 1.5;
-    ctx.beginPath(); ctx.arc(p.x, p.y, r, 0, Math.PI * 2); ctx.stroke();
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, r, 0, Math.PI * 2);
+    ctx.stroke();
 
-    // Filled circle
-    ctx.fillStyle = col;
-    ctx.beginPath(); ctx.arc(p.x, p.y, r - 1, 0, Math.PI * 2); ctx.fill();
-
-    // HP ring (like LoL minimap green ring around champion)
+    // HP ring (outside the border)
     const pct = f.hp / f.maxHp;
     const hpCol = pct > 0.5 ? '#00ff44' : pct > 0.25 ? '#ffaa00' : '#ff3333';
     ctx.strokeStyle = hpCol;
     ctx.lineWidth = 2;
     ctx.beginPath();
-    ctx.arc(p.x, p.y, r + 2, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * pct);
+    ctx.arc(p.x, p.y, r + 3, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * pct);
     ctx.stroke();
   };
-  drawChamp(state.player, '#1166cc', '#33aaff');
-  drawChamp(state.enemy, '#cc2222', '#ff4444');
+  drawChamp(state.player, '#00aaff');
+  drawChamp(state.enemy, '#ff3333');
 
-  // Distance overlay (bottom-right corner)
+  // ── Distance overlay ──
   const dist = Math.abs(state.player.x - state.enemy.x);
   const dl = dist <= 3 ? '근접' : dist <= 9 ? 'E' : dist <= 24 ? 'Q' : '원거리';
   ctx.fillStyle = 'rgba(0,0,0,0.6)';
-  const tw = 70, th = 14;
-  ctx.fillRect(W - tw - 4, H - th - 4, tw, th);
+  ctx.fillRect(W - 74, H - 18, 70, 16);
   ctx.fillStyle = '#ccc';
   ctx.font = '9px sans-serif';
   ctx.textAlign = 'right';
