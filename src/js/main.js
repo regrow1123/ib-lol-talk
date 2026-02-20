@@ -7,6 +7,17 @@ const $ = id => document.getElementById(id);
 
 function init() {
   state = createGameState();
+  // Init log toggle
+  const logToggle = $('log-toggle');
+  if (logToggle) {
+    logToggle.onclick = () => {
+      const content = $('log-content');
+      content.classList.toggle('collapsed');
+      $('log-arrow').textContent = content.classList.contains('collapsed') ? '▶' : '▼';
+    };
+  }
+  // Clear log
+  if ($('log-content')) $('log-content').innerHTML = '<div class="log-entry-start">⚔️ 라인전 시작</div>';
   renderAll();
 }
 
@@ -174,10 +185,35 @@ function renderResult() {
     container.appendChild(p);
   }
 
+  // Add to log
+  appendToLog(state);
+
   $('next-turn-btn').onclick = () => {
     state = advanceToChoice(state);
     renderAll();
   };
+}
+
+function appendToLog(state) {
+  const logContainer = $('log-content');
+  if (!logContainer) return;
+
+  const entry = document.createElement('div');
+  entry.className = 'log-entry';
+
+  const turnNum = state.turn - 1;
+  const playerText = state.lastPlayerAction ? state.lastPlayerAction.text : '';
+  const enemyText = state.lastEnemyAction ? state.lastEnemyAction.text : '';
+  const results = state.narratives.join(' ');
+
+  entry.innerHTML =
+    `<span class="log-turn">[${turnNum}턴]</span> ` +
+    `<span class="log-player-action">나: ${playerText}</span> | ` +
+    `<span class="log-enemy-action">적: ${enemyText}</span><br>` +
+    `<span class="log-result">→ ${results}</span>`;
+
+  logContainer.appendChild(entry);
+  logContainer.scrollTop = logContainer.scrollHeight;
 }
 
 function renderGameOver() {
@@ -200,15 +236,6 @@ function renderGameOver() {
     $('gameover-narratives').innerHTML = '';
     init();
   };
-}
-
-// Log panel
-function renderLog() {
-  const container = $('log-content');
-  if (!container) return;
-  container.innerHTML = state.log.map(l =>
-    `<div class="log-entry"><strong>${l.turn}턴</strong>: ${l.narratives.join(' | ')}</div>`
-  ).join('');
 }
 
 // Start
