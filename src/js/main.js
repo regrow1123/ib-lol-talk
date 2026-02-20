@@ -403,14 +403,6 @@ function renderCanvas() {
     ctx.arc(p.x, p.y, r, 0, Math.PI * 2);
     ctx.stroke();
 
-    // HP ring (outside the border)
-    const pct = f.hp / f.maxHp;
-    const hpCol = pct > 0.5 ? '#00ff44' : pct > 0.25 ? '#ffaa00' : '#ff3333';
-    ctx.strokeStyle = hpCol;
-    ctx.lineWidth = 2;
-    ctx.beginPath();
-    ctx.arc(p.x, p.y, r + 3, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * pct);
-    ctx.stroke();
   };
   drawChamp(state.player, '#00aaff');
   drawChamp(state.enemy, '#ff3333');
