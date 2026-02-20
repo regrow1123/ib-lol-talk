@@ -104,14 +104,14 @@ body {
 /* Status bars */
 .status-row {
   display: flex;
-  gap: 12px;
+  gap: 8px;
 }
 .status-card {
   flex: 1;
   background: var(--bg-panel);
   border: 1px solid var(--border);
-  border-radius: 8px;
-  padding: 12px;
+  border-radius: 6px;
+  padding: 6px 10px;
 }
 .status-card.player-card { border-left: 3px solid var(--blue); }
 .status-card.enemy-card { border-left: 3px solid var(--hp-red); }
@@ -120,41 +120,41 @@ body {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 8px;
+  margin-bottom: 4px;
 }
 .status-name {
   font-weight: 700;
-  font-size: 1em;
+  font-size: 0.8em;
 }
 .status-name.player { color: var(--blue); }
 .status-name.enemy { color: var(--hp-red); }
 .status-level {
-  font-size: 0.8em;
+  font-size: 0.7em;
   color: var(--accent);
   font-weight: 700;
 }
 .status-info {
   display: flex;
-  gap: 12px;
-  font-size: 0.75em;
+  gap: 8px;
+  font-size: 0.65em;
   color: var(--text-dim);
-  margin-top: 6px;
+  margin-top: 3px;
 }
-.status-info span { display: flex; align-items: center; gap: 3px; }
+.status-info span { display: flex; align-items: center; gap: 2px; }
 
 /* Bar */
 .bar-container {
-  height: 18px;
+  height: 12px;
   background: #1a1a2e;
-  border-radius: 4px;
+  border-radius: 3px;
   overflow: hidden;
-  margin: 3px 0;
+  margin: 2px 0;
   position: relative;
 }
 .bar-fill {
   height: 100%;
   transition: width 0.4s ease;
-  border-radius: 4px;
+  border-radius: 3px;
 }
 .bar-fill.hp { background: linear-gradient(90deg, #27ae60, #2ecc71); }
 .bar-fill.energy { background: linear-gradient(90deg, #d4a017, #f1c40f); }
@@ -169,7 +169,7 @@ body {
   top: 50%;
   left: 50%;
   transform: translate(-50%, -50%);
-  font-size: 0.65em;
+  font-size: 0.55em;
   font-weight: 700;
   color: white;
   text-shadow: 0 1px 2px rgba(0,0,0,0.8);
@@ -178,13 +178,13 @@ body {
 /* Cooldowns */
 .cooldown-row {
   display: flex;
-  gap: 6px;
-  margin-top: 8px;
+  gap: 4px;
+  margin-top: 4px;
 }
 .cd-badge {
-  padding: 3px 8px;
-  border-radius: 4px;
-  font-size: 0.7em;
+  padding: 1px 6px;
+  border-radius: 3px;
+  font-size: 0.6em;
   font-weight: 700;
   background: var(--bg-card);
   color: var(--accent);
