@@ -335,36 +335,33 @@ function renderCanvas() {
   // Map coords are on 1000x1000 reference, canvas is WxH
   const s = W / 1000;
 
-  // ── Towers ──
+  // ── Towers (simple filled circle + border) ──
   const drawTower = (mapX, mapY, col) => {
     const px = mapX * s, py = mapY * s;
-    const r = W * 0.03; // 3% of canvas width
+    const r = W * 0.03;
 
-    // Filled circle with glow
-    ctx.save();
-    ctx.shadowColor = col;
-    ctx.shadowBlur = r * 2;
+    // Filled circle
     ctx.fillStyle = col;
     ctx.beginPath();
     ctx.arc(px, py, r, 0, Math.PI * 2);
     ctx.fill();
-    ctx.restore();
 
-    // White border
-    ctx.strokeStyle = '#fff';
-    ctx.lineWidth = 1.5;
+    // Dark border
+    ctx.strokeStyle = '#000';
+    ctx.lineWidth = 2;
     ctx.beginPath();
     ctx.arc(px, py, r, 0, Math.PI * 2);
     ctx.stroke();
 
-    // Cross/plus inside (turret look)
+    // White cross inside
     ctx.strokeStyle = '#fff';
     ctx.lineWidth = 2;
+    const d = r * 0.55;
     ctx.beginPath();
-    ctx.moveTo(px, py - r * 0.6);
-    ctx.lineTo(px, py + r * 0.6);
-    ctx.moveTo(px - r * 0.6, py);
-    ctx.lineTo(px + r * 0.6, py);
+    ctx.moveTo(px - d, py - d);
+    ctx.lineTo(px + d, py + d);
+    ctx.moveTo(px + d, py - d);
+    ctx.lineTo(px - d, py + d);
     ctx.stroke();
   };
   drawTower(RED_T1.x, RED_T1.y, '#ff4444');
