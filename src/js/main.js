@@ -7,7 +7,9 @@ let state = null;
 const $ = id => document.getElementById(id);
 
 function init() {
+  try {
   state = createGameState();
+  console.log('Game state created:', state.phase, state.player.skillLevels);
   // Init log toggle
   const logToggle = $('log-toggle');
   if (logToggle) {
@@ -20,6 +22,7 @@ function init() {
   // Clear log
   if ($('log-content')) $('log-content').innerHTML = '<div class="log-entry-start">⚔️ 라인전 시작</div>';
   renderAll();
+  } catch(e) { console.error('INIT ERROR:', e); document.body.innerHTML = '<pre style="color:red;padding:20px;">INIT ERROR: ' + e.message + '\n' + e.stack + '</pre>'; }
 }
 
 function renderAll() {
