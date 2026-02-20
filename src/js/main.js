@@ -1,8 +1,13 @@
 // ib-lol talk — KakaoTalk-style chat UI
 const $ = id => document.getElementById(id);
 
+const API_BASE = window.location.hostname === 'localhost'
+  ? 'http://localhost:3001'
+  : (window.API_BASE || '');
+
+let gameId = null;
 let state = {
-  turn: 1,
+  turn: 0,
   player: { hp:645,maxHp:645,energy:200,maxEnergy:200,cs:0,gold:0,level:1,shield:0,
             skillLevels:{Q:0,W:0,E:0,R:0},cooldowns:{Q:0,W:0,E:0,R:99},skillPoints:1 },
   enemy:  { hp:645,maxHp:645,energy:200,maxEnergy:200,cs:0,gold:0,level:1,shield:0,
@@ -13,11 +18,25 @@ let sending = false;
 let drawerOpen = false;
 
 // ── Init ──
-function init() {
+async function init() {
+  // Start new game via server
+  try {
+    const res = await fetch(`${API_BASE}/api/start`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ difficulty: 'normal' }),
+    });
+    const data = await res.json();
+    gameId = data.gameId;
+    state = data.state;
+    addSystemMsg(data.narrative || '⚔️ 리신 vs 리신 — 라인전 시작');
+  } catch {
+    addSystemMsg('⚠️ 서버 연결 실패 — 로컬 모드로 진행합니다');
+    gameId = null;
+  }
+
   renderStatus();
   checkPhase();
-
-  addSystemMsg('⚔️ 리신 vs 리신 — 라인전 시작');
 
   $('send-btn').onclick = submit;
   $('player-input').addEventListener('keydown', e => {
@@ -54,20 +73,26 @@ async function submit() {
   const typing = addTypingIndicator();
 
   try {
-    // TODO: actual server call
-    await new Promise(r => setTimeout(r, 800));
-    const data = mockTurn(input);
+    const res = await fetch(`${API_BASE}/api/turn`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ gameId, input }),
+    });
+    const data = await res.json();
     typing.remove();
 
-    if (data.enemyAction) addEnemyMsg(data.enemyAction);
-    if (data.narrative) addNarratorMsg(data.narrative);
-    if (data.state) state = data.state;
-
-    renderStatus();
-    checkPhase();
+    if (data.error) {
+      addSystemMsg(`⚠️ ${data.error}`);
+    } else {
+      if (data.enemyAction) addEnemyMsg(data.enemyAction);
+      if (data.narrative) addNarratorMsg(data.narrative);
+      if (data.state) state = data.state;
+      renderStatus();
+      checkPhase();
+    }
   } catch {
     typing.remove();
-    addSystemMsg('⚠️ 오류가 발생했습니다');
+    addSystemMsg('⚠️ 서버 오류가 발생했습니다');
   }
 
   sending = false;
@@ -201,9 +226,24 @@ function showSkillUp() {
     btn.disabled = !canLevel || rBlock;
 
     if (canLevel && !rBlock) {
-      btn.onclick = () => {
-        state.player.skillLevels[s.key]++;
-        state.player.skillPoints--;
+      btn.onclick = async () => {
+        try {
+          if (gameId) {
+            const res = await fetch(`${API_BASE}/api/skillup`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ gameId, skill: s.key }),
+            });
+            const data = await res.json();
+            if (data.state) state = data.state;
+          } else {
+            state.player.skillLevels[s.key]++;
+            state.player.skillPoints--;
+          }
+        } catch {
+          state.player.skillLevels[s.key]++;
+          state.player.skillPoints--;
+        }
         renderStatus();
         if (state.player.skillPoints <= 0) {
           overlay.classList.add('hidden');
@@ -226,14 +266,6 @@ function showGameOver() {
   $('restart-btn').onclick = () => {
     $('gameover-overlay').classList.add('hidden');
     $('chat-feed').innerHTML = '';
-    state = {
-      turn:1,
-      player:{hp:645,maxHp:645,energy:200,maxEnergy:200,cs:0,gold:0,level:1,shield:0,
-              skillLevels:{Q:0,W:0,E:0,R:0},cooldowns:{Q:0,W:0,E:0,R:99},skillPoints:1},
-      enemy:{hp:645,maxHp:645,energy:200,maxEnergy:200,cs:0,gold:0,level:1,shield:0,
-             skillLevels:{Q:1,W:0,E:0,R:0},cooldowns:{Q:0,W:0,E:0,R:99},skillPoints:0},
-      phase:'skillup',
-    };
     init();
   };
 }
@@ -268,16 +300,6 @@ function renderStatus() {
       else { el.textContent = `${s}${lv}`; el.className = 'cd'; }
     }
   }
-}
-
-// ── Mock ──
-function mockTurn(input) {
-  state.turn++;
-  return {
-    enemyAction: '미니언 뒤에서 CS를 노린다',
-    narrative: `"${input}" — 서버 연결 후 결과가 표시됩니다.`,
-    state: { ...state, phase: 'play' },
-  };
 }
 
 document.addEventListener('DOMContentLoaded', init);
