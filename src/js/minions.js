@@ -1,4 +1,4 @@
-// Minion wave & CS system — LoL-accurate values
+// Minion wave & CS system — LoL-accurate values with grid coordinates
 
 const WAVE_INTERVAL = 10; // new wave every 10 turns (~30s)
 
@@ -11,11 +11,12 @@ const MINION_STATS = {
 const MELEE_COUNT = 3;
 const RANGED_COUNT = 3;
 
-export function createMinion(type, side) {
+export function createMinion(type, side, x, y) {
   const s = MINION_STATS[type];
   return {
     type,
     side, // 'player' | 'enemy'
+    x, y, // Grid coordinates
     hp: s.hp,
     maxHp: s.hp,
     ad: s.ad,
@@ -28,8 +29,26 @@ export function createMinion(type, side) {
 
 export function createWave(side) {
   const wave = [];
-  for (let i = 0; i < MELEE_COUNT; i++) wave.push(createMinion('melee', side));
-  for (let i = 0; i < RANGED_COUNT; i++) wave.push(createMinion('ranged', side));
+  const clashX = 30; // MINION_CLASH.x
+  const clashY = 12; // MINION_CLASH.y
+  
+  // Spread minions around clash point with some scatter
+  for (let i = 0; i < MELEE_COUNT; i++) {
+    const xOffset = (side === 'player' ? -1 : 1) * (2 + i * 1.5);
+    const yOffset = (Math.random() - 0.5) * 4; // Some Y-axis scatter
+    const x = Math.round(clashX + xOffset);
+    const y = Math.round(Math.max(8, Math.min(16, clashY + yOffset))); // Keep in lane
+    wave.push(createMinion('melee', side, x, y));
+  }
+  
+  for (let i = 0; i < RANGED_COUNT; i++) {
+    const xOffset = (side === 'player' ? -1 : 1) * (4 + i * 1.5);
+    const yOffset = (Math.random() - 0.5) * 4;
+    const x = Math.round(clashX + xOffset);
+    const y = Math.round(Math.max(8, Math.min(16, clashY + yOffset)));
+    wave.push(createMinion('ranged', side, x, y));
+  }
+  
   return wave;
 }
 
@@ -40,6 +59,37 @@ export function initMinions() {
     waveTimer: WAVE_INTERVAL,
     deadThisTurn: { player: [], enemy: [] }, // track deaths for XP
   };
+}
+
+// Check if a champion is "behind minions" for Q skillshot blocking
+export function isBehindMinions(champion, minions, isPlayerChampion) {
+  // Get the relevant minion wave (the one that can block for this champion)
+  const blockingWave = isPlayerChampion ? minions.playerWave : minions.enemyWave;
+  
+  if (blockingWave.length === 0) return false;
+  
+  // Find the frontmost minion x-coordinate
+  const frontmostX = isPlayerChampion ? 
+    Math.max(...blockingWave.filter(m => m.hp > 0).map(m => m.x)) :
+    Math.min(...blockingWave.filter(m => m.hp > 0).map(m => m.x));
+  
+  // Champion is behind minions if they are closer to their own tower than the frontmost minion
+  if (isPlayerChampion) {
+    return champion.x < frontmostX; // Player champion behind if x is less than frontmost minion
+  } else {
+    return champion.x > frontmostX; // Enemy champion behind if x is greater than frontmost minion
+  }
+}
+
+// Get the frontmost minion x-coordinate for line-of-sight calculations
+export function getFrontmostMinionX(minions, side) {
+  const wave = side === 'player' ? minions.playerWave : minions.enemyWave;
+  const aliveMinions = wave.filter(m => m.hp > 0);
+  if (aliveMinions.length === 0) return null;
+  
+  return side === 'player' ? 
+    Math.max(...aliveMinions.map(m => m.x)) :
+    Math.min(...aliveMinions.map(m => m.x));
 }
 
 // Minions fight each other: each minion attacks one opposing minion

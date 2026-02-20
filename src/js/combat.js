@@ -18,7 +18,8 @@ export function calcMagicDamage(rawDamage, targetMr) {
 // Returns raw damage before resistances
 export function getSkillRawDamage(skill, part, attacker, target) {
   const s = LEE_SIN.skills[skill];
-  const lvl = 0; // skill level index 0 = level 1
+  const skillLevel = attacker.skillLevels[skill] || 0;
+  const lvl = Math.max(0, skillLevel - 1); // Convert skill level to array index (level 1 = index 0)
 
   if (skill === 'Q' && part === 1) {
     return s.baseDamage1[lvl] + s.bonusAdRatio1 * attacker.bonusAd;

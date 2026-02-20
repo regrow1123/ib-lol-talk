@@ -5,7 +5,26 @@ import { generateActions, resolveActions } from './actions.js';
 import { chooseAction } from './ai.js';
 import * as templates from './templates.js';
 
-export function createFighter(name, position) {
+// Grid constants
+export const GRID_W = 60;
+export const GRID_H = 24;
+export const TOWER_PLAYER = {x: 3, y: 12};
+export const TOWER_ENEMY = {x: 57, y: 12};
+export const MINION_CLASH = {x: 30, y: 12};
+export const BUSH_TOP = {xMin: 18, xMax: 42, yMin: 2, yMax: 5};
+export const BUSH_BOT = {xMin: 18, xMax: 42, yMin: 19, yMax: 22};
+export const LANE_Y_MIN = 6;
+export const LANE_Y_MAX = 18;
+
+// Range constants (grid cells)
+export const AA_RANGE = 3;
+export const E_RANGE = 9;
+export const Q_RANGE = 24;
+export const R_RANGE = 8;
+export const W_RANGE = 14;
+export const TOWER_RANGE = 15;
+
+export function createFighter(name, startX, startY) {
   const stats = getStatsAtLevel(1, { doransBlade: true });
   return {
     name,
@@ -13,8 +32,8 @@ export function createFighter(name, position) {
     energy: stats.energy, maxEnergy: stats.energy,
     totalAd: stats.totalAd, baseAd: stats.baseAd, bonusAd: stats.bonusAd,
     armor: stats.armor, mr: stats.mr,
-    position,       // 0-4 horizontal (tower to tower)
-    laneY: 1,       // 0=top, 1=center, 2=bottom (vertical lane position)
+    x: startX,       // Grid X coordinate (0-60)
+    y: startY,       // Grid Y coordinate (0-24)
     level: 1, xp: 0,
     cs: 0, gold: 500 - 450 - 50, // after buying doran + pot
     cooldowns: { Q: 0, W: 0, E: 0, R: 99 },
@@ -34,8 +53,8 @@ export function createFighter(name, position) {
 export function createGameState() {
   const state = {
     turn: 1,
-    player: createFighter('나', 1),
-    enemy: createFighter('적', 3),
+    player: createFighter('나', 10, 12), // Player starts at (10, 12)
+    enemy: createFighter('적', 50, 12),   // Enemy starts at (50, 12)
     minions: initMinions(),
     log: [],
     phase: 'skillup', // 'skillup' | 'choice' | 'result' | 'gameover'
@@ -166,6 +185,17 @@ export function advanceToChoice(state) {
   return state;
 }
 
+// Helper function to calculate grid distance
+export function getGridDistance(a, b) {
+  return Math.abs(a.x - b.x);  // Using horizontal distance for lane-based game
+}
+
+// Helper function to check if position is in bush
+export function isInBush(x, y) {
+  return (x >= BUSH_TOP.xMin && x <= BUSH_TOP.xMax && y >= BUSH_TOP.yMin && y <= BUSH_TOP.yMax) ||
+         (x >= BUSH_BOT.xMin && x <= BUSH_BOT.xMax && y >= BUSH_BOT.yMin && y <= BUSH_BOT.yMax);
+}
+
 // AI skill level-up priority: R > Q > E > W
 function aiLevelUpSkill(fighter) {
   const { canLevelSkill, levelUpSkill } = require_champion();
@@ -226,6 +256,7 @@ function tickCooldowns(fighter) {
 }
 
 export function getSituationText(state) {
+  const distance = getGridDistance(state.player, state.enemy);
   const csable = state.minions.playerWave.filter(m => m.hp > 0 && m.hp <= state.player.totalAd).length;
-  return templates.getTurnSituation(state.turn, state.player.position, state.enemy.position, csable, state.player, state.enemy, state.minions);
+  return templates.getTurnSituation(state.turn, state.player.x, state.enemy.x, distance, csable, state.player, state.enemy, state.minions);
 }
