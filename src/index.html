@@ -3,102 +3,108 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>ib-lol talk — 리신 라인전</title>
+  <title>ib-lol talk</title>
   <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
   <div class="game-container">
-    <!-- Header -->
-    <div class="game-header">
-      <h1>ib-lol talk</h1>
-      <div class="subtitle">리신 vs 리신 — 라인전 시뮬레이터</div>
-    </div>
 
-    <!-- Lane Mini Map -->
-    <canvas id="lane-canvas" width="760" height="200"></canvas>
+    <!-- Canvas Minimap -->
+    <canvas id="lane-canvas" width="760" height="180"></canvas>
 
-    <!-- Status -->
+    <!-- Status Row -->
     <div class="status-row">
-      <!-- Player -->
-      <div class="status-card player-card">
+      <div class="status-card player-side">
         <div class="status-header">
-          <span class="status-name player">🟦 나 (리신)</span>
-          <span class="status-level" id="player-level">Lv.1</span>
+          <span class="champ-name player">나 (리신)</span>
+          <span class="champ-level" id="p-level">Lv.1</span>
         </div>
-        <div class="bar-container">
-          <div class="bar-fill hp" id="player-hp-bar" style="width:100%"></div>
-          <div class="bar-fill shield hidden" id="player-shield-bar" style="width:0%"></div>
-          <div class="bar-text" id="player-hp-text">645 / 645</div>
+        <div class="bar hp-bar">
+          <div class="bar-fill" id="p-hp-fill" style="width:100%"></div>
+          <div class="bar-shield hidden" id="p-shield-fill"></div>
+          <span class="bar-label" id="p-hp-text">645 / 645</span>
         </div>
-        <div class="bar-container">
-          <div class="bar-fill energy" id="player-energy-bar" style="width:100%"></div>
-          <div class="bar-text" id="player-energy-text">200 / 200</div>
+        <div class="bar energy-bar">
+          <div class="bar-fill" id="p-energy-fill" style="width:100%"></div>
+          <span class="bar-label" id="p-energy-text">200 / 200</span>
         </div>
-        <div class="status-info">
-          <span>🪙 CS: <strong id="player-cs">0</strong></span>
-          <span>💰 <strong id="player-gold">0</strong>G</span>
-        </div>
-        <div class="cooldown-row">
-          <span class="cd-badge" id="player-cd-q">Q</span>
-          <span class="cd-badge" id="player-cd-w">W</span>
-          <span class="cd-badge" id="player-cd-e">E</span>
-          <span class="cd-badge" id="player-cd-r">R</span>
+        <div class="status-meta">
+          <span>CS <strong id="p-cs">0</strong></span>
+          <span><strong id="p-gold">0</strong>G</span>
+          <div class="cd-row">
+            <span class="cd" id="p-cd-q">Q</span>
+            <span class="cd" id="p-cd-w">W</span>
+            <span class="cd" id="p-cd-e">E</span>
+            <span class="cd" id="p-cd-r">R</span>
+          </div>
         </div>
       </div>
 
-      <!-- Enemy -->
-      <div class="status-card enemy-card">
+      <div class="turn-badge" id="turn-badge">1턴</div>
+
+      <div class="status-card enemy-side">
         <div class="status-header">
-          <span class="status-name enemy">🟥 적 (리신)</span>
-          <span class="status-level" id="enemy-level">Lv.1</span>
+          <span class="champ-name enemy">적 (리신)</span>
+          <span class="champ-level" id="e-level">Lv.1</span>
         </div>
-        <div class="bar-container">
-          <div class="bar-fill hp" id="enemy-hp-bar" style="width:100%"></div>
-          <div class="bar-fill shield hidden" id="enemy-shield-bar" style="width:0%"></div>
-          <div class="bar-text" id="enemy-hp-text">645 / 645</div>
+        <div class="bar hp-bar">
+          <div class="bar-fill" id="e-hp-fill" style="width:100%"></div>
+          <div class="bar-shield hidden" id="e-shield-fill"></div>
+          <span class="bar-label" id="e-hp-text">645 / 645</span>
         </div>
-        <div class="bar-container">
-          <div class="bar-fill energy" id="enemy-energy-bar" style="width:100%"></div>
-          <div class="bar-text" id="enemy-energy-text">200 / 200</div>
+        <div class="bar energy-bar">
+          <div class="bar-fill" id="e-energy-fill" style="width:100%"></div>
+          <span class="bar-label" id="e-energy-text">200 / 200</span>
         </div>
-        <div class="status-info">
-          <span>🪙 CS: <strong id="enemy-cs">0</strong></span>
-          <span>💰 <strong id="enemy-gold">0</strong>G</span>
-        </div>
-        <div class="cooldown-row">
-          <span class="cd-badge" id="enemy-cd-q">Q</span>
-          <span class="cd-badge" id="enemy-cd-w">W</span>
-          <span class="cd-badge" id="enemy-cd-e">E</span>
-          <span class="cd-badge" id="enemy-cd-r">R</span>
+        <div class="status-meta">
+          <span>CS <strong id="e-cs">0</strong></span>
+          <span><strong id="e-gold">0</strong>G</span>
+          <div class="cd-row">
+            <span class="cd" id="e-cd-q">Q</span>
+            <span class="cd" id="e-cd-w">W</span>
+            <span class="cd" id="e-cd-e">E</span>
+            <span class="cd" id="e-cd-r">R</span>
+          </div>
         </div>
       </div>
     </div>
 
-    <!-- Game Log -->
-    <div class="log-panel" id="log-panel">
-      <div class="log-header" id="log-toggle">📜 전투 기록 <span id="log-arrow">▼</span></div>
-      <div class="log-content" id="log-content"></div>
+    <!-- Narrative Feed -->
+    <div class="narrative-feed" id="narrative-feed">
+      <div class="narrative-entry system">⚔️ 리신 vs 리신 — 라인전이 시작됩니다.</div>
     </div>
 
-    <!-- Choices -->
-    <div class="choices-panel" id="choices-panel">
-      <h3>🎯 행동을 선택하세요</h3>
-      <div id="choices-list"></div>
+    <!-- Input Area -->
+    <div class="input-area">
+      <div class="input-hint" id="input-hint">어떻게 하시겠습니까?</div>
+      <div class="input-row">
+        <input type="text" id="player-input" placeholder="행동을 입력하세요..." autocomplete="off" />
+        <button id="send-btn">⏎</button>
+      </div>
+      <div class="input-examples">
+        <span class="example" data-text="미니언 막타를 먹는다">CS</span>
+        <span class="example" data-text="적에게 Q를 쏜다">Q</span>
+        <span class="example" data-text="뒤로 물러선다">후퇴</span>
+        <span class="example" data-text="적의 스킬을 유도하면서 앞으로 압박한다">압박</span>
+      </div>
     </div>
 
-    <!-- Result -->
-    <div class="result-panel hidden" id="result-panel">
-      <h3>📜 결과</h3>
-      <div id="result-narratives"></div>
-      <button id="next-turn-btn">다음 상황으로 →</button>
+    <!-- Skill Level Up (overlay) -->
+    <div class="overlay hidden" id="skillup-overlay">
+      <div class="overlay-box">
+        <h3>⬆️ 스킬 레벨업</h3>
+        <div id="skillup-buttons"></div>
+      </div>
     </div>
 
-    <!-- Game Over -->
-    <div class="gameover-panel hidden" id="gameover-panel">
-      <div id="gameover-text"></div>
-      <div id="gameover-narratives"></div>
-      <button id="restart-btn">다시 시작</button>
+    <!-- Game Over (overlay) -->
+    <div class="overlay hidden" id="gameover-overlay">
+      <div class="overlay-box">
+        <div id="gameover-text" class="gameover-text"></div>
+        <button id="restart-btn" class="primary-btn">다시 시작</button>
+      </div>
     </div>
+
   </div>
 
   <script type="module" src="js/main.js"></script>
