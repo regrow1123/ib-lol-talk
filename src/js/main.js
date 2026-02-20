@@ -274,6 +274,11 @@ function renderStatus() {
 }
 
 // ── Canvas ──
+let mapBg = null;
+const mapImg = new Image();
+mapImg.src = 'img/midlane.png';
+mapImg.onload = () => { mapBg = mapImg; renderCanvas(); };
+
 function renderCanvas() {
   const canvas = $('lane-canvas');
   if (!canvas) return;
@@ -281,68 +286,84 @@ function renderCanvas() {
   const W = canvas.width, H = canvas.height;
   ctx.clearRect(0, 0, W, H);
 
+  // Background: midlane minimap image
+  if (mapBg) {
+    ctx.drawImage(mapBg, 0, 0, W, H);
+    // Slight dark overlay for readability
+    ctx.fillStyle = 'rgba(0,0,0,0.3)';
+    ctx.fillRect(0, 0, W, H);
+  } else {
+    ctx.fillStyle = '#0d1117';
+    ctx.fillRect(0, 0, W, H);
+  }
+
+  // Grid → pixel mapping (champions move on 60x24 grid)
   const pad = 35;
   const gx = x => pad + (x/60) * (W - pad*2);
   const gy = y => 8 + (y/24) * (H - 16);
 
-  ctx.fillStyle = '#0d1117';
-  ctx.fillRect(0, 0, W, H);
-
-  // Bushes
-  ctx.fillStyle = 'rgba(34,85,34,0.18)';
-  ctx.fillRect(gx(18), gy(2), gx(42)-gx(18), gy(5)-gy(2));
-  ctx.fillRect(gx(18), gy(19), gx(42)-gx(18), gy(22)-gy(19));
-
-  ctx.fillStyle = '#1e3a1e';
-  ctx.font = '8px sans-serif';
-  ctx.textAlign = 'center';
-  ctx.fillText('부쉬', gx(30), gy(4));
-  ctx.fillText('부쉬', gx(30), gy(21));
-
-  // Lane
-  ctx.fillStyle = '#151d28';
-  ctx.fillRect(gx(0), gy(8), gx(60)-gx(0), gy(16)-gy(8));
-
-  // Center line
-  ctx.strokeStyle = '#1e2a38';
-  ctx.setLineDash([5,5]);
-  ctx.beginPath(); ctx.moveTo(gx(0),gy(12)); ctx.lineTo(gx(60),gy(12)); ctx.stroke();
-  ctx.setLineDash([]);
-
-  // Towers
-  const drawT = (x,y,col,lbl) => {
-    const px=gx(x), py=gy(y);
-    ctx.fillStyle = col+'33'; ctx.fillRect(px-7, py-12, 14, 24);
-    ctx.fillStyle = col; ctx.fillRect(px-4, py-9, 8, 18);
-    ctx.fillStyle = '#6a7a8a'; ctx.font = '7px sans-serif'; ctx.textAlign = 'center';
-    ctx.fillText(lbl, px, py-15);
-  };
-  drawT(3,12,'#3498db','아군');
-  drawT(57,12,'#e74c3c','적');
-
-  // Champions
-  const drawC = (f,col,lbl) => {
-    const px=gx(f.x), py=gy(f.y), s=14;
-    ctx.strokeStyle = col; ctx.lineWidth = 2;
-    ctx.strokeRect(px-s/2, py-s/2, s, s);
-    // HP
-    const bw=s+4, bh=2.5, bx=px-bw/2, by=py-s/2-5;
-    ctx.fillStyle = '#111'; ctx.fillRect(bx,by,bw,bh);
-    const pct = f.hp/f.maxHp;
-    ctx.fillStyle = pct>0.5?'#2ecc71':pct>0.25?'#f39c12':'#e74c3c';
-    ctx.fillRect(bx,by,bw*pct,bh);
+  // Tower indicators (subtle)
+  const drawT = (x, y, col, lbl) => {
+    const px = gx(x), py = gy(y);
+    // Glow
+    ctx.shadowColor = col;
+    ctx.shadowBlur = 8;
+    ctx.fillStyle = col;
+    ctx.beginPath(); ctx.arc(px, py, 6, 0, Math.PI*2); ctx.fill();
+    ctx.shadowBlur = 0;
     // Label
-    ctx.fillStyle = '#ccc'; ctx.font = 'bold 7px sans-serif'; ctx.textAlign = 'center';
-    ctx.fillText(lbl, px, py+3);
+    ctx.fillStyle = '#fff';
+    ctx.font = 'bold 7px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText(lbl, px, py - 12);
   };
-  drawC(state.player,'#3498db','나');
-  drawC(state.enemy,'#e74c3c','적');
+  drawT(3, 12, '#3498db', '아군 타워');
+  drawT(57, 12, '#e74c3c', '적 타워');
 
-  // Distance
+  // Champions (circles with glow)
+  const drawC = (f, col, lbl) => {
+    const px = gx(f.x), py = gy(f.y);
+    const r = 8;
+
+    // Outer glow
+    ctx.shadowColor = col;
+    ctx.shadowBlur = 10;
+    ctx.strokeStyle = col;
+    ctx.lineWidth = 2.5;
+    ctx.beginPath(); ctx.arc(px, py, r, 0, Math.PI*2); ctx.stroke();
+    ctx.shadowBlur = 0;
+
+    // Fill
+    ctx.fillStyle = col + '44';
+    ctx.beginPath(); ctx.arc(px, py, r, 0, Math.PI*2); ctx.fill();
+
+    // HP arc
+    const pct = f.hp / f.maxHp;
+    const hpCol = pct > 0.5 ? '#2ecc71' : pct > 0.25 ? '#f39c12' : '#e74c3c';
+    ctx.strokeStyle = hpCol;
+    ctx.lineWidth = 2.5;
+    ctx.beginPath();
+    ctx.arc(px, py, r + 4, -Math.PI/2, -Math.PI/2 + Math.PI*2*pct);
+    ctx.stroke();
+
+    // Label
+    ctx.fillStyle = '#fff';
+    ctx.font = 'bold 8px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText(lbl, px, py + 3);
+  };
+  drawC(state.player, '#3498db', '나');
+  drawC(state.enemy, '#e74c3c', '적');
+
+  // Distance info
   const dist = Math.abs(state.player.x - state.enemy.x);
-  const dl = dist<=3?'근접':dist<=9?'E':dist<=24?'Q':'원거리';
-  ctx.fillStyle = '#5a6a7a'; ctx.font = '8px sans-serif'; ctx.textAlign = 'right';
-  ctx.fillText(`거리 ${dist} (${dl})`, W-8, 12);
+  const dl = dist <= 3 ? '근접' : dist <= 9 ? 'E사거리' : dist <= 24 ? 'Q사거리' : '원거리';
+  ctx.fillStyle = 'rgba(0,0,0,0.5)';
+  ctx.fillRect(W - 110, 2, 106, 16);
+  ctx.fillStyle = '#ddd';
+  ctx.font = '9px sans-serif';
+  ctx.textAlign = 'right';
+  ctx.fillText(`거리 ${dist} (${dl})`, W - 6, 14);
 }
 
 // ── Mock ──
