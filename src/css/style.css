@@ -1,0 +1,330 @@
+/* ib-lol talk — Dark game theme */
+@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700&display=swap');
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+:root {
+  --bg: #0a0e14;
+  --bg-panel: #141a23;
+  --bg-card: #1a2130;
+  --border: #2a3545;
+  --text: #c8d6e5;
+  --text-dim: #6b7d8f;
+  --accent: #c89b3c;
+  --accent-glow: #f0e6d2;
+  --hp-green: #2ecc71;
+  --hp-red: #e74c3c;
+  --energy-yellow: #f1c40f;
+  --shield-white: #ecf0f1;
+  --blue: #3498db;
+  --purple: #9b59b6;
+}
+
+body {
+  font-family: 'Noto Sans KR', sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.game-container {
+  max-width: 800px;
+  width: 100%;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+/* Header */
+.game-header {
+  text-align: center;
+  padding: 12px;
+  border-bottom: 1px solid var(--border);
+}
+.game-header h1 {
+  font-size: 1.4em;
+  color: var(--accent);
+  letter-spacing: 2px;
+}
+.game-header .subtitle {
+  font-size: 0.8em;
+  color: var(--text-dim);
+}
+
+/* Situation */
+.situation-panel {
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 16px;
+  text-align: center;
+  font-size: 1.1em;
+  color: var(--accent-glow);
+  font-weight: 500;
+}
+
+/* Lane map */
+.lane-map {
+  display: flex;
+  justify-content: center;
+  gap: 4px;
+  padding: 8px;
+  background: var(--bg-panel);
+  border-radius: 8px;
+  border: 1px solid var(--border);
+}
+.lane-pos {
+  width: 80px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg-card);
+  border-radius: 4px;
+  font-size: 0.7em;
+  color: var(--text-dim);
+  position: relative;
+  border: 2px solid transparent;
+}
+.lane-pos.player-here { border-color: var(--blue); }
+.lane-pos.enemy-here { border-color: var(--hp-red); }
+.lane-pos.player-here.enemy-here { border-color: var(--purple); }
+.bush-indicator {
+  font-size: 0.7em;
+  color: var(--text-dim);
+  text-align: center;
+  padding: 2px;
+}
+.bush-indicator.active { color: #2ecc71; font-weight: 700; }
+
+/* Status bars */
+.status-row {
+  display: flex;
+  gap: 12px;
+}
+.status-card {
+  flex: 1;
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 12px;
+}
+.status-card.player-card { border-left: 3px solid var(--blue); }
+.status-card.enemy-card { border-left: 3px solid var(--hp-red); }
+
+.status-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+.status-name {
+  font-weight: 700;
+  font-size: 1em;
+}
+.status-name.player { color: var(--blue); }
+.status-name.enemy { color: var(--hp-red); }
+.status-level {
+  font-size: 0.8em;
+  color: var(--accent);
+  font-weight: 700;
+}
+.status-info {
+  display: flex;
+  gap: 12px;
+  font-size: 0.75em;
+  color: var(--text-dim);
+  margin-top: 6px;
+}
+.status-info span { display: flex; align-items: center; gap: 3px; }
+
+/* Bar */
+.bar-container {
+  height: 18px;
+  background: #1a1a2e;
+  border-radius: 4px;
+  overflow: hidden;
+  margin: 3px 0;
+  position: relative;
+}
+.bar-fill {
+  height: 100%;
+  transition: width 0.4s ease;
+  border-radius: 4px;
+}
+.bar-fill.hp { background: linear-gradient(90deg, #27ae60, #2ecc71); }
+.bar-fill.energy { background: linear-gradient(90deg, #d4a017, #f1c40f); }
+.bar-fill.shield {
+  background: rgba(255,255,255,0.3);
+  position: absolute;
+  top: 0;
+  left: 0;
+}
+.bar-text {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  font-size: 0.65em;
+  font-weight: 700;
+  color: white;
+  text-shadow: 0 1px 2px rgba(0,0,0,0.8);
+}
+
+/* Cooldowns */
+.cooldown-row {
+  display: flex;
+  gap: 6px;
+  margin-top: 8px;
+}
+.cd-badge {
+  padding: 3px 8px;
+  border-radius: 4px;
+  font-size: 0.7em;
+  font-weight: 700;
+  background: var(--bg-card);
+  color: var(--accent);
+  border: 1px solid var(--border);
+}
+.cd-badge.on-cooldown {
+  color: var(--hp-red);
+  opacity: 0.5;
+}
+
+/* Choices */
+.choices-panel {
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 16px;
+}
+.choices-panel h3 {
+  color: var(--accent);
+  margin-bottom: 12px;
+  font-size: 0.95em;
+}
+
+.action-group {
+  margin-bottom: 12px;
+}
+.action-group-label {
+  font-size: 0.8em;
+  color: var(--text-dim);
+  margin-bottom: 6px;
+  font-weight: 500;
+}
+
+.choice-btn {
+  display: block;
+  width: 100%;
+  padding: 10px 14px;
+  margin: 4px 0;
+  background: var(--bg-card);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-size: 0.85em;
+  font-family: 'Noto Sans KR', sans-serif;
+  cursor: pointer;
+  text-align: left;
+  transition: all 0.15s;
+}
+.choice-btn:hover {
+  background: #243040;
+  border-color: var(--accent);
+  color: var(--accent-glow);
+  transform: translateX(4px);
+}
+.choice-btn.choice-attack:hover { border-color: var(--hp-red); }
+.choice-btn.choice-cs:hover { border-color: var(--energy-yellow); }
+.choice-btn.choice-move:hover { border-color: var(--blue); }
+.choice-btn.choice-defense:hover { border-color: var(--shield-white); }
+
+/* Result */
+.result-panel {
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 16px;
+}
+.enemy-action-reveal {
+  background: rgba(231, 76, 60, 0.15);
+  border: 1px solid rgba(231, 76, 60, 0.3);
+  border-radius: 6px;
+  padding: 10px;
+  margin-bottom: 12px;
+  font-size: 0.9em;
+  color: #e74c3c;
+}
+.narrative {
+  padding: 6px 0;
+  font-size: 0.95em;
+  line-height: 1.6;
+  border-bottom: 1px solid rgba(42, 53, 69, 0.5);
+}
+.narrative:last-child { border-bottom: none; }
+
+#next-turn-btn {
+  display: block;
+  width: 100%;
+  margin-top: 12px;
+  padding: 12px;
+  background: var(--accent);
+  color: var(--bg);
+  border: none;
+  border-radius: 6px;
+  font-size: 1em;
+  font-weight: 700;
+  font-family: 'Noto Sans KR', sans-serif;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+#next-turn-btn:hover { background: var(--accent-glow); }
+
+/* Game Over */
+.gameover-panel {
+  background: var(--bg-panel);
+  border: 2px solid var(--accent);
+  border-radius: 12px;
+  padding: 32px;
+  text-align: center;
+}
+#gameover-text {
+  font-size: 2em;
+  font-weight: 700;
+  margin-bottom: 16px;
+}
+#restart-btn {
+  margin-top: 16px;
+  padding: 12px 32px;
+  background: var(--accent);
+  color: var(--bg);
+  border: none;
+  border-radius: 6px;
+  font-size: 1.1em;
+  font-weight: 700;
+  font-family: 'Noto Sans KR', sans-serif;
+  cursor: pointer;
+}
+#restart-btn:hover { background: var(--accent-glow); }
+
+.hidden { display: none !important; }
+
+/* Scrollable choices */
+#choices-list {
+  max-height: 50vh;
+  overflow-y: auto;
+}
+#choices-list::-webkit-scrollbar { width: 6px; }
+#choices-list::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+/* Responsive */
+@media (max-width: 600px) {
+  .status-row { flex-direction: column; }
+  .lane-pos { width: 60px; font-size: 0.6em; }
+  .choice-btn { font-size: 0.8em; padding: 8px 10px; }
+}

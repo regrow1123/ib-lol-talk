@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ib-lol talk — 리신 라인전</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <div class="game-container">
+    <!-- Header -->
+    <div class="game-header">
+      <h1>ib-lol talk</h1>
+      <div class="subtitle">리신 vs 리신 — 라인전 시뮬레이터</div>
+    </div>
+
+    <!-- Situation -->
+    <div class="situation-panel">
+      <div id="situation-text">게임을 시작합니다...</div>
+    </div>
+
+    <!-- Lane Map -->
+    <div class="lane-map">
+      <div class="lane-pos" id="lane-0">🏰 아군탑</div>
+      <div class="lane-pos" id="lane-1">아군쪽</div>
+      <div class="lane-pos" id="lane-2">중앙</div>
+      <div class="lane-pos" id="lane-3">적쪽</div>
+      <div class="lane-pos" id="lane-4">적탑 🏰</div>
+    </div>
+    <div style="display:flex;justify-content:center;gap:40px;">
+      <div class="bush-indicator" id="player-bush">🌿 나 부쉬</div>
+      <div class="bush-indicator" id="enemy-bush">🌿 적 부쉬</div>
+    </div>
+
+    <!-- Status -->
+    <div class="status-row">
+      <!-- Player -->
+      <div class="status-card player-card">
+        <div class="status-header">
+          <span class="status-name player">🟦 나 (리신)</span>
+          <span class="status-level" id="player-level">Lv.1</span>
+        </div>
+        <div class="bar-container">
+          <div class="bar-fill hp" id="player-hp-bar" style="width:100%"></div>
+          <div class="bar-fill shield hidden" id="player-shield-bar" style="width:0%"></div>
+          <div class="bar-text" id="player-hp-text">645 / 645</div>
+        </div>
+        <div class="bar-container">
+          <div class="bar-fill energy" id="player-energy-bar" style="width:100%"></div>
+          <div class="bar-text" id="player-energy-text">200 / 200</div>
+        </div>
+        <div class="status-info">
+          <span>🪙 CS: <strong id="player-cs">0</strong></span>
+          <span>💰 <strong id="player-gold">0</strong>G</span>
+        </div>
+        <div class="cooldown-row">
+          <span class="cd-badge" id="player-cd-q">Q</span>
+          <span class="cd-badge" id="player-cd-w">W</span>
+          <span class="cd-badge" id="player-cd-e">E</span>
+          <span class="cd-badge" id="player-cd-r">R</span>
+        </div>
+      </div>
+
+      <!-- Enemy -->
+      <div class="status-card enemy-card">
+        <div class="status-header">
+          <span class="status-name enemy">🟥 적 (리신)</span>
+          <span class="status-level" id="enemy-level">Lv.1</span>
+        </div>
+        <div class="bar-container">
+          <div class="bar-fill hp" id="enemy-hp-bar" style="width:100%"></div>
+          <div class="bar-fill shield hidden" id="enemy-shield-bar" style="width:0%"></div>
+          <div class="bar-text" id="enemy-hp-text">645 / 645</div>
+        </div>
+        <div class="bar-container">
+          <div class="bar-fill energy" id="enemy-energy-bar" style="width:100%"></div>
+          <div class="bar-text" id="enemy-energy-text">200 / 200</div>
+        </div>
+        <div class="status-info">
+          <span>🪙 CS: <strong id="enemy-cs">0</strong></span>
+          <span>💰 <strong id="enemy-gold">0</strong>G</span>
+        </div>
+        <div class="cooldown-row">
+          <span class="cd-badge" id="enemy-cd-q">Q</span>
+          <span class="cd-badge" id="enemy-cd-w">W</span>
+          <span class="cd-badge" id="enemy-cd-e">E</span>
+          <span class="cd-badge" id="enemy-cd-r">R</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Choices -->
+    <div class="choices-panel" id="choices-panel">
+      <h3>🎯 행동을 선택하세요</h3>
+      <div id="choices-list"></div>
+    </div>
+
+    <!-- Result -->
+    <div class="result-panel hidden" id="result-panel">
+      <h3>📜 결과</h3>
+      <div id="result-narratives"></div>
+      <button id="next-turn-btn">다음 상황으로 →</button>
+    </div>
+
+    <!-- Game Over -->
+    <div class="gameover-panel hidden" id="gameover-panel">
+      <div id="gameover-text"></div>
+      <div id="gameover-narratives"></div>
+      <button id="restart-btn">다시 시작</button>
+    </div>
+  </div>
+
+  <script type="module" src="js/main.js"></script>
+</body>
+</html>
