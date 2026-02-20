@@ -1,5 +1,6 @@
 // Game loop, UI binding
-import { createGameState, getPlayerActions, processTurn, advanceToChoice, getSituationText } from './engine.js';
+import { createGameState, getPlayerActions, processTurn, advanceToChoice, getSituationText, hasSkillPoints, playerLevelUpSkill } from './engine.js';
+import { canLevelSkill } from './champion.js';
 
 let state = null;
 
@@ -25,7 +26,11 @@ function renderAll() {
   renderStatus();
   renderSituation();
 
-  if (state.phase === 'choice') {
+  if (state.phase === 'skillup') {
+    renderSkillUp();
+    $('result-panel').classList.add('hidden');
+    $('choices-panel').classList.remove('hidden');
+  } else if (state.phase === 'choice') {
     renderChoices();
     $('result-panel').classList.add('hidden');
     $('choices-panel').classList.remove('hidden');
@@ -84,12 +89,16 @@ function renderCooldowns(fighter, side) {
   for (const s of skills) {
     const el = $(`${side}-cd-${s.toLowerCase()}`);
     if (el) {
+      const lv = fighter.skillLevels[s];
       const cd = fighter.cooldowns[s];
-      if (cd > 0) {
-        el.textContent = `${s}: ${cd}`;
+      if (lv === 0) {
+        el.textContent = `${s}`;
+        el.classList.add('on-cooldown');
+      } else if (cd > 0) {
+        el.textContent = `${s}${lv}: ${cd}`;
         el.classList.add('on-cooldown');
       } else {
-        el.textContent = `${s}`;
+        el.textContent = `${s}${lv}`;
         el.classList.remove('on-cooldown');
       }
     }
@@ -273,6 +282,45 @@ function renderLaneCanvas() {
   ctx.font = '10px sans-serif';
   ctx.textAlign = 'right';
   ctx.fillText(`거리: ${dist}칸 (${distLabel})`, W - 8, 16);
+}
+
+function renderSkillUp() {
+  const container = $('choices-list');
+  container.innerHTML = '';
+
+  const header = document.createElement('div');
+  header.className = 'action-group-label';
+  header.textContent = `⬆️ 스킬 포인트 배분 (${state.player.skillPoints}포인트)`;
+  container.appendChild(header);
+
+  const skills = [
+    { key: 'Q', name: '음파 / 공명타', desc: (lv) => `물리 피해 ${[55,80,105,130,155][lv]}(+115%추가AD)` },
+    { key: 'W', name: '방호 / 철갑', desc: (lv) => `쉴드 ${[70,115,160,205,250][lv]}` },
+    { key: 'E', name: '폭풍 / 쇠약', desc: (lv) => `마법 피해 ${[35,60,85,110,135][lv]}(+100%AD)` },
+    { key: 'R', name: '용의 분노', desc: (lv) => `물리 피해 ${[175,400,625][lv]}(+200%추가AD)` },
+  ];
+
+  for (const s of skills) {
+    const currentLv = state.player.skillLevels[s.key];
+    const can = canLevelSkill(state.player, s.key);
+    const btn = document.createElement('button');
+    btn.className = `choice-btn choice-defense`;
+    
+    const lvText = `Lv.${currentLv}`;
+    const nextDesc = can && currentLv < 5 ? ` → ${s.desc(currentLv)}` : '';
+    btn.textContent = `${s.key} - ${s.name} [${lvText}]${nextDesc}`;
+    
+    if (!can) {
+      btn.style.opacity = '0.3';
+      btn.style.cursor = 'not-allowed';
+    } else {
+      btn.onclick = () => {
+        playerLevelUpSkill(state, s.key);
+        renderAll();
+      };
+    }
+    container.appendChild(btn);
+  }
 }
 
 function renderChoices() {

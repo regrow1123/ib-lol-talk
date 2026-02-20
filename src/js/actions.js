@@ -13,7 +13,7 @@ export function generateActions(fighter, opponent, minions, csWave) {
   const hasCSMinion = hasLastHittable(csWave);
 
   // 1. Attack actions with direction (Q1 skillshot)
-  if (fighter.energy >= 50 && fighter.cooldowns.Q <= 0 && dist <= 2 && !opponent.inBush) {
+  if (fighter.skillLevels.Q > 0 && fighter.energy >= 50 && fighter.cooldowns.Q <= 0 && dist <= 2 && !opponent.inBush) {
     for (const dir of DIRECTIONS) {
       actions.push({
         id: `Q1_${dir}`,
@@ -35,7 +35,7 @@ export function generateActions(fighter, opponent, minions, csWave) {
   }
 
   // E1 (AOE - no direction needed, hits adjacent)
-  if (fighter.energy >= 50 && fighter.cooldowns.E <= 0 && dist <= 1 && !opponent.inBush) {
+  if (fighter.skillLevels.E > 0 && fighter.energy >= 50 && fighter.cooldowns.E <= 0 && dist <= 1 && !opponent.inBush) {
     actions.push({
       id: 'E1',
       type: 'attack', skill: 'E1', direction: 'aoe',
@@ -67,7 +67,7 @@ export function generateActions(fighter, opponent, minions, csWave) {
   }
 
   // W1 (shield)
-  if (fighter.energy >= 50 && fighter.cooldowns.W <= 0) {
+  if (fighter.skillLevels.W > 0 && fighter.energy >= 50 && fighter.cooldowns.W <= 0) {
     actions.push({
       id: 'W1',
       type: 'defense', skill: 'W1',
@@ -87,7 +87,7 @@ export function generateActions(fighter, opponent, minions, csWave) {
   }
 
   // R (targeted, adjacent, level 6+)
-  if (fighter.level >= 6 && fighter.cooldowns.R <= 0 && dist <= 1 && !opponent.inBush) {
+  if (fighter.skillLevels.R > 0 && fighter.cooldowns.R <= 0 && dist <= 1 && !opponent.inBush) {
     actions.push({
       id: 'R',
       type: 'attack', skill: 'R', direction: 'targeted',

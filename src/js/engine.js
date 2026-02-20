@@ -1,5 +1,5 @@
 // Game state management, turn processing
-import { getStatsAtLevel, LEE_SIN } from './champion.js';
+import { getStatsAtLevel, LEE_SIN, checkLevelUp, MINION_XP } from './champion.js';
 import { initMinions, tickMinions, hasLastHittable } from './minions.js';
 import { generateActions, resolveActions } from './actions.js';
 import { chooseAction } from './ai.js';
@@ -16,7 +16,9 @@ export function createFighter(name, position) {
     position,
     level: 1, xp: 0,
     cs: 0, gold: 500 - 450 - 50, // after buying doran + pot
-    cooldowns: { Q: 0, W: 0, E: 0, R: 37 },
+    cooldowns: { Q: 0, W: 0, E: 0, R: 99 },
+    skillLevels: { Q: 0, W: 0, E: 0, R: 0 },
+    skillPoints: 1, // start with 1 point at level 1
     potions: 1,
     potionActive: 0,
     shield: 0, shieldDuration: 0,
@@ -30,16 +32,20 @@ export function createFighter(name, position) {
 }
 
 export function createGameState() {
-  return {
+  const state = {
     turn: 1,
     player: createFighter('나', 1),
     enemy: createFighter('적', 3),
     minions: initMinions(),
     log: [],
-    phase: 'choice', // 'choice' | 'result' | 'gameover'
+    phase: 'skillup', // 'skillup' | 'choice' | 'result' | 'gameover'
     winner: null,
     narratives: [],
   };
+  // AI levels up Q at level 1
+  state.enemy.skillLevels.Q = 1;
+  state.enemy.skillPoints = 0;
+  return state;
 }
 
 export function getPlayerActions(state) {
@@ -88,6 +94,25 @@ export function processTurn(state, playerAction) {
   state.lastPlayerAction = playerAction;
   state.lastEnemyAction = enemyAction;
 
+  // XP from proximity (both get XP from nearby dying minions each turn)
+  const deadPlayerMinions = state.minions.playerWave.filter(m => m.hp <= 0).length;
+  const deadEnemyMinions = state.minions.enemyWave.filter(m => m.hp <= 0).length;
+  // Both players get proximity XP from minions dying near them
+  state.player.xp += deadPlayerMinions * 45; // simplified average
+  state.enemy.xp += deadEnemyMinions * 45;
+
+  // Level up check
+  const playerLeveled = checkLevelUp(state.player);
+  const enemyLeveled = checkLevelUp(state.enemy);
+  if (playerLeveled) {
+    state.narratives.push(`⬆️ 레벨 업! Lv.${state.player.level}`);
+  }
+  if (enemyLeveled) {
+    state.narratives.push(`적이 레벨 업! Lv.${state.enemy.level}`);
+    // AI auto level-up skill
+    aiLevelUpSkill(state.enemy);
+  }
+
   // Check game over
   if (state.player.hp <= 0) {
     state.phase = 'gameover';
@@ -105,6 +130,9 @@ export function processTurn(state, playerAction) {
     state.phase = 'gameover';
     state.winner = 'enemy';
     state.narratives.push('💀 적이 CS 100을 먼저 달성했다...');
+  } else if (playerLeveled && state.player.skillPoints > 0) {
+    state.phase = 'result'; // show result first, then skillup on next advance
+    state._pendingSkillUp = true;
   } else {
     state.phase = 'result';
   }
@@ -128,8 +156,58 @@ export function advanceToChoice(state) {
   state.enemy.q1Hit = false;
   state.enemy.e1Hit = false;
   state.enemy.w1Used = false;
-  state.phase = 'choice';
+  
+  if (state._pendingSkillUp || state.player.skillPoints > 0) {
+    state._pendingSkillUp = false;
+    state.phase = 'skillup';
+  } else {
+    state.phase = 'choice';
+  }
   return state;
+}
+
+// AI skill level-up priority: R > Q > E > W
+function aiLevelUpSkill(fighter) {
+  const { canLevelSkill, levelUpSkill } = require_champion();
+  const priority = ['R', 'Q', 'E', 'W'];
+  for (const skill of priority) {
+    if (canLevelSkillCheck(fighter, skill)) {
+      fighter.skillLevels[skill]++;
+      fighter.skillPoints--;
+      if (fighter.skillPoints <= 0) break;
+    }
+  }
+}
+
+function canLevelSkillCheck(fighter, skill) {
+  const MAX = { Q: 5, W: 5, E: 5, R: 3 };
+  const R_LEVELS = [6, 11, 16];
+  if (fighter.skillLevels[skill] >= MAX[skill]) return false;
+  if (fighter.skillPoints <= 0) return false;
+  if (skill === 'R') {
+    if (!R_LEVELS.includes(fighter.level)) return false;
+    const rExpected = R_LEVELS.filter(l => l <= fighter.level).length;
+    if (fighter.skillLevels[skill] >= rExpected) return false;
+  }
+  return true;
+}
+
+function require_champion() {
+  return { canLevelSkill: canLevelSkillCheck };
+}
+
+export function hasSkillPoints(state) {
+  return state.player.skillPoints > 0;
+}
+
+export function playerLevelUpSkill(state, skill) {
+  if (!canLevelSkillCheck(state.player, skill)) return false;
+  state.player.skillLevels[skill]++;
+  state.player.skillPoints--;
+  if (state.player.skillPoints <= 0) {
+    state.phase = 'choice';
+  }
+  return true;
 }
 
 function tickBuffs(fighter) {

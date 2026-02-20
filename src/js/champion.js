@@ -94,8 +94,59 @@ export function getStatsAtLevel(level, items = { doransBlade: true }) {
   };
 }
 
-export function getSkillLevel(champLevel) {
-  // Prototype: everyone has skill level 1 for all skills
-  // R available at level 6
-  return { Q: 1, W: 1, E: 1, R: champLevel >= 6 ? 1 : 0 };
+// Max skill levels
+export const MAX_SKILL_LEVEL = { Q: 5, W: 5, E: 5, R: 3 };
+
+// R can only be leveled at champion level 6, 11, 16
+export const R_LEVELS = [6, 11, 16];
+
+// XP required per level (LoL values)
+export const XP_TABLE = [0, 280, 660, 1140, 1720, 2400, 3180, 4060, 5040, 6120, 7300, 8580, 9960, 11440, 13020, 14700, 16480, 18360];
+
+export function canLevelSkill(fighter, skill) {
+  const sl = fighter.skillLevels[skill];
+  const maxLvl = MAX_SKILL_LEVEL[skill];
+  if (sl >= maxLvl) return false;
+  if (fighter.skillPoints <= 0) return false;
+  // R only at 6, 11, 16
+  if (skill === 'R') {
+    if (!R_LEVELS.includes(fighter.level)) return false;
+    // Check already leveled R at this champion level
+    const rExpected = R_LEVELS.filter(l => l <= fighter.level).length;
+    if (sl >= rExpected) return false;
+  }
+  // Normal skills can't exceed ceil(champLevel / 2) ... simplified: max = champLevel (LoL allows 1 point per level)
+  return true;
 }
+
+export function levelUpSkill(fighter, skill) {
+  if (!canLevelSkill(fighter, skill)) return false;
+  fighter.skillLevels[skill]++;
+  fighter.skillPoints--;
+  return true;
+}
+
+export function checkLevelUp(fighter) {
+  if (fighter.level >= 18) return false;
+  const needed = XP_TABLE[fighter.level]; // XP needed to reach next level
+  if (fighter.xp >= needed) {
+    fighter.level++;
+    fighter.skillPoints++;
+    // Update stats
+    const stats = getStatsAtLevel(fighter.level, { doransBlade: fighter.items.includes('doransBlade') });
+    const hpGain = stats.maxHp - fighter.maxHp;
+    fighter.maxHp = stats.maxHp;
+    fighter.hp = Math.min(fighter.maxHp, fighter.hp + hpGain); // gain the HP difference
+    fighter.totalAd = stats.totalAd;
+    fighter.baseAd = stats.baseAd;
+    fighter.armor = stats.armor;
+    fighter.mr = stats.mr;
+    return true;
+  }
+  return false;
+}
+
+// XP from minion kill (LoL: melee ~60, ranged ~30 at early levels)
+export const MINION_XP = { melee: 60, ranged: 30 };
+// XP from being near dying minion (shared if in range)
+export const MINION_PROXIMITY_XP = { melee: 60, ranged: 30 };
