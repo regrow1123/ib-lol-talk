@@ -3,9 +3,9 @@ const $ = id => document.getElementById(id);
 
 let state = {
   turn: 1,
-  player: { hp:645,maxHp:645,energy:200,maxEnergy:200,cs:0,gold:0,level:1,x:15,y:12,shield:0,
+  player: { hp:645,maxHp:645,energy:200,maxEnergy:200,cs:0,gold:0,level:1,shield:0,
             skillLevels:{Q:0,W:0,E:0,R:0},cooldowns:{Q:0,W:0,E:0,R:99},skillPoints:1 },
-  enemy:  { hp:645,maxHp:645,energy:200,maxEnergy:200,cs:0,gold:0,level:1,x:45,y:12,shield:0,
+  enemy:  { hp:645,maxHp:645,energy:200,maxEnergy:200,cs:0,gold:0,level:1,shield:0,
             skillLevels:{Q:1,W:0,E:0,R:0},cooldowns:{Q:0,W:0,E:0,R:99},skillPoints:0 },
   phase: 'skillup',
 };
@@ -14,7 +14,6 @@ let drawerOpen = false;
 
 // ── Init ──
 function init() {
-  renderCanvas();
   renderStatus();
   checkPhase();
 
@@ -28,7 +27,6 @@ function init() {
   $('info-toggle').onclick = () => {
     drawerOpen = !drawerOpen;
     $('info-drawer').classList.toggle('hidden', !drawerOpen);
-    if (drawerOpen) renderCanvas();
   };
 
   document.querySelectorAll('.chip').forEach(el => {
@@ -66,7 +64,6 @@ async function submit() {
     if (data.state) state = data.state;
 
     renderStatus();
-    if (drawerOpen) renderCanvas();
     checkPhase();
   } catch {
     typing.remove();
@@ -231,9 +228,9 @@ function showGameOver() {
     $('chat-feed').innerHTML = '';
     state = {
       turn:1,
-      player:{hp:645,maxHp:645,energy:200,maxEnergy:200,cs:0,gold:0,level:1,x:15,y:12,shield:0,
+      player:{hp:645,maxHp:645,energy:200,maxEnergy:200,cs:0,gold:0,level:1,shield:0,
               skillLevels:{Q:0,W:0,E:0,R:0},cooldowns:{Q:0,W:0,E:0,R:99},skillPoints:1},
-      enemy:{hp:645,maxHp:645,energy:200,maxEnergy:200,cs:0,gold:0,level:1,x:45,y:12,shield:0,
+      enemy:{hp:645,maxHp:645,energy:200,maxEnergy:200,cs:0,gold:0,level:1,shield:0,
              skillLevels:{Q:1,W:0,E:0,R:0},cooldowns:{Q:0,W:0,E:0,R:99},skillPoints:0},
       phase:'skillup',
     };
@@ -271,168 +268,6 @@ function renderStatus() {
       else { el.textContent = `${s}${lv}`; el.className = 'cd'; }
     }
   }
-}
-
-// ── Canvas ──
-// Full SR minimap. Mid lane = diagonal (bottom-left → top-right).
-// Grid x: 0-60 along mid lane. y: 0-24 perpendicular to lane.
-
-let mapBg = null;
-let champIcon = null;
-// tower icon loaded via canvas drawing
-
-const mapImg = new Image();
-mapImg.src = 'img/minimap.png';
-mapImg.onload = () => { mapBg = mapImg; renderCanvas(); };
-
-const champImg = new Image();
-champImg.src = 'img/leesin.png';
-champImg.onload = () => { champIcon = champImg; renderCanvas(); };
-
-// Tower drawn directly on canvas (LoL minimap style)
-
-// Player = RED team (top-right), Enemy = BLUE team (bottom-left)
-// Mid lane 1st tower positions on 1000x1000 reference
-const RED_T1  = { x: 605, y: 400 }; // player tower (red mid T1)
-const BLUE_T1 = { x: 400, y: 605 }; // enemy tower (blue mid T1)
-
-// Lane endpoints: slightly beyond T1 towers
-// grid x=0 = player tower area (red), x=60 = enemy tower area (blue)
-const MID_START = { x: 650, y: 355 }; // grid x=0 (behind red T1)
-const MID_END   = { x: 355, y: 650 }; // grid x=60 (behind blue T1)
-
-// Perpendicular direction to mid lane (normalized)
-// Mid lane direction: (1, -1)/sqrt(2). Perpendicular: (1, 1)/sqrt(2)
-const PERP_X = 1 / Math.SQRT2;
-const PERP_Y = 1 / Math.SQRT2;
-
-function gridToMap(gx, gy, mapSize) {
-  const t = gx / 60;
-  const mx = MID_START.x + t * (MID_END.x - MID_START.x);
-  const my = MID_START.y + t * (MID_END.y - MID_START.y);
-  // Perpendicular offset (gy=12 is center of lane)
-  const perpOffset = (gy - 12) * 3;
-  const px = (mx + perpOffset * PERP_X) * (mapSize / 1000);
-  const py = (my + perpOffset * PERP_Y) * (mapSize / 1000);
-  return { x: px, y: py };
-}
-
-function renderCanvas() {
-  const canvas = $('lane-canvas');
-  if (!canvas) return;
-  const ctx = canvas.getContext('2d');
-  const W = canvas.width, H = canvas.height;
-  ctx.clearRect(0, 0, W, H);
-
-  // Background
-  if (mapBg) {
-    ctx.drawImage(mapBg, 0, 0, W, H);
-  } else {
-    ctx.fillStyle = '#0d1117';
-    ctx.fillRect(0, 0, W, H);
-  }
-
-  // Map coords are on 1000x1000 reference, canvas is WxH
-  const s = W / 1000;
-
-  // ── Towers (LoL minimap turret silhouette) ──
-  const drawTower = (mapX, mapY, col) => {
-    const px = mapX * s, py = mapY * s;
-    const k = W / 200; // scale
-
-    // Main turret body
-    ctx.fillStyle = col;
-    ctx.beginPath();
-    // Pointed top
-    ctx.moveTo(px, py - 6*k);
-    // Left battlement
-    ctx.lineTo(px - 1.5*k, py - 3.5*k);
-    ctx.lineTo(px - 3.5*k, py - 3.5*k);
-    ctx.lineTo(px - 3.5*k, py - 1.5*k);
-    // Left body
-    ctx.lineTo(px - 2.5*k, py - 1.5*k);
-    ctx.lineTo(px - 2*k, py + 3*k);
-    // Base
-    ctx.lineTo(px - 3*k, py + 4*k);
-    ctx.lineTo(px - 3*k, py + 5*k);
-    ctx.lineTo(px + 3*k, py + 5*k);
-    ctx.lineTo(px + 3*k, py + 4*k);
-    // Right body
-    ctx.lineTo(px + 2*k, py + 3*k);
-    ctx.lineTo(px + 2.5*k, py - 1.5*k);
-    // Right battlement
-    ctx.lineTo(px + 3.5*k, py - 1.5*k);
-    ctx.lineTo(px + 3.5*k, py - 3.5*k);
-    ctx.lineTo(px + 1.5*k, py - 3.5*k);
-    ctx.closePath();
-    ctx.fill();
-
-    // Dark outline
-    ctx.strokeStyle = '#000';
-    ctx.lineWidth = 1;
-    ctx.stroke();
-  };
-  drawTower(RED_T1.x, RED_T1.y, '#ff4444');
-  drawTower(BLUE_T1.x, BLUE_T1.y, '#4488ff');
-
-  // ── Minions (tiny dots like real minimap) ──
-  const rng = seededRng(state.turn);
-  const drawMinion = (gx, gy, col) => {
-    const p = gridToMap(gx, gy, W);
-    ctx.fillStyle = col;
-    ctx.beginPath();
-    ctx.arc(p.x, p.y, 1.8, 0, Math.PI * 2);
-    ctx.fill();
-  };
-  // Red minions (player side — closer to grid x=0, player tower)
-  for (let i = 0; i < 6; i++) {
-    drawMinion(28 - rng() * 5, 10.5 + rng() * 3, '#ee4444');
-  }
-  // Blue minions (enemy side — closer to grid x=60, enemy tower)
-  for (let i = 0; i < 6; i++) {
-    drawMinion(32 + rng() * 5, 10.5 + rng() * 3, '#4488ee');
-  }
-
-  // ── Champions (circular portrait like real LoL minimap) ──
-  const drawChamp = (f, borderCol) => {
-    const p = gridToMap(f.x, f.y, W);
-    const r = 10;
-
-    ctx.save();
-
-    // Clip circle for portrait
-    ctx.beginPath();
-    ctx.arc(p.x, p.y, r, 0, Math.PI * 2);
-    ctx.closePath();
-    ctx.clip();
-
-    // Draw champion portrait
-    if (champIcon) {
-      ctx.drawImage(champIcon, p.x - r, p.y - r, r * 2, r * 2);
-    } else {
-      ctx.fillStyle = '#333';
-      ctx.fill();
-    }
-
-    ctx.restore();
-
-    // Border ring (team color)
-    ctx.strokeStyle = borderCol;
-    ctx.lineWidth = 2;
-    ctx.beginPath();
-    ctx.arc(p.x, p.y, r, 0, Math.PI * 2);
-    ctx.stroke();
-
-  };
-  drawChamp(state.player, '#ff3333');  // player = red team
-  drawChamp(state.enemy, '#00aaff');   // enemy = blue team
-
-  // (distance info moved to status area)
-}
-
-function seededRng(seed) {
-  let s = seed * 16807 + 31;
-  return () => { s = (s * 16807) % 2147483647; return (s & 0xffff) / 0xffff; };
 }
 
 // ── Mock ──

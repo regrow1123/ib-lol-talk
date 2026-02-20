@@ -68,14 +68,6 @@ body {
 }
 @keyframes slideDown { from { max-height: 0; } to { max-height: 400px; } }
 
-#lane-canvas {
-  width: 100%;
-  aspect-ratio: 1;
-  max-height: 50vh;
-  display: block;
-  image-rendering: auto;
-}
-
 .info-stats {
   display: flex;
   gap: 1px;
