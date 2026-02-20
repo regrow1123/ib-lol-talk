@@ -9,7 +9,7 @@ export async function interpretTurn(game, playerInput) {
 
   const response = await client.messages.create({
     model: process.env.LLM_MODEL || 'claude-sonnet-4-20250514',
-    max_tokens: 1024,
+    max_tokens: 512,
     system: systemPrompt,
     messages: [
       { role: 'user', content: playerInput },

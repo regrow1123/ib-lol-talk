@@ -101,10 +101,19 @@ ${AI_PERSONALITY}
 - AA: 3칸, E: 9칸, R: 8칸, Q: 24칸, W: 14칸, 타워: 15칸
 - 아군타워: x=3, 적타워: x=57
 
-## 피해량 참고 (서버가 정확히 계산하므로 근사치만 참고)
-- Q1: 기본 ${game.player.skillLevels.Q > 0 ? LEE_SIN.skills.Q.q1Base[game.player.skillLevels.Q - 1] : 0} + 115%보너스AD
-- E1: 기본 ${game.player.skillLevels.E > 0 ? LEE_SIN.skills.E.e1Base[game.player.skillLevels.E - 1] : 0} + 100%총AD (마법피해)
-- AA: 총AD ${game.player.ad}
+## 스킬 효과 요약 (정확한 수치는 서버가 계산)
+- **Q1 음파**: 물리 피해(${game.player.skillLevels.Q > 0 ? LEE_SIN.skills.Q.q1Base[game.player.skillLevels.Q - 1] : 0}+115%보너스AD) + 적에게 표식 3초. 직선 투사체, 미니언에 막힘
+- **Q2 공명타**: Q1 표식 대상에게 돌진 + 물리 피해(잃은 체력 비례 최대 2배). Q1 맞혀야 사용 가능
+- **W1 방호**: 자신/아군에게 돌진 + 쉴드(${game.player.skillLevels.W > 0 ? LEE_SIN.skills.W.shield[game.player.skillLevels.W - 1] : 0}) 2초. 미니언/와드에도 사용 가능 → 위치 변경 수단
+- **W2 철갑**: 생명력 흡수 + 주문 흡혈 4초
+- **E1 폭풍**: 주변 원형 마법 피해(${game.player.skillLevels.E > 0 ? LEE_SIN.skills.E.e1Base[game.player.skillLevels.E - 1] : 0}+100%총AD) + 표식. 미니언 차단 없음
+- **E2 쇠약**: E1 표식 대상 둔화(${game.player.skillLevels.E > 0 ? LEE_SIN.skills.E.slowPercent[game.player.skillLevels.E - 1] : 0}%) 4초
+- **R 용의 분노**: 대상 넉백(16칸) + 물리 피해(${game.player.skillLevels.R > 0 ? LEE_SIN.skills.R.base[game.player.skillLevels.R - 1] : 0}+200%보너스AD). 타워 쪽으로 차면 킬각!
+- **패시브 연타**: 스킬 사용 후 AA 2회 공속 40%↑ + 기력 회복
+- **AA**: 총AD ${game.player.ad} 물리 피해
+
+**중요: Q1은 피해를 줌과 동시에 표식을 남기는 것임. "표식만 남긴다"가 아님!**
+**중요: 서술에 피해량(숫자)을 적극적으로 언급할 것!**
 
 ## 응답 형식
 반드시 아래 JSON 형식으로만 응답하세요. 다른 텍스트 없이 JSON만.
@@ -131,7 +140,7 @@ ${AI_PERSONALITY}
     "interrupted": false,
     "turnScale": "farming|skirmish"
   },
-  "narrative": "2~3문장의 생생한 한국어 서술. ~함 체로 작성. 카톡에 어울리는 짧고 임팩트 있는 문체.",
+  "narrative": "1~2문장. 핵심만. 피해량 숫자 포함. 예: '음파 적중! 49 물리 피해. 표식이 남음'",
   "aiChat": "AI가 친구처럼 하는 말 (~함 체) — 논쟁, 감탄, 조언, 놀림 등. 스킬 메커니즘 설명 포함. 반드시 포함!"
 }
 \`\`\`
