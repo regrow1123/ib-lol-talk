@@ -279,7 +279,7 @@ function renderStatus() {
 
 let mapBg = null;
 let champIcon = null;
-let towerIcon = null;
+// tower icon loaded via canvas drawing
 
 const mapImg = new Image();
 mapImg.src = 'img/minimap.png';
@@ -289,9 +289,7 @@ const champImg = new Image();
 champImg.src = 'img/leesin.png';
 champImg.onload = () => { champIcon = champImg; renderCanvas(); };
 
-const towerImg = new Image();
-towerImg.src = 'img/tower.png';
-towerImg.onload = () => { towerIcon = towerImg; renderCanvas(); };
+// Tower drawn directly on canvas (LoL minimap style)
 
 // Player = RED team (top-right), Enemy = BLUE team (bottom-left)
 // Mid lane 1st tower positions on 1000x1000 minimap
@@ -336,27 +334,38 @@ function renderCanvas() {
 
   const s = W / 1000; // scale factor
 
-  // ── Towers (actual LoL tower icon) ──
-  const drawTower = (mapX, mapY, tintCol) => {
+  // ── Towers (LoL minimap style — pointy turret shape) ──
+  const drawTower = (mapX, mapY, col) => {
     const px = mapX * s, py = mapY * s;
-    const sz = 14;
-    if (towerIcon) {
-      // Tint: draw icon then overlay color
-      ctx.save();
-      ctx.globalAlpha = 0.9;
-      ctx.drawImage(towerIcon, px - sz/2, py - sz/2, sz, sz);
-      ctx.globalCompositeOperation = 'source-atop';
-      ctx.fillStyle = tintCol;
-      ctx.globalAlpha = 0.4;
-      ctx.fillRect(px - sz/2, py - sz/2, sz, sz);
-      ctx.restore();
-    } else {
-      ctx.fillStyle = tintCol;
-      const d = 5;
-      ctx.beginPath();
-      ctx.moveTo(px, py-d); ctx.lineTo(px+d, py); ctx.lineTo(px, py+d); ctx.lineTo(px-d, py);
-      ctx.closePath(); ctx.fill();
-    }
+
+    // Outer glow
+    ctx.shadowColor = col;
+    ctx.shadowBlur = 8;
+
+    // Tower body (trapezoid/turret shape)
+    ctx.fillStyle = col;
+    ctx.beginPath();
+    ctx.moveTo(px - 2, py + 6);    // bottom-left
+    ctx.lineTo(px - 4, py + 2);    // mid-left
+    ctx.lineTo(px - 3, py - 2);    // upper-left
+    ctx.lineTo(px, py - 7);        // top point
+    ctx.lineTo(px + 3, py - 2);    // upper-right
+    ctx.lineTo(px + 4, py + 2);    // mid-right
+    ctx.lineTo(px + 2, py + 6);    // bottom-right
+    ctx.closePath();
+    ctx.fill();
+
+    // Battlements (small wings at top)
+    ctx.fillRect(px - 5, py - 3, 2, 4);
+    ctx.fillRect(px + 3, py - 3, 2, 4);
+
+    ctx.shadowBlur = 0;
+
+    // Center dot (white)
+    ctx.fillStyle = '#fff';
+    ctx.beginPath();
+    ctx.arc(px, py, 1.5, 0, Math.PI * 2);
+    ctx.fill();
   };
   drawTower(RED_T1.x, RED_T1.y, '#ff4444');   // player tower (red)
   drawTower(BLUE_T1.x, BLUE_T1.y, '#4488ff'); // enemy tower (blue)
