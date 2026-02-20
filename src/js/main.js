@@ -199,28 +199,24 @@ function renderLaneCanvas() {
     const clashX = posToX(2); // minions clash at center
 
     alive.forEach((m, i) => {
-      // Scatter: melee in front, ranged behind. Spread in Y within lane.
       const isMelee = m.type === 'melee';
       const xOffset = (side === 'player' ? -1 : 1) * (isMelee ? 8 + rng() * 12 : 22 + rng() * 16);
       const yOffset = (rng() - 0.5) * (laneHalfH * 1.2);
       const x = clashX + xOffset;
       const y = laneY + yOffset;
 
-      // HP ratio for color intensity
       const hpRatio = m.hp / m.maxHp;
-      const radius = isMelee ? 4 : 3;
+      const size = isMelee ? 8 : 7;
 
-      ctx.beginPath();
-      ctx.arc(x, y, radius, 0, Math.PI * 2);
-      ctx.fillStyle = baseColor;
       ctx.globalAlpha = 0.4 + hpRatio * 0.5;
-      ctx.fill();
+      ctx.fillStyle = baseColor;
+      ctx.fillRect(x - size/2, y - size/2, size, size);
 
       // Low HP indicator (막타 가능)
       if (m.hp <= 80) {
         ctx.strokeStyle = '#f1c40f';
         ctx.lineWidth = 1.5;
-        ctx.stroke();
+        ctx.strokeRect(x - size/2, y - size/2, size, size);
       }
 
       ctx.globalAlpha = 1;
@@ -241,29 +237,31 @@ function renderLaneCanvas() {
       y = laneY;
     }
 
+    const size = 18;
+    const half = size / 2;
+
     // Shadow
-    ctx.beginPath();
-    ctx.ellipse(x, y + 10, 10, 4, 0, 0, Math.PI * 2);
     ctx.fillStyle = 'rgba(0,0,0,0.3)';
-    ctx.fill();
+    ctx.fillRect(x - half + 2, y - half + 2, size, size);
 
-    // Body circle
-    ctx.beginPath();
-    ctx.arc(x, y, 11, 0, Math.PI * 2);
+    // Outer (dark)
     ctx.fillStyle = darkColor;
-    ctx.fill();
-    ctx.beginPath();
-    ctx.arc(x, y, 9, 0, Math.PI * 2);
-    ctx.fillStyle = color;
-    ctx.fill();
+    ctx.fillRect(x - half - 1, y - half - 1, size + 2, size + 2);
 
-    // HP ring
+    // Inner
+    ctx.fillStyle = color;
+    ctx.fillRect(x - half, y - half, size, size);
+
+    // HP bar above
     const hpPct = fighter.hp / fighter.maxHp;
-    ctx.beginPath();
-    ctx.arc(x, y, 12, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * hpPct);
-    ctx.strokeStyle = hpPct > 0.5 ? '#2ecc71' : hpPct > 0.25 ? '#f39c12' : '#e74c3c';
-    ctx.lineWidth = 2;
-    ctx.stroke();
+    const barW = size + 4;
+    const barH = 3;
+    const barX = x - barW / 2;
+    const barY = y - half - 7;
+    ctx.fillStyle = '#1a1a2e';
+    ctx.fillRect(barX, barY, barW, barH);
+    ctx.fillStyle = hpPct > 0.5 ? '#2ecc71' : hpPct > 0.25 ? '#f39c12' : '#e74c3c';
+    ctx.fillRect(barX, barY, barW * hpPct, barH);
 
     // Label
     ctx.fillStyle = '#f0e6d2';
