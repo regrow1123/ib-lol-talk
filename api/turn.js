@@ -1,5 +1,9 @@
-// Vercel serverless: POST /api/turn — V2
-import { callLLM } from '../server/llm.js';
+// Vercel serverless: POST /api/turn — V3 하이브리드 파이프라인
+import { parseIntent } from '../server/intent.js';
+import { resolveAction, mergeChanges } from '../server/combat.js';
+import { decideAiAction } from '../server/ai.js';
+import { generateSuggestions } from '../server/suggest.js';
+import { narrate } from '../server/narrator.js';
 import { validateStateUpdate } from '../server/validate.js';
 import { applyStateUpdate } from '../server/game.js';
 
@@ -20,33 +24,60 @@ export default async function handler(req, res) {
   }
 
   try {
-    // 1. LLM call
-    const llmResult = await callLLM(gameState, input, history || []);
+    // === V3 파이프라인 ===
 
-    // 2. Validate stateUpdate
-    const validated = validateStateUpdate(llmResult.stateUpdate, gameState);
+    // 1. Intent 해석 (LLM 경량)
+    const intent = await parseIntent(input, gameState);
+    console.log(`Turn ${gameState.turn}: "${input}" → intent:`, JSON.stringify(intent));
 
-    // 3. Apply to state
+    // 2. 플레이어 액션 규칙 엔진
+    const playerResult = resolveAction(intent, gameState, 'player');
+
+    // 3. AI 행동 결정 (규칙 엔진)
+    const aiIntent = decideAiAction(gameState, playerResult);
+
+    // 4. AI 액션 규칙 엔진 — 플레이어 결과를 반영한 중간 상태로
+    const midState = applyMidState(gameState, playerResult.stateChanges);
+    const aiResult = resolveAction(aiIntent, midState, 'enemy');
+
+    // 5. 상태 병합
+    const merged = mergePlayerAndAi(gameState, playerResult.stateChanges, aiResult.stateChanges);
+
+    // 6. 가드레일 검증
+    const validated = validateStateUpdate(merged, gameState);
+
+    // 7. 서술 생성 (LLM 경량)
+    const allEvents = [...playerResult.events, ...aiResult.events];
+    const { narrative, aiChat } = await narrate(allEvents, {
+      ...gameState,
+      player: { ...gameState.player, hp: validated.playerHp },
+      enemy: { ...gameState.enemy, hp: validated.enemyHp },
+    });
+
+    // 8. Suggestions (규칙 기반)
+    const nextStatePreview = { ...gameState, player: { ...gameState.player, hp: validated.playerHp, energy: validated.playerEnergy, cooldowns: validated.playerCooldowns }, enemy: { ...gameState.enemy, hp: validated.enemyHp, energy: validated.enemyEnergy, cooldowns: validated.enemyCooldowns } };
+    const suggestions = generateSuggestions(nextStatePreview);
+
+    // 9. 상태 적용
     let nextState = applyStateUpdate(gameState, validated);
 
-    // 4. Check gameOver
-    let gameOver = llmResult.gameOver || null;
+    // 10. gameOver 체크
+    let gameOver = null;
     if (validated.playerHp <= 0 && validated.enemyHp <= 0) {
-      // No simultaneous death — attacker (player initiated) gets the kill
       validated.enemyHp = 0;
       validated.playerHp = 1;
-      gameOver = { winner: 'player', reason: 'kill', summary: llmResult.gameOver?.summary || '아슬아슬하게 적을 먼저 처치했습니다!' };
+      gameOver = { winner: 'player', reason: 'kill', summary: '아슬아슬하게 적을 먼저 처치했습니다!' };
     } else if (validated.playerHp <= 0) {
-      gameOver = { winner: 'enemy', reason: 'kill', summary: llmResult.gameOver?.summary || '적에게 처치당했습니다.' };
+      gameOver = { winner: 'enemy', reason: 'kill', summary: '적에게 처치당했습니다.' };
     } else if (validated.enemyHp <= 0) {
-      gameOver = { winner: 'player', reason: 'kill', summary: llmResult.gameOver?.summary || '적을 처치했습니다!' };
+      gameOver = { winner: 'player', reason: 'kill', summary: '적을 처치했습니다!' };
     } else if (validated.playerCs >= 50) {
       gameOver = { winner: 'player', reason: 'cs', summary: 'CS 50 달성!' };
     } else if (validated.enemyCs >= 50) {
       gameOver = { winner: 'enemy', reason: 'cs', summary: '적이 먼저 CS 50에 도달했습니다.' };
-    } else if (validated.towerHp.enemy <= 0) {
+    } else if (validated.towerHp?.enemy <= 0) {
       gameOver = { winner: 'player', reason: 'tower', summary: '적 타워를 파괴했습니다!' };
-    } else if (validated.towerHp.player <= 0) {
+    } else if (validated.towerHp?.player <= 0) {
       gameOver = { winner: 'enemy', reason: 'tower', summary: '아군 타워가 파괴되었습니다.' };
     }
 
@@ -55,45 +86,141 @@ export default async function handler(req, res) {
       nextState.winner = gameOver.winner;
     }
 
-    // 5. Check levelUp — only if level actually increased
-    let levelUp = llmResult.levelUp || null;
-    const playerLeveledUp = validated.playerLevel > gameState.player.level;
-    const enemyLeveledUp = validated.enemyLevel > gameState.enemy.level;
+    // 11. levelUp 체크
+    let levelUp = null;
+    const newPlayerCs = validated.playerCs;
+    const newEnemyCs = validated.enemyCs;
+    const expectedPlayerLevel = csToLevel(newPlayerCs);
+    const expectedEnemyLevel = csToLevel(newEnemyCs);
 
-    if (levelUp && !playerLeveledUp && !enemyLeveledUp) {
-      levelUp = null; // LLM sent levelUp but no level change — discard
-    }
-
-    if (levelUp && playerLeveledUp && levelUp.who !== 'enemy') {
+    if (expectedPlayerLevel > gameState.player.level) {
+      nextState.player.level = expectedPlayerLevel;
+      nextState.player.skillPoints = (nextState.player.skillPoints || 0) + (expectedPlayerLevel - gameState.player.level);
       nextState.phase = 'skillup';
-      nextState.player.skillPoints = (nextState.player.skillPoints || 0) + 1;
-    } else if (playerLeveledUp && !levelUp) {
-      // Level increased but LLM forgot to send levelUp — force it
-      levelUp = { newLevel: validated.playerLevel, who: 'player', options: ['Q','W','E'], descriptions: ['스킬 강화','스킬 강화','스킬 강화'] };
-      if (validated.playerLevel >= 6 && gameState.player.skillLevels.R < 1) {
-        levelUp.options.push('R');
-        levelUp.descriptions.push('궁극기 해금');
+      const options = ['Q', 'W', 'E'];
+      const descs = ['음파/공명타 강화', '방호/철갑 강화', '폭풍/쇠약 강화'];
+      if (expectedPlayerLevel >= 6 && gameState.player.skillLevels.R < 1) {
+        options.push('R');
+        descs.push('용의 분노 해금');
       }
-      nextState.phase = 'skillup';
-      nextState.player.skillPoints = (nextState.player.skillPoints || 0) + 1;
-    }
-    // Enemy auto level-up
-    if (enemyLeveledUp) {
-      nextState.enemy.skillPoints = 0; // AI auto-picks
+      levelUp = { newLevel: expectedPlayerLevel, who: 'player', options, descriptions: descs };
     }
 
-    console.log(`Turn ${gameState.turn}: "${input}" → HP ${validated.playerHp}/${validated.enemyHp}`);
+    if (expectedEnemyLevel > gameState.enemy.level) {
+      nextState.enemy.level = expectedEnemyLevel;
+      nextState.enemy.skillPoints = 0;
+      // AI auto skill-up
+      autoSkillUp(nextState.enemy, expectedEnemyLevel - gameState.enemy.level);
+    }
+
+    console.log(`Turn ${gameState.turn}: HP ${validated.playerHp}/${validated.enemyHp} | CS ${validated.playerCs}/${validated.enemyCs}`);
 
     res.json({
       state: nextState,
-      narrative: llmResult.narrative,
-      aiChat: llmResult.aiChat,
-      suggestions: levelUp ? [] : (llmResult.suggestions || []),
+      narrative,
+      aiChat,
+      suggestions: levelUp ? [] : suggestions,
       levelUp,
       gameOver,
     });
   } catch (err) {
-    console.error('Turn error:', err.message);
+    console.error('Turn error:', err.message, err.stack);
     res.status(500).json({ error: '턴 처리 중 오류: ' + err.message });
+  }
+}
+
+// 플레이어 결과를 중간 상태로 적용 (AI가 이 상태 기준으로 행동)
+function applyMidState(gameState, playerChanges) {
+  return {
+    ...gameState,
+    player: {
+      ...gameState.player,
+      hp: playerChanges.attackerHp,
+      energy: playerChanges.attackerEnergy,
+      cooldowns: { ...playerChanges.attackerCooldowns },
+      position: playerChanges.attackerPosition,
+      shield: playerChanges.attackerShield,
+      cs: playerChanges.attackerCs,
+      gold: playerChanges.attackerGold,
+    },
+    enemy: {
+      ...gameState.enemy,
+      hp: playerChanges.defenderHp,
+      energy: playerChanges.defenderEnergy,
+      cooldowns: { ...playerChanges.defenderCooldowns },
+      position: playerChanges.defenderPosition,
+      shield: playerChanges.defenderShield,
+      cs: playerChanges.defenderCs,
+      gold: playerChanges.defenderGold,
+      buffs: playerChanges.defenderBuffs || [],
+      debuffs: playerChanges.defenderDebuffs || [],
+    },
+  };
+}
+
+// 두 결과 병합 (플레이어→적 공격 + AI→플레이어 공격)
+function mergePlayerAndAi(gameState, pChanges, aiChanges) {
+  return {
+    playerHp: aiChanges.defenderHp,
+    enemyHp: aiChanges.attackerHp,
+    playerEnergy: aiChanges.defenderEnergy,
+    enemyEnergy: aiChanges.attackerEnergy,
+    playerCooldowns: aiChanges.defenderCooldowns,
+    enemyCooldowns: aiChanges.attackerCooldowns,
+    playerPosition: aiChanges.defenderPosition,
+    enemyPosition: aiChanges.attackerPosition,
+    playerCs: aiChanges.defenderCs,
+    enemyCs: aiChanges.attackerCs,
+    playerLevel: gameState.player.level,
+    enemyLevel: gameState.enemy.level,
+    playerGold: aiChanges.defenderGold,
+    enemyGold: aiChanges.attackerGold,
+    playerShield: aiChanges.defenderShield,
+    enemyShield: aiChanges.attackerShield,
+    playerBuffs: aiChanges.defenderBuffs || [],
+    enemyBuffs: aiChanges.attackerBuffs || [],
+    playerDebuffs: aiChanges.defenderDebuffs || [],
+    enemyDebuffs: aiChanges.attackerDebuffs || [],
+    playerSpellCooldowns: aiChanges.defenderSpellCooldowns || [0, 0],
+    enemySpellCooldowns: aiChanges.attackerSpellCooldowns || [0, 0],
+    towerHp: { ...gameState.tower },
+    minions: JSON.parse(JSON.stringify(gameState.minions)),
+  };
+}
+
+function csToLevel(cs) {
+  if (cs >= 40) return 9;
+  if (cs >= 35) return 8;
+  if (cs >= 30) return 7;
+  if (cs >= 25) return 6;
+  if (cs >= 20) return 5;
+  if (cs >= 16) return 4;
+  if (cs >= 13) return 3;
+  if (cs >= 7) return 2;
+  return 1;
+}
+
+function autoSkillUp(enemy, points) {
+  const priority = ['Q', 'E', 'W'];
+  for (let i = 0; i < points; i++) {
+    // R at 6, 11, 16
+    if (enemy.level >= 6 && enemy.skillLevels.R < 1) {
+      enemy.skillLevels.R++;
+      continue;
+    }
+    if (enemy.level >= 11 && enemy.skillLevels.R < 2) {
+      enemy.skillLevels.R++;
+      continue;
+    }
+    if (enemy.level >= 16 && enemy.skillLevels.R < 3) {
+      enemy.skillLevels.R++;
+      continue;
+    }
+    for (const sk of priority) {
+      if (enemy.skillLevels[sk] < 5) {
+        enemy.skillLevels[sk]++;
+        break;
+      }
+    }
   }
 }

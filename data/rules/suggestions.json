@@ -1,0 +1,48 @@
+{
+  "description": "상황별 suggestion 템플릿. 이모지 금지. 심리전/읽기 느낌, 교육적 근거 포함",
+  "categories": {
+    "aggressive": {
+      "conditions": ["enemy_hp_low", "enemy_cd", "level_advantage", "energy_high"],
+      "templates": [
+        "상대 {enemy_skill} 쿨타임이라 {my_skill}로 교환하면 유리",
+        "상대 HP {enemy_hp}%로 낮으니 Q1으로 올인 노려보기",
+        "미니언 수 우위일 때 앞으로 압박하며 교환",
+        "상대 기력 {enemy_energy} 부족하니 적극적으로 트레이드",
+        "레벨 우위 활용해서 {my_skill} 선공",
+        "E1 둔화 걸고 Q1 연계하면 적중률 높음"
+      ]
+    },
+    "defensive": {
+      "conditions": ["hp_low", "energy_low", "enemy_aggressive"],
+      "templates": [
+        "미니언 뒤에서 안전하게 CS 챙기기",
+        "W1 쉴드로 상대 공격 받아내고 후퇴",
+        "HP 낮으니 W2 피흡으로 체력 회복",
+        "상대 {enemy_skill} 사거리 밖에서 CS",
+        "기력 부족하니 AA로만 CS 챙기며 회복 대기",
+        "수풀에 숨어서 상대 스킬 낭비 유도"
+      ]
+    },
+    "utility": {
+      "conditions": ["neutral", "farming_phase"],
+      "templates": [
+        "수풀 시야 끊으며 상대 긴장시키기",
+        "미니언 정리하고 리콜 타이밍 잡기",
+        "패시브 AA로 기력 회복하면서 CS",
+        "스킬 쿨 돌아올 때까지 안전하게 파밍",
+        "상대 움직임 관찰하며 패턴 읽기",
+        "미니언 라인 밀고 타워 압박"
+      ]
+    },
+    "combo": {
+      "conditions": ["has_q_e", "has_all_skills", "has_r"],
+      "templates": [
+        "Q1 적중 후 AA 넣고 Q2로 마무리 (기본 콤보)",
+        "E1 둔화 후 Q1 맞추면 거의 확정 적중",
+        "Q1-Q2-E1-AA-R 풀콤보로 킬 노리기",
+        "W1으로 미니언 타고 접근 후 R-Q1-Q2 인섹",
+        "Q1-AA-AA-Q2 패시브 활용 풀 콤보"
+      ]
+    }
+  }
+}
