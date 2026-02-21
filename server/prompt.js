@@ -18,6 +18,53 @@ const AI_PERSONALITY = `당신의 AI 성격: "같이 놀면서 리액션해주�
 - 이기는 것보다 **플레이어가 리신의 스킬을 체험하는 것**이 목표`;
 
 
+function getAvailableSkills(champ, game) {
+  const dist = Math.abs(game.player.x - game.enemy.x);
+  const skills = [];
+  const ENERGY_COST = { Q: 50, W: 50, E: 50, R: 0 };
+  const RANGE = { Q: 24, W: 14, E: 9, R: 8, AA: 3 };
+
+  for (const s of ['Q', 'W', 'E', 'R']) {
+    if (champ.skillLevels[s] > 0 && champ.cooldowns[s] === 0 && champ.energy >= ENERGY_COST[s]) {
+      if (s === 'R' && champ.level < 6) continue;
+      skills.push(`${s}(레벨${champ.skillLevels[s]}, 사거리${RANGE[s]}칸)`);
+    }
+  }
+  // Q2 available if Q mark exists
+  if (champ.marks?.q > 0 && champ.cooldowns.Q === 0 && champ.energy >= 50) {
+    skills.push('Q2(돌진)');
+  }
+  // E2 available if E mark on enemy
+  if (champ.marks?.e > 0) {
+    skills.push('E2(둔화)');
+  }
+  if (dist <= RANGE.AA) skills.push(`AA(사거리${RANGE.AA}칸)`);
+  // Spells
+  if ((champ.spellCooldowns?.flash || 0) === 0) skills.push('점멸');
+  if ((champ.spellCooldowns?.second || 0) === 0) skills.push(SPELLS[champ.spells?.second]?.name || '점화');
+
+  return skills.length > 0 ? skills.join(', ') : '없음 (기본공격/이동만)';
+}
+
+function getUnavailableSkills(champ, game) {
+  const reasons = [];
+  const ENERGY_COST = { Q: 50, W: 50, E: 50, R: 0 };
+
+  for (const s of ['Q', 'W', 'E', 'R']) {
+    if (champ.skillLevels[s] === 0) {
+      reasons.push(`${s}(미습득)`);
+    } else if (champ.cooldowns[s] > 0) {
+      reasons.push(`${s}(쿨타임 ${champ.cooldowns[s]}턴)`);
+    } else if (champ.energy < ENERGY_COST[s]) {
+      reasons.push(`${s}(에너지 부족)`);
+    }
+  }
+  if ((champ.spellCooldowns?.flash || 0) > 0) reasons.push(`점멸(쿨 ${champ.spellCooldowns.flash}턴)`);
+  if ((champ.spellCooldowns?.second || 0) > 0) reasons.push(`${SPELLS[champ.spells?.second]?.name || '점화'}(쿨 ${champ.spellCooldowns.second}턴)`);
+
+  return reasons.length > 0 ? reasons.join(', ') : '없음';
+}
+
 export function buildSystemPrompt(game) {
   return `당신은 "ib-lol talk" 게임의 심판이자 AI 스파링 파트너입니다.
 리그 오브 레전드의 미드 라인전 1v1을 텍스트 Interactive Fiction으로 진행합니다.
@@ -76,16 +123,20 @@ ${AI_PERSONALITY}
 ## 현재 게임 상태
 턴: ${game.turn}
 플레이어: HP ${Math.round(game.player.hp)}/${game.player.maxHp}, 에너지 ${game.player.energy}/${game.player.maxEnergy}, CS ${game.player.cs}, 레벨 ${game.player.level}, 위치 (${game.player.x},${game.player.y})${game.player.inBush ? ' [부쉬]' : ''}
-  스킬: Q${game.player.skillLevels.Q} W${game.player.skillLevels.W} E${game.player.skillLevels.E} R${game.player.skillLevels.R}
+  스킬레벨: Q=${game.player.skillLevels.Q} W=${game.player.skillLevels.W} E=${game.player.skillLevels.E} R=${game.player.skillLevels.R}
   쿨다운: Q=${game.player.cooldowns.Q} W=${game.player.cooldowns.W} E=${game.player.cooldowns.E} R=${game.player.cooldowns.R}
+  ⚡ 사용가능: ${getAvailableSkills(game.player, game)}
+  ❌ 사용불가: ${getUnavailableSkills(game.player, game)}
   마크: Q마크=${game.player.marks.q > 0 ? '있음' : '없음'} E마크=${game.player.marks.e > 0 ? '있음' : '없음'}
   쉴드: ${game.player.shield}, 포션: ${game.player.potions || 0}개${game.player.potionActive ? ' (사용중)' : ''}
   소환사주문: 점멸(쿨${game.player.spellCooldowns?.flash || 0}) + ${SPELLS[game.player.spells?.second]?.name || '점화'}(쿨${game.player.spellCooldowns?.second || 0})
   룬: ${RUNES[game.player.rune]?.name || '정복자'}${game.player.rune === 'conqueror' ? ` (스택:${game.player.runeState?.stacks || 0}/12)` : ''}${game.player.rune === 'electrocute' ? ` (쿨:${game.player.runeState?.cooldown || 0})` : ''}${game.player.rune === 'grasp' ? ` (${game.player.runeState?.ready ? '충전됨' : '충전중'})` : ''}
   ${game.player.ignitedBy ? '🔥 점화 피해 중!' : ''}${game.player.exhausted > 0 ? '💨 탈진 상태!' : ''}
 적(AI): HP ${Math.round(game.enemy.hp)}/${game.enemy.maxHp}, 에너지 ${game.enemy.energy}/${game.enemy.maxEnergy}, CS ${game.enemy.cs}, 레벨 ${game.enemy.level}, 위치 (${game.enemy.x},${game.enemy.y})${game.enemy.inBush ? ' [부쉬]' : ''}
-  스킬: Q${game.enemy.skillLevels.Q} W${game.enemy.skillLevels.W} E${game.enemy.skillLevels.E} R${game.enemy.skillLevels.R}
+  스킬레벨: Q=${game.enemy.skillLevels.Q} W=${game.enemy.skillLevels.W} E=${game.enemy.skillLevels.E} R=${game.enemy.skillLevels.R}
   쿨다운: Q=${game.enemy.cooldowns.Q} W=${game.enemy.cooldowns.W} E=${game.enemy.cooldowns.E} R=${game.enemy.cooldowns.R}
+  ⚡ 사용가능: ${getAvailableSkills(game.enemy, game)}
+  ❌ 사용불가: ${getUnavailableSkills(game.enemy, game)}
   마크: Q마크=${game.enemy.marks?.q > 0 ? '있음' : '없음'} E마크=${game.enemy.marks?.e > 0 ? '있음' : '없음'}
   소환사주문: 점멸(쿨${game.enemy.spellCooldowns?.flash || 0}) + ${SPELLS[game.enemy.spells?.second]?.name || '점화'}(쿨${game.enemy.spellCooldowns?.second || 0})
   ${game.enemy.ignitedBy ? '🔥 점화 피해 중!' : ''}${game.enemy.exhausted > 0 ? '💨 탈진 상태!' : ''}
@@ -164,6 +215,8 @@ ${AI_PERSONALITY}
 - positionChange는 이동할 칸 수 (현재 위치에 더할 값)
 - farming 턴에서 CS는 웨이브 단위 (1~4), skirmish 턴에서는 0~1
 - aiChat은 반드시 포함 (~함 체). 플레이어 행동에 리액션 + 자기 행동 말하기. 예: "ㅋㅋ 갑자기 Q 날림", "아 E 아팠음", "나도 CS 좀 먹음"
-- suggestions는 반드시 3개. 의도/목적이 드러나는 표현. "Q 쏜다"(X) → "Q로 찔러보고 맞으면 따라간다"(O). 사거리/쿨다운/에너지 고려해서 실제 가능한 행동만. 공격/수비/파밍 중 다양하게 제시.
+- suggestions는 반드시 3개. 의도/목적이 드러나는 표현. "Q 쏜다"(X) → "Q로 찔러보고 맞으면 따라간다"(O). 공격/수비/파밍 중 다양하게 제시.
+- **suggestions 필수 검증**: 위의 "⚡ 사용가능" 목록에 있는 스킬만 제안할 것! "❌ 사용불가"에 있는 스킬은 절대 제안하지 말 것!
+- **AI 행동 필수 검증**: AI도 자기 "⚡ 사용가능" 목록의 스킬만 사용 가능! 미습득/쿨타임/에너지부족 스킬 사용 금지!
 `;
 }
