@@ -1,10 +1,7 @@
 // Vercel serverless: POST /api/skillup — V2
 // Client sends skill choice, server validates and returns updated state
-// 마지막 스킬포인트 소진 시 LLM suggestions도 함께 리턴
 
-import { callLLMSuggestionsOnly } from '../server/llm.js';
-
-export default async function handler(req, res) {
+export default function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
@@ -34,15 +31,6 @@ export default async function handler(req, res) {
 
   if (p.skillPoints <= 0) {
     state.phase = 'play';
-    // 마지막 스킬포인트 → LLM suggestions 포함
-    const { history } = req.body || {};
-    try {
-      const suggestions = await callLLMSuggestionsOnly(state, history || []);
-      return res.json({ ok: true, state, suggestions });
-    } catch (err) {
-      console.error('Skillup suggest error:', err.message);
-      return res.json({ ok: true, state, suggestions: ['CS 챙기기', '안전하게 대기', '상대 움직임 관찰'] });
-    }
   }
 
   res.json({ ok: true, state });

@@ -63,7 +63,7 @@ ${skillDesc}
 - 스킬표기: Q1/Q2/W1/W2/E1/E2/R
 - 미습득/쿨/기력부족 사용금지. 불가능스킬→알려주고 대체행동
 - 상대방(aiChat) 말투: 문장 끝을 ~했음/~됐음/~인듯/~ㅋㅋ 등 반말 종결. 예: "잘 피했음", "그거 좀 아팠음 ㅋㅋ", "CS 먹을 타이밍에 Q 노리는 거 좋았음", "다음엔 W 쉴드 먼저 쓰는 게 나을듯". "체"라는 글자를 붙이지 말 것. 친근+대응이유+팁. "AI"표현금지→"상대방"
-- suggestions: [✓]스킬만, 1~3개. 이모지 사용금지. 상황맞게(HP높→공격, HP낮→방어, 쿨중→CS). 읽기/심리전느낌(상대행동예측). 교육적근거포함. 중복금지
+- suggestions: 스킬별+일반 5~7개 생성. 이모지금지. 형식: [{"skill":"Q","text":"..."},{"skill":null,"text":"CS 챙기기"}]. skill=해당스킬키(Q/W/E/R/spell) 또는 null(일반). 미습득스킬 포함OK(클라이언트가 필터). 읽기/심리전느낌(상대행동예측). 교육적근거포함. 중복금지
 
 ## AI 성격
 ${buildPersonalityPrompt(gameState.enemy?.personality)}
@@ -72,7 +72,7 @@ ${buildPersonalityPrompt(gameState.enemy?.personality)}
 ## JSON응답 (diff 형식)
 stateUpdate에는 **변경된 필드만** 포함. 변경 없는 필드는 생략. 서버가 이전 상태에 머지함.
 예: HP만 변했으면 {"stateUpdate":{"playerHp":85,"enemyHp":90}} — 나머지 생략
-{"narrative":"","aiChat":"~했음/~됐음/~인듯","stateUpdate":{변경필드만},"suggestions":[],"gameOver":null}
+{"narrative":"","aiChat":"~했음/~됐음/~인듯","stateUpdate":{변경필드만},"suggestions":[{"skill":"Q","text":"..."},{"skill":null,"text":"..."}],"gameOver":null}
 gameOver예: {"winner":"player","reason":"kill","summary":"요약"}`;
 
   // Dynamic: current turn state (changes every turn)

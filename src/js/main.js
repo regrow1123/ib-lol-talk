@@ -7,7 +7,7 @@ let state = null;
 let sending = false;
 let turnHistory = [];
 let setupChoices = { spells: [], rune: null };
-let lastSuggestions = []; // 레벨업 후 복원용
+let allSuggestions = []; // 전체 suggestions (스킬 태그 포함)
 
 // ═══════════════════════════════════════
 // Setup Screen
@@ -183,9 +183,8 @@ async function doSkillUp(key) {
     showSkillUpChoices();
   } else {
     state.phase = 'play';
-    // 마지막 스킬포인트 소진 시 skillup 응답에 suggestions 포함
-    if (skillupData?.suggestions) lastSuggestions = skillupData.suggestions;
-    renderSuggestions(lastSuggestions);
+    // 스킬업 완료 → 저장된 suggestions를 새 스킬 상태로 필터링
+    renderSuggestions(allSuggestions);
     setInput(true);
     $('player-input').focus();
   }
@@ -238,13 +237,13 @@ async function submit() {
         state.winner = data.gameOver.winner;
         showGameOver(data.gameOver);
       } else if (data.levelUp && data.levelUp.who !== 'enemy') {
-        // 서버가 레벨업 감지 → 스킬 선택, suggestions는 저장
-        lastSuggestions = data.suggestions || [];
+        // 서버가 레벨업 감지 → 스킬 선택, suggestions 저장 (스킬업 후 필터링)
+        allSuggestions = data.suggestions || [];
         handlePhase();
       } else {
         state.phase = 'play';
-        lastSuggestions = data.suggestions || [];
-        renderSuggestions(lastSuggestions);
+        allSuggestions = data.suggestions || [];
+        renderSuggestions(allSuggestions);
         setInput(true);
       }
     }
@@ -507,15 +506,35 @@ function showTooltipPopup(text) {
 // ═══════════════════════════════════════
 // Suggestions
 // ═══════════════════════════════════════
+function filterSuggestions(suggestions) {
+  if (!state) return suggestions;
+  const p = state.player;
+  return suggestions.filter(s => {
+    if (!s.skill) return true; // 일반 suggestion
+    const key = s.skill.toUpperCase();
+    // Q/W/E/R 스킬 체크
+    if (['Q', 'W', 'E', 'R'].includes(key)) {
+      return p.skillLevels[key] > 0 && p.cooldowns[key] <= 0;
+    }
+    // spell 체크 (flash, ignite 등)
+    const spellIdx = p.spells?.indexOf(s.skill.toLowerCase());
+    if (spellIdx >= 0) return (p.spellCooldowns[spellIdx] || 0) <= 0;
+    return true;
+  });
+}
+
 function renderSuggestions(suggestions) {
   const box = $('suggestions');
   box.innerHTML = '';
-  for (const s of suggestions) {
+  const filtered = filterSuggestions(suggestions);
+  // 최대 3개
+  for (const s of filtered.slice(0, 3)) {
+    const text = typeof s === 'string' ? s : s.text;
     const btn = document.createElement('button');
     btn.className = 'suggestion-btn';
-    btn.textContent = s;
+    btn.textContent = text;
     btn.onclick = () => {
-      $('player-input').value = s;
+      $('player-input').value = text;
       submit();
     };
     box.appendChild(btn);
