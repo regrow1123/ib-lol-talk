@@ -519,6 +519,8 @@ function showTooltipPopup(text) {
 // ── Post-Skillup: full turn for quality suggestions ──
 async function fetchPostSkillupTurn(skillKey) {
   try {
+    // Ensure phase is 'play' before sending
+    state.phase = 'play';
     const res = await fetch(`${API_BASE}/api/turn`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -529,18 +531,28 @@ async function fetchPostSkillupTurn(skillKey) {
       }),
     });
     const data = await res.json();
+    if (data.error) { console.error('postSkillup error:', data.error); return; }
     if (data.state) {
+      // Keep phase as 'play' — don't let another skillup override
+      const phase = data.state.phase;
       state = data.state;
+      if (phase === 'skillup') {
+        // LLM triggered another levelup — handle it
+        state.phase = 'skillup';
+        renderStatus();
+        if (data.levelUp) showSkillUp();
+        return;
+      }
       renderStatus();
     }
     if (data.narrative) addSystemMsg(data.narrative);
     if (data.aiChat) addEnemyMsg(data.aiChat);
     if (data.suggestions?.length) renderSuggestions(data.suggestions);
-    if (data.narrative) {
-      turnHistory.push({ role: 'user', content: `${skillKey} 스킬 레벨업` });
-      turnHistory.push({ role: 'assistant', content: JSON.stringify(data) });
-    }
-  } catch {}
+    turnHistory.push({ role: 'user', content: `${skillKey} 스킬 레벨업` });
+    turnHistory.push({ role: 'assistant', content: JSON.stringify({ narrative: data.narrative, aiChat: data.aiChat }) });
+  } catch (err) {
+    console.error('fetchPostSkillupTurn failed:', err);
+  }
 }
 
 // ── Suggestions ──
