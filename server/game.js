@@ -68,6 +68,7 @@ export function applyStateUpdate(gameState, validated) {
   next.player.shield = validated.playerShield;
   next.player.buffs = validated.playerBuffs;
   next.player.debuffs = validated.playerDebuffs;
+  if (validated.playerSpellCooldowns) next.player.spellCooldowns = [...validated.playerSpellCooldowns];
 
   next.enemy.hp = validated.enemyHp;
   next.enemy.energy = validated.enemyEnergy;
@@ -79,6 +80,7 @@ export function applyStateUpdate(gameState, validated) {
   next.enemy.shield = validated.enemyShield;
   next.enemy.buffs = validated.enemyBuffs;
   next.enemy.debuffs = validated.enemyDebuffs;
+  if (validated.enemySpellCooldowns) next.enemy.spellCooldowns = [...validated.enemySpellCooldowns];
 
   next.tower = { ...validated.towerHp };
   next.minions = JSON.parse(JSON.stringify(validated.minions));

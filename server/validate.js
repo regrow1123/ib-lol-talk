@@ -56,6 +56,10 @@ export function validateStateUpdate(stateUpdate, prevState) {
     s.minions.enemy = s.minions.enemy || prevState.minions.enemy;
   }
 
+  // Spell cooldowns: clamp 0+
+  s.playerSpellCooldowns = clampSpellCooldowns(s.playerSpellCooldowns, prevState.player.spellCooldowns);
+  s.enemySpellCooldowns = clampSpellCooldowns(s.enemySpellCooldowns, prevState.enemy.spellCooldowns);
+
   // Buffs/debuffs: ensure arrays
   s.playerBuffs = Array.isArray(s.playerBuffs) ? s.playerBuffs : [];
   s.enemyBuffs = Array.isArray(s.enemyBuffs) ? s.enemyBuffs : [];
@@ -68,6 +72,11 @@ export function validateStateUpdate(stateUpdate, prevState) {
 function clamp(val, min, max) {
   if (typeof val !== 'number' || isNaN(val)) return min;
   return Math.min(max, Math.max(min, val));
+}
+
+function clampSpellCooldowns(cds, prev) {
+  if (!Array.isArray(cds)) return prev ? [...prev] : [0, 0];
+  return cds.map((v, i) => Math.max(0, Math.round(typeof v === 'number' ? v : (prev?.[i] ?? 0))));
 }
 
 function clampCooldowns(cds, prev) {

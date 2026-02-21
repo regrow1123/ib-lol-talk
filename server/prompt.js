@@ -56,7 +56,7 @@ MELEE_RANGE(AA/E/R거리) | MID_RANGE(Q거리) | BEHIND_MINIONS(Q1차단!) | BUS
 - suggestions: [✓] 상태인 스킬만 포함. 1~3개. 심리전/읽기 느낌으로 작성 — 단순 "Q1 쓴다"(X) → 상대의 행동을 예측하는 의도가 드러나게. 예: "상대가 CS 먹을 타이밍에 Q1 노리기", "미니언 뒤에 숨어서 상대 스킬 낭비 유도", "앞으로 걸어가서 올인 의도 보여주고 상대 점멸 빼기"
 
 ## JSON 응답 (이것만 출력)
-{"narrative":"1~2문장 간결 서술","aiChat":"AI반응(~함체)","stateUpdate":{"playerHp":0~100,"enemyHp":0~100,"playerEnergy":0~200,"enemyEnergy":0~200,"playerCooldowns":{"Q":0,"W":0,"E":0,"R":0},"enemyCooldowns":{"Q":0,"W":0,"E":0,"R":0},"playerPosition":"태그","enemyPosition":"태그","playerCs":n,"enemyCs":n,"playerLevel":n,"enemyLevel":n,"playerGold":n,"enemyGold":n,"playerShield":0,"enemyShield":0,"playerBuffs":[],"enemyBuffs":[],"playerDebuffs":[],"enemyDebuffs":[],"towerHp":{"player":0~100,"enemy":0~100},"minions":{"player":{"melee":0~3,"ranged":0~3},"enemy":{"melee":0~3,"ranged":0~3}}},"levelUp":null,"suggestions":["1~3개"],"gameOver":null}
+{"narrative":"1~2문장 간결 서술","aiChat":"AI반응(~함체)","stateUpdate":{"playerHp":0~100,"enemyHp":0~100,"playerEnergy":0~200,"enemyEnergy":0~200,"playerCooldowns":{"Q":0,"W":0,"E":0,"R":0},"enemyCooldowns":{"Q":0,"W":0,"E":0,"R":0},"playerSpellCooldowns":[0,0],"enemySpellCooldowns":[0,0],"playerPosition":"태그","enemyPosition":"태그","playerCs":n,"enemyCs":n,"playerLevel":n,"enemyLevel":n,"playerGold":n,"enemyGold":n,"playerShield":0,"enemyShield":0,"playerBuffs":[],"enemyBuffs":[],"playerDebuffs":[],"enemyDebuffs":[],"towerHp":{"player":0~100,"enemy":0~100},"minions":{"player":{"melee":0~3,"ranged":0~3},"enemy":{"melee":0~3,"ranged":0~3}}},"levelUp":null,"suggestions":["1~3개"],"gameOver":null}
 
 levelUp 예: {"newLevel":2,"who":"player","options":["Q","W","E"],"descriptions":["설명1","설명2","설명3"]}
 gameOver 예: {"winner":"player","reason":"kill","summary":"요약"}`;
