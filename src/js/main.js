@@ -383,45 +383,56 @@ function setHpColor(id, hp) {
   else el.style.background = 'linear-gradient(90deg, #27ae60, #2ecc71)';
 }
 
+const DDRAGON = 'https://ddragon.leagueoflegends.com/cdn/14.20.1';
+const SKILL_ICONS = {
+  Q: `${DDRAGON}/img/spell/BlindMonkQOne.png`,
+  W: `${DDRAGON}/img/spell/BlindMonkWOne.png`,
+  E: `${DDRAGON}/img/spell/BlindMonkEOne.png`,
+  R: `${DDRAGON}/img/spell/BlindMonkRKick.png`,
+};
+const SPELL_ICONS = {
+  flash: `${DDRAGON}/img/spell/SummonerFlash.png`,
+  ignite: `${DDRAGON}/img/spell/SummonerDot.png`,
+  exhaust: `${DDRAGON}/img/spell/SummonerExhaust.png`,
+  barrier: `${DDRAGON}/img/spell/SummonerBarrier.png`,
+  teleport: `${DDRAGON}/img/spell/SummonerTeleport.png`,
+};
+
 function renderCooldowns(containerId, fighter) {
   const box = $(containerId);
   box.innerHTML = '';
 
-  // Skills: Q W E R
   const skills = ['Q', 'W', 'E', 'R'];
   for (const s of skills) {
     const lv = fighter.skillLevels?.[s] || 0;
     const cd = fighter.cooldowns?.[s] || 0;
     const el = document.createElement('div');
     el.className = 'cd-icon';
+    el.innerHTML = `<img src="${SKILL_ICONS[s]}" alt="${s}">`;
     if (lv === 0) {
       el.classList.add('cd-locked');
-      el.textContent = s;
     } else if (cd > 0) {
       el.classList.add('cd-active');
-      el.innerHTML = `<span class="cd-label">${s}</span><span class="cd-num">${cd}</span>`;
+      el.innerHTML += `<div class="cd-overlay">${cd}</div>`;
     } else {
       el.classList.add('cd-ready');
-      el.textContent = s;
     }
     box.appendChild(el);
   }
 
-  // Spells
-  const spellNames = { flash: 'F', ignite: 'I', exhaust: 'X', barrier: 'B', teleport: 'T' };
   const spells = fighter.spells || [];
   const spellCds = fighter.spellCooldowns || [];
   for (let i = 0; i < spells.length; i++) {
     const cd = spellCds[i] || 0;
     const el = document.createElement('div');
     el.className = 'cd-icon cd-spell';
-    const label = spellNames[spells[i]] || spells[i]?.[0]?.toUpperCase() || '?';
+    const icon = SPELL_ICONS[spells[i]] || SPELL_ICONS.flash;
+    el.innerHTML = `<img src="${icon}" alt="${spells[i]}">`;
     if (cd > 0) {
       el.classList.add('cd-active');
-      el.innerHTML = `<span class="cd-label">${label}</span><span class="cd-num">${cd}</span>`;
+      el.innerHTML += `<div class="cd-overlay">${cd}</div>`;
     } else {
       el.classList.add('cd-ready');
-      el.textContent = label;
     }
     box.appendChild(el);
   }

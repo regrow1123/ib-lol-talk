@@ -394,49 +394,53 @@ body {
 /* Cooldown row */
 .cooldown-row {
   display: flex;
-  gap: 4px;
-  margin-top: 4px;
+  gap: 2px;
+  margin-top: 3px;
   justify-content: center;
 }
 .cd-icon {
-  width: 28px;
-  height: 28px;
-  border-radius: 4px;
+  width: 20px;
+  height: 20px;
+  border-radius: 3px;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 11px;
+  font-size: 9px;
   font-weight: 700;
   position: relative;
   color: #fff;
+  overflow: hidden;
+}
+.cd-icon img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
 }
 .cd-icon.cd-ready {
-  background: #2980b9;
+  border: 1px solid #2980b9;
 }
 .cd-icon.cd-active {
-  background: #555;
-  flex-direction: column;
-  gap: 0;
+  filter: grayscale(1) brightness(0.4);
 }
-.cd-icon.cd-active .cd-label {
-  font-size: 9px;
-  opacity: 0.7;
-  line-height: 1;
-}
-.cd-icon.cd-active .cd-num {
-  font-size: 11px;
-  line-height: 1;
+.cd-icon.cd-active .cd-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+  font-weight: 700;
   color: #f39c12;
+  text-shadow: 0 0 2px #000;
 }
 .cd-icon.cd-locked {
-  background: #333;
-  color: #666;
+  filter: grayscale(1) brightness(0.25);
 }
 .cd-icon.cd-spell {
   border-radius: 50%;
 }
 .cd-icon.cd-spell.cd-ready {
-  background: #8e44ad;
+  border-color: #8e44ad;
 }
 
 .gameover-text { font-size: 2em; font-weight: 700; margin-bottom: 8px; }
