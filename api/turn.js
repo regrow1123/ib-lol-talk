@@ -50,15 +50,31 @@ export default async function handler(req, res) {
       nextState.winner = gameOver.winner;
     }
 
-    // 5. Check levelUp
+    // 5. Check levelUp — only if level actually increased
     let levelUp = llmResult.levelUp || null;
-    if (levelUp && levelUp.who !== 'enemy') {
+    const playerLeveledUp = validated.playerLevel > gameState.player.level;
+    const enemyLeveledUp = validated.enemyLevel > gameState.enemy.level;
+
+    if (levelUp && !playerLeveledUp && !enemyLeveledUp) {
+      levelUp = null; // LLM sent levelUp but no level change — discard
+    }
+
+    if (levelUp && playerLeveledUp && levelUp.who !== 'enemy') {
+      nextState.phase = 'skillup';
+      nextState.player.skillPoints = (nextState.player.skillPoints || 0) + 1;
+    } else if (playerLeveledUp && !levelUp) {
+      // Level increased but LLM forgot to send levelUp — force it
+      levelUp = { newLevel: validated.playerLevel, who: 'player', options: ['Q','W','E'], descriptions: ['스킬 강화','스킬 강화','스킬 강화'] };
+      if (validated.playerLevel >= 6 && gameState.player.skillLevels.R < 1) {
+        levelUp.options.push('R');
+        levelUp.descriptions.push('궁극기 해금');
+      }
       nextState.phase = 'skillup';
       nextState.player.skillPoints = (nextState.player.skillPoints || 0) + 1;
     }
-    // Enemy auto level-up (AI picks skill)
-    if (levelUp && (levelUp.who === 'enemy' || levelUp.who === 'both')) {
-      nextState.enemy.skillPoints = 0; // AI already decided
+    // Enemy auto level-up
+    if (enemyLeveledUp) {
+      nextState.enemy.skillPoints = 0; // AI auto-picks
     }
 
     console.log(`Turn ${gameState.turn}: "${input}" → HP ${validated.playerHp}/${validated.enemyHp}`);
