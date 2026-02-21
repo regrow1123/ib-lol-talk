@@ -33,9 +33,16 @@ export default async function handler(req, res) {
 
     console.log(`Turn ${gameState.turn}: "${input}" → ${llmResult.playerAction.type} | AI=${llmResult.aiAction.type}`);
 
+    // Append actual damage numbers to narrative
+    let narrative = llmResult.narrative || '';
+    const dmgParts = [];
+    if (dmgLog.playerDealt > 0) dmgParts.push(`내 피해: ${Math.round(dmgLog.playerDealt)}`);
+    if (dmgLog.enemyDealt > 0) dmgParts.push(`받은 피해: ${Math.round(dmgLog.enemyDealt)}`);
+    if (dmgParts.length) narrative += ` [${dmgParts.join(' / ')}]`;
+
     res.json({
       state,
-      narrative: llmResult.narrative,
+      narrative,
       enemyAction: llmResult.aiChat,
       playerAction: llmResult.playerAction.detail,
       aiAction: llmResult.aiAction.detail,
