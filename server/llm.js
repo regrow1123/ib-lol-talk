@@ -32,6 +32,8 @@ export async function callLLM(gameState, playerInput, history = []) {
       if (attempt < MAX_RETRIES) continue;
     } catch (err) {
       console.error(`LLM API error (attempt ${attempt + 1}):`, err.message);
+      // Don't retry auth/billing errors
+      if (err.status === 401 || err.status === 402 || err.status === 403) break;
       if (attempt < MAX_RETRIES) continue;
     }
   }
