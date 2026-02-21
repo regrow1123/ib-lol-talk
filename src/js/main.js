@@ -300,6 +300,7 @@ async function showSkillUp() {
             overlay.classList.add('hidden');
             state.phase = 'play';
             setInput(true);
+            fetchSuggestions(`${s.key} 스킬 레벨업 직후`);
           } else {
             showSkillUp();
           }
@@ -313,6 +314,7 @@ async function showSkillUp() {
             overlay.classList.add('hidden');
             state.phase = 'play';
             setInput(true);
+            fetchSuggestions(`${s.key} 스킬 레벨업 직후`);
           } else {
             showSkillUp();
           }
@@ -512,6 +514,19 @@ function showTooltipPopup(text) {
   el.classList.remove('hidden');
   clearTimeout(el._timer);
   el._timer = setTimeout(() => el.classList.add('hidden'), 4000);
+}
+
+// ── Post-Skillup Suggestions (LLM) ──
+async function fetchSuggestions(context) {
+  try {
+    const res = await fetch(`${API_BASE}/api/suggest`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ gameState: state, context }),
+    });
+    const data = await res.json();
+    if (data.suggestions?.length) renderSuggestions(data.suggestions);
+  } catch {}
 }
 
 // ── Suggestions ──
