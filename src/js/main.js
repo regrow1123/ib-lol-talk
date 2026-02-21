@@ -379,7 +379,7 @@ function renderStatus() {
   $('e-level').textContent = `Lv.${e.level}`;
   renderCooldowns('e-cooldowns', e);
 
-  $('turn-text').textContent = `${state.turn}턴`;
+  // turn display removed
 
   // HP bar color
   setHpColor('p-hp-fill', p.hp);
