@@ -43,7 +43,7 @@ ${champ.tips.combos.map(c => `- ${c}`).join('\n')}
 ## 현재 게임 상태 (${gameState.turn}턴)
 
 ### 플레이어
-- HP: ${gameState.player.hp}% | 에너지: ${gameState.player.energy}/200
+- HP: ${gameState.player.hp}% | 기력: ${gameState.player.energy}/200
 - 레벨: ${gameState.player.level} | CS: ${gameState.player.cs} | 골드: ${gameState.player.gold}
 - 위치: ${gameState.player.position}
 - 쉴드: ${gameState.player.shield}
@@ -54,7 +54,7 @@ ${playerSkills}
 - 디버프: ${gameState.player.debuffs?.length ? gameState.player.debuffs.join(', ') : '없음'}
 
 ### 적 (AI)
-- HP: ${gameState.enemy.hp}% | 에너지: ${gameState.enemy.energy}/200
+- HP: ${gameState.enemy.hp}% | 기력: ${gameState.enemy.energy}/200
 - 레벨: ${gameState.enemy.level} | CS: ${gameState.enemy.cs} | 골드: ${gameState.enemy.gold}
 - 위치: ${gameState.enemy.position}
 - 쉴드: ${gameState.enemy.shield}
@@ -99,7 +99,7 @@ ${enemySkills}
 - W1 쉴드는 피해 흡수
 - W2 피흡으로 체력 회복
 - R 넉백 → 타워 사거리로 밀어넣기 가능
-- 패시브: 스킬 사이 AA로 에너지 회복
+- 패시브: 스킬 사이 AA로 기력 회복
 - 레벨/스킬랭크 높을수록 피해 증가
 - 룬 효과 자연스럽게 반영
 
@@ -169,11 +169,11 @@ R은 레벨 6/11/16에서만 찍기 가능.
 - 반드시 유효한 JSON만 출력. 다른 텍스트 없이.
 - stateUpdate의 모든 필드는 필수.
 - HP는 0~100% 범위.
-- 에너지는 0~200 범위.
+- 기력는 0~200 범위.
 - 쿨타임은 턴 수 (1턴 ≈ 3초). 0 = 사용 가능.
 - CS, 레벨, 골드는 이전보다 감소 불가.
 - 스킬은 Q1/Q2/W1/W2/E1/E2/R로 정확히 구분하여 서술.
-- 사용 불가능한 스킬(레벨 0, 쿨타임 중, 에너지 부족)은 사용하지 말 것.`;
+- 사용 불가능한 스킬(레벨 0, 쿨타임 중, 기력 부족)은 사용하지 말 것.`;
 }
 
 function buildSkillInfo(champ, fighter) {
@@ -191,7 +191,7 @@ function buildSkillInfo(champ, fighter) {
     } else {
       const cost = skill.cost[0];
       if (cost > fighter.energy) {
-        status = `에너지 부족 (${cost} 필요)`;
+        status = `기력 부족 (${cost} 필요)`;
       } else {
         status = '사용 가능';
       }
