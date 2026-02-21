@@ -31,7 +31,12 @@ export default async function handler(req, res) {
 
     // 4. Check gameOver
     let gameOver = llmResult.gameOver || null;
-    if (validated.playerHp <= 0) {
+    if (validated.playerHp <= 0 && validated.enemyHp <= 0) {
+      // No simultaneous death — attacker (player initiated) gets the kill
+      validated.enemyHp = 0;
+      validated.playerHp = 1;
+      gameOver = { winner: 'player', reason: 'kill', summary: llmResult.gameOver?.summary || '아슬아슬하게 적을 먼저 처치했습니다!' };
+    } else if (validated.playerHp <= 0) {
       gameOver = { winner: 'enemy', reason: 'kill', summary: llmResult.gameOver?.summary || '적에게 처치당했습니다.' };
     } else if (validated.enemyHp <= 0) {
       gameOver = { winner: 'player', reason: 'kill', summary: llmResult.gameOver?.summary || '적을 처치했습니다!' };
