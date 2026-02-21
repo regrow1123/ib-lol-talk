@@ -330,6 +330,16 @@ function showGameOver(gameOver) {
     $('gameover-overlay').classList.add('hidden');
     // 채팅 로그 복기 가능, 입력은 비활성화 유지
     setInput(false);
+    // 선택지 영역에 새 게임 버튼
+    const box = $('suggestions');
+    box.innerHTML = '';
+    const btn = document.createElement('button');
+    btn.className = 'suggestion-btn';
+    btn.textContent = '🔄 새 게임 시작';
+    btn.onclick = () => {
+      $('restart-btn').click();
+    };
+    box.appendChild(btn);
   };
   $('restart-btn').onclick = () => {
     $('gameover-overlay').classList.add('hidden');
