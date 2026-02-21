@@ -300,7 +300,6 @@ async function showSkillUp() {
             overlay.classList.add('hidden');
             state.phase = 'play';
             setInput(true);
-            renderPostSkillupSuggestions();
           } else {
             showSkillUp();
           }
@@ -314,7 +313,6 @@ async function showSkillUp() {
             overlay.classList.add('hidden');
             state.phase = 'play';
             setInput(true);
-            renderPostSkillupSuggestions();
           } else {
             showSkillUp();
           }
@@ -514,24 +512,6 @@ function showTooltipPopup(text) {
   el.classList.remove('hidden');
   clearTimeout(el._timer);
   el._timer = setTimeout(() => el.classList.add('hidden'), 4000);
-}
-
-// ── Post-Skillup Suggestions ──
-function renderPostSkillupSuggestions() {
-  const p = state.player;
-  const skills = [];
-  if (p.skillLevels.Q > 0 && p.cooldowns.Q <= 0) skills.push('Q');
-  if (p.skillLevels.W > 0 && p.cooldowns.W <= 0) skills.push('W');
-  if (p.skillLevels.E > 0 && p.cooldowns.E <= 0) skills.push('E');
-  if (p.skillLevels.R > 0 && p.cooldowns.R <= 0) skills.push('R');
-
-  const suggestions = [];
-  if (skills.includes('Q')) suggestions.push('새로 배운 스킬로 상대 견제해보기');
-  if (skills.includes('W') && skills.includes('Q')) suggestions.push('Q-W 콤보로 짧은 교환 시도');
-  if (skills.length === 0) suggestions.push('CS 먹으며 쿨타임 기다리기');
-  suggestions.push('미니언 정리하면서 상대 움직임 관찰');
-
-  renderSuggestions(suggestions.slice(0, 3));
 }
 
 // ── Suggestions ──
