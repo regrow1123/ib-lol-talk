@@ -11,7 +11,7 @@ export default async function handler(req, res) {
   if (req.method === 'OPTIONS') return res.status(200).end();
   if (req.method !== 'POST') return res.status(405).json({ error: 'POST only' });
 
-  const { gameState, input } = req.body || {};
+  const { gameState, input, history } = req.body || {};
   if (!gameState || !input) {
     return res.status(400).json({ error: 'gameState와 input이 필요합니다' });
   }
@@ -26,7 +26,7 @@ export default async function handler(req, res) {
 
   try {
     // LLM interprets player input + decides AI action
-    const llmResult = await interpretTurn(gameState, input);
+    const llmResult = await interpretTurn(gameState, input, history || []);
 
     // Server validates and applies exact damage/state changes
     const { dmgLog, state } = resolveTurn(gameState, llmResult);

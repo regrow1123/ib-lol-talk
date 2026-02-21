@@ -10,6 +10,7 @@ let state = null;
 let sending = false;
 let drawerOpen = false;
 let setupChoices = { spell: null, rune: null };
+let turnHistory = []; // {role, content} pairs for LLM context
 
 // ── Setup Screen ──
 function initSetup() {
@@ -130,7 +131,7 @@ async function submit() {
     const res = await fetch(`${API_BASE}/api/turn`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ gameState: state, input }),
+      body: JSON.stringify({ gameState: state, input, history: turnHistory }),
     });
     const data = await res.json();
     typing.remove();
@@ -138,6 +139,13 @@ async function submit() {
     if (data.error) {
       addSystemMsg(`⚠️ ${data.error}`);
     } else {
+      // Store turn in history for LLM context
+      turnHistory.push({ role: 'user', content: input });
+      const assistantSummary = [data.narrative, data.enemyAction].filter(Boolean).join(' | ');
+      turnHistory.push({ role: 'assistant', content: assistantSummary });
+      // Keep last 10 messages (5 turns)
+      if (turnHistory.length > 10) turnHistory = turnHistory.slice(-10);
+
       if (data.narrative) addSystemMsg(data.narrative);
       if (data.enemyAction) addEnemyMsg(data.enemyAction);
       if (data.state) state = data.state;
@@ -307,6 +315,7 @@ function showGameOver() {
     $('gameover-overlay').classList.add('hidden');
     $('chat-feed').innerHTML = '';
     state = null;
+    turnHistory = [];
     $('setup-overlay').classList.remove('hidden');
     $('setup-start-btn').disabled = false;
     $('setup-start-btn').textContent = '게임 시작';

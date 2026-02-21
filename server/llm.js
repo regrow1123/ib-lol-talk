@@ -4,16 +4,23 @@ import { buildSystemPrompt } from './prompt.js';
 
 const client = new Anthropic();  // uses ANTHROPIC_API_KEY env var
 
-export async function interpretTurn(game, playerInput) {
+export async function interpretTurn(game, playerInput, history = []) {
   const systemPrompt = buildSystemPrompt(game);
+
+  // Build messages: recent turn history + current input
+  const messages = [];
+  // Include last 5 turns of history for context
+  const recentHistory = history.slice(-10); // 10 messages = 5 turns (user+assistant pairs)
+  for (const h of recentHistory) {
+    messages.push({ role: h.role, content: h.content });
+  }
+  messages.push({ role: 'user', content: playerInput });
 
   const response = await client.messages.create({
     model: process.env.LLM_MODEL || 'claude-sonnet-4-20250514',
     max_tokens: 512,
     system: systemPrompt,
-    messages: [
-      { role: 'user', content: playerInput },
-    ],
+    messages,
   });
 
   const text = response.content[0].text.trim();
