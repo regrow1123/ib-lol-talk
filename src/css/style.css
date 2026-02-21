@@ -293,7 +293,9 @@ body {
   color: var(--accent);
   cursor: pointer;
   transition: all 0.15s;
-  white-space: nowrap;
+  white-space: normal;
+  text-align: left;
+  line-height: 1.4;
 }
 .suggestion-btn:hover {
   background: var(--accent);
