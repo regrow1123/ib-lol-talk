@@ -45,7 +45,6 @@ LoL 1v1 라인전을 재현한 LLM 기반 텍스트 전략 게임.
 - **Prompt caching**: static(챔피언 데이터+규칙) / dynamic(현재 상태) 분리 → cache_control
 - **LLM은 수치 계산 안 함**: actions 배열만 출력 → 출력 토큰 절약
 - **History 압축**: 최근 2턴 원문, 이전은 1줄 요약
-- **max_tokens 800**: 응답은 간결해야 함
 
 ### 프로그램 흐름
 
