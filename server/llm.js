@@ -14,8 +14,6 @@ export async function callLLM(gameState, playerInput, history = []) {
     messages.push({ role: h.role, content: h.content });
   }
   messages.push({ role: 'user', content: playerInput });
-  // Prefill: force JSON output by starting assistant response with {
-  messages.push({ role: 'assistant', content: '{' });
 
   for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
     try {
@@ -26,10 +24,7 @@ export async function callLLM(gameState, playerInput, history = []) {
         messages,
       });
 
-      const raw = response.content[0].text.trim();
-      // Prefill was '{', so response continues from there. 
-      // But if model repeats '{', avoid '{{...'
-      const text = raw.startsWith('{') ? raw : '{' + raw;
+      const text = response.content[0].text.trim();
       const parsed = extractJSON(text);
       if (parsed) return parsed;
 
