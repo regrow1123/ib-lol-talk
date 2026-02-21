@@ -385,10 +385,10 @@ function setHpColor(id, hp) {
 
 const DDRAGON = 'https://ddragon.leagueoflegends.com/cdn/14.20.1';
 const SKILL_ICONS = {
-  Q: `${DDRAGON}/img/spell/BlindMonkQOne.png`,
-  W: `${DDRAGON}/img/spell/BlindMonkWOne.png`,
-  E: `${DDRAGON}/img/spell/BlindMonkEOne.png`,
-  R: `${DDRAGON}/img/spell/BlindMonkRKick.png`,
+  Q: `${DDRAGON}/img/spell/LeeSinQOne.png`,
+  W: `${DDRAGON}/img/spell/LeeSinWOne.png`,
+  E: `${DDRAGON}/img/spell/LeeSinEOne.png`,
+  R: `${DDRAGON}/img/spell/LeeSinR.png`,
 };
 const SPELL_ICONS = {
   flash: `${DDRAGON}/img/spell/SummonerFlash.png`,
