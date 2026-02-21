@@ -89,6 +89,38 @@ export async function callLLM(gameState, playerInput, history = []) {
   };
 }
 
+// Lightweight LLM call: suggestions only (after skillup)
+export async function callLLMSuggestionsOnly(gameState, history = []) {
+  const { staticPrompt, dynamicPrompt } = buildPromptParts(gameState);
+
+  const system = [
+    { type: 'text', text: staticPrompt, cache_control: { type: 'ephemeral' } },
+    { type: 'text', text: dynamicPrompt },
+  ];
+
+  const messages = [];
+  const recent = history.slice(-4);
+  for (const h of recent) {
+    messages.push({ role: h.role, content: h.content });
+  }
+  messages.push({ role: 'user', content: '[시스템] 스킬 레벨업 완료. 현재 상황에 맞는 suggestions 3개를 JSON으로 응답해줘. 형식: {"suggestions":["..","..",".."]}'  });
+
+  try {
+    const response = await client.messages.create({
+      model: process.env.LLM_MODEL || 'claude-sonnet-4-6',
+      max_tokens: 200,
+      system,
+      messages,
+    });
+    const text = response.content[0].text.trim();
+    const parsed = extractJSON(text);
+    if (parsed?.suggestions) return parsed.suggestions;
+  } catch (err) {
+    console.error('Suggest LLM error:', err.message);
+  }
+  return ['CS 챙기기', '안전하게 대기', '상대 움직임 관찰'];
+}
+
 function extractJSON(text) {
   // Try direct parse first
   try { return JSON.parse(text); } catch {}

@@ -182,7 +182,20 @@ async function doSkillUp(key) {
     showSkillUpChoices();
   } else {
     state.phase = 'play';
-    // Restore LLM suggestions from the turn that triggered levelup
+    // LLM에 새 suggestions 요청
+    renderSuggestions([]); // clear
+    setInput(false); // 로딩 중 입력 비활성
+    try {
+      const res = await fetch(`${API_BASE}/api/suggest`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ gameState: state, history: turnHistory }),
+      });
+      const data = await res.json();
+      lastSuggestions = data.suggestions || [];
+    } catch {
+      lastSuggestions = ['CS 챙기기', '안전하게 대기', '상대 움직임 관찰'];
+    }
     renderSuggestions(lastSuggestions);
     setInput(true);
     $('player-input').focus();
