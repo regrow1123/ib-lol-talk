@@ -46,6 +46,7 @@ export function resolveTurn(game, llmResult) {
   let playerHitCount = 0, enemyHitCount = 0;
 
   for (const hit of (resolution.playerHits || [])) {
+    hit.skill = normalizeSkill(hit.skill);
     if (!hit.hit) {
       dmgLog.events.push({ who: 'player', skill: hit.skill, result: 'miss', reason: hit.reason || '' });
       continue;
@@ -56,7 +57,7 @@ export function resolveTurn(game, llmResult) {
         dmgLog.events.push({ who: 'player', skill: hit.skill, result: 'invalid', reason: '사용 불가' });
         continue;
       }
-      consumeSkillResources(game.player, hit.skill);
+      consumeSkillResources(game.player, hit.skill, game.enemy);
       if (game.player.exhausted > 0) dmg *= (1 - SPELLS.exhaust.damageReduction);
       applyDamage(game.enemy, dmg);
       dmgLog.playerDealt += dmg;
@@ -68,6 +69,7 @@ export function resolveTurn(game, llmResult) {
 
   // ── Process AI hits ──
   for (const hit of (resolution.aiHits || [])) {
+    hit.skill = normalizeSkill(hit.skill);
     if (!hit.hit) {
       dmgLog.events.push({ who: 'enemy', skill: hit.skill, result: 'miss', reason: hit.reason || '' });
       continue;
@@ -78,7 +80,7 @@ export function resolveTurn(game, llmResult) {
         dmgLog.events.push({ who: 'enemy', skill: hit.skill, result: 'invalid', reason: '사용 불가' });
         continue;
       }
-      consumeSkillResources(game.enemy, hit.skill);
+      consumeSkillResources(game.enemy, hit.skill, game.player);
       if (game.enemy.exhausted > 0) dmg *= (1 - SPELLS.exhaust.damageReduction);
       applyDamage(game.player, dmg);
       dmgLog.enemyDealt += dmg;
@@ -180,6 +182,21 @@ function isBush(x, y) {
   return (x >= 18 && x <= 42) && ((y >= 2 && y <= 5) || (y >= 19 && y <= 22));
 }
 
+// Normalize skill names from LLM (e.g. "Q" → "Q1", "E" → "E1")
+function normalizeSkill(skill) {
+  if (!skill) return skill;
+  const s = skill.toUpperCase().trim();
+  const map = {
+    'Q': 'Q1', 'Q1': 'Q1', 'Q2': 'Q2', '음파': 'Q1', '공명타': 'Q2',
+    'W': 'W1', 'W1': 'W1', 'W2': 'W2', '방호': 'W1', '철갑': 'W2',
+    'E': 'E1', 'E1': 'E1', 'E2': 'E2', '폭풍': 'E1', '쇠약': 'E2',
+    'R': 'R', '용의 분노': 'R',
+    'AA': 'AA', '기본공격': 'AA',
+    'IGNITE': 'IGNITE', '점화': 'IGNITE',
+  };
+  return map[s] || s;
+}
+
 function calcHitDamage(skill, attacker, defender) {
   switch (skill) {
     case 'Q1': return calcQ1Damage(attacker, defender);
@@ -187,7 +204,9 @@ function calcHitDamage(skill, attacker, defender) {
     case 'E1': return calcE1Damage(attacker, defender);
     case 'R':  return calcRDamage(attacker, defender);
     case 'AA': return calcAADamage(attacker, defender);
-    default: return 0;
+    default:
+      console.warn(`Unknown skill in calcHitDamage: "${skill}"`);
+      return 0;
   }
 }
 
@@ -209,19 +228,29 @@ function validateSkillUse(fighter, skill, target) {
   }
 }
 
-function consumeSkillResources(fighter, skill) {
+function consumeSkillResources(fighter, skill, target) {
   switch (skill) {
     case 'Q1':
       spendEnergy(fighter, 50);
       setCooldown(fighter, 'Q');
+      // Set Q mark on target for Q2 follow-up
+      if (target) target.marks = target.marks || { q: 0, e: 0 };
+      if (target) target.marks.q = 3; // 3 turns (~9 sec)
       break;
     case 'Q2':
       spendEnergy(fighter, 25);
-      // Q2 doesn't reset cooldown separately (same as Q1 cd)
+      if (target) target.marks.q = 0; // consume mark
       break;
     case 'E1':
       spendEnergy(fighter, 50);
       setCooldown(fighter, 'E');
+      // Set E mark on target
+      if (target) target.marks = target.marks || { q: 0, e: 0 };
+      if (target) target.marks.e = 3;
+      break;
+    case 'E2':
+      // E2 consumes E mark (slow applied)
+      if (target) target.marks.e = 0;
       break;
     case 'R':
       setCooldown(fighter, 'R');
