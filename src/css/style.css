@@ -275,6 +275,33 @@ body {
   border-color: var(--accent);
 }
 
+.suggestions {
+  display: flex;
+  gap: 6px;
+  padding: 0 0 6px 0;
+  flex-wrap: wrap;
+}
+.suggestions:empty { display: none; }
+.suggestion-btn {
+  padding: 6px 12px;
+  background: #fff;
+  border: 1.5px solid var(--accent);
+  border-radius: 16px;
+  font-family: inherit;
+  font-size: 0.78em;
+  color: var(--accent);
+  cursor: pointer;
+  transition: all 0.15s;
+  white-space: nowrap;
+}
+.suggestion-btn:hover {
+  background: var(--accent);
+  color: #fff;
+}
+.suggestion-btn:active {
+  transform: scale(0.95);
+}
+
 .input-row {
   display: flex;
   gap: 6px;

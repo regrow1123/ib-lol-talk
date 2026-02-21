@@ -71,6 +71,7 @@ async function startGame() {
     const runeNames = { conqueror: '정복자', electrocute: '감전', grasp: '착취의 손아귀' };
     addSystemMsg(`📜 ${runeNames[setupChoices.rune]} | ⚡점멸 + ${spellNames[setupChoices.spell]}`);
     addSystemMsg(data.narrative || '⚔️ 리신 vs 리신 — 라인전 시작');
+    renderSuggestions(['미니언 막타 먹기', 'Q로 견제', '안전하게 파밍']);
   } catch {
     addSystemMsg('⚠️ 서버 연결 실패 — 로컬 모드로 진행합니다');
     gameId = null;
@@ -119,6 +120,7 @@ async function submit() {
 
   sending = true;
   $('player-input').value = '';
+  $('suggestions').innerHTML = '';
   setInput(false);
 
   // My message
@@ -149,6 +151,7 @@ async function submit() {
       if (data.narrative) addSystemMsg(data.narrative);
       if (data.enemyAction) addEnemyMsg(data.enemyAction);
       if (data.state) state = data.state;
+      renderSuggestions(data.suggestions || []);
       renderStatus();
       checkPhase();
     }
@@ -360,6 +363,22 @@ function renderStatus() {
       `<span class="tag${flashCd > 0 ? ' on-cd' : ''}">${spellIcons.flash}</span>` +
       `<span class="tag${spellCd > 0 ? ' on-cd' : ''}">${spellIcons[spell2] || '?'}</span>` +
       `<span class="tag rune-tag">${runeIcons[rune] || '?'}</span>`;
+  }
+}
+
+// ── Suggestions ──
+function renderSuggestions(suggestions) {
+  const box = $('suggestions');
+  box.innerHTML = '';
+  for (const s of suggestions) {
+    const btn = document.createElement('button');
+    btn.className = 'suggestion-btn';
+    btn.textContent = s;
+    btn.onclick = () => {
+      $('player-input').value = s;
+      submit();
+    };
+    box.appendChild(btn);
   }
 }
 

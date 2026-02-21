@@ -46,6 +46,7 @@ export default async function handler(req, res) {
       enemyAction: llmResult.aiChat,
       playerAction: llmResult.playerAction.detail,
       aiAction: llmResult.aiAction.detail,
+      suggestions: llmResult.suggestions || [],
     });
   } catch (err) {
     console.error('Turn error:', err.message);
