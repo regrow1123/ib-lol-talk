@@ -47,6 +47,61 @@ LoL 1v1 라인전을 재현한 LLM 기반 텍스트 전략 게임.
 - **History 압축**: 최근 2턴 원문, 이전은 1줄 요약
 - **max_tokens 800**: 응답은 간결해야 함
 
+### 프로그램 흐름
+
+#### 게임 시작
+```
+[셋업 화면] 주문/룬 선택
+    → POST /api/start (spells, rune)
+    → 서버: 초기 상태 생성 (HP=maxHp, distance=800, blocked=true 등)
+    → 클라이언트: state 저장, phase='skillup'
+    → 스킬 선택 UI 표시 (suggestions 영역)
+    → 스킬 선택 → POST /api/skillup
+    → 서버: 검증 + 상태 업데이트
+    → 클라이언트: suggestions 필터링 → 입력 활성화
+```
+
+#### 일반 턴
+```
+[플레이어 입력] "Q1으로 견제"
+    → POST /api/turn (gameState, input, history)
+    → 서버:
+        1. LLM 호출 → {actions, distance, blocked, cs, narrative, aiChat, suggestions, ...}
+        2. actions 검증 (미습득/쿨다운 중 스킬 → 무시)
+        3. 데미지 엔진: actions 순서대로 데미지/쉴드/자원/쿨다운 계산
+        4. CS 적용 → 레벨업 판정
+        5. 가드레일 (HP/자원 클램프)
+        6. gameOver 체크 (HP 0 / CS 50)
+    → 클라이언트:
+        1. narrative → 시스템 메시지
+        2. aiChat → 상대방 말풍선
+        3. state 업데이트 → 상태바 렌더링
+        4. suggestions 저장 + 필터링 → 칩 버튼
+        5. levelUp 있으면 → 스킬 선택 UI (입력 비활성화)
+        6. gameOver 있으면 → 게임오버 오버레이
+```
+
+#### 레벨업 (턴 중간)
+```
+[턴 결과에 levelUp 포함]
+    → 입력 비활성화, suggestions에 스킬 선택 버튼
+    → 스킬 선택 → POST /api/skillup
+    → 서버: 검증 + 상태 업데이트
+    → skillPoints 0이면:
+        → 저장된 suggestions 재필터링 (새 스킬 반영)
+        → 입력 활성화
+    → skillPoints 남으면:
+        → 다시 스킬 선택 UI
+```
+
+#### 게임 오버
+```
+[gameOver 수신]
+    → 게임오버 오버레이 (승패 + 요약)
+    → 복기하기 → 채팅 로그 확인
+    → 새 게임 → 셋업 화면으로
+```
+
 ---
 
 ## 3. 게임 설계
