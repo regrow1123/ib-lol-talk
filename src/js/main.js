@@ -71,7 +71,7 @@ async function startGame() {
     const runeNames = { conqueror: '정복자', electrocute: '감전', grasp: '착취의 손아귀' };
     addSystemMsg(`📜 ${runeNames[setupChoices.rune]} | ⚡점멸 + ${spellNames[setupChoices.spell]}`);
     addSystemMsg(data.narrative || '⚔️ 리신 vs 리신 — 라인전 시작');
-    renderSuggestions(['미니언 막타 먹기', 'Q로 견제', '안전하게 파밍']);
+    renderSuggestions(['미니언 뒤에서 안전하게 CS 챙기기', 'Q로 찔러보고 맞으면 따라간다', '앞으로 걸어가서 압박 넣기']);
   } catch {
     addSystemMsg('⚠️ 서버 연결 실패 — 로컬 모드로 진행합니다');
     gameId = null;
