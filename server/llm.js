@@ -26,7 +26,10 @@ export async function callLLM(gameState, playerInput, history = []) {
         messages,
       });
 
-      const text = '{' + response.content[0].text.trim();
+      const raw = response.content[0].text.trim();
+      // Prefill was '{', so response continues from there. 
+      // But if model repeats '{', avoid '{{...'
+      const text = raw.startsWith('{') ? raw : '{' + raw;
       const parsed = extractJSON(text);
       if (parsed) return parsed;
 
