@@ -112,7 +112,7 @@ LLM은 `distance`와 스킬 사거리를 비교하여 적중/회피 판정.
 | 48 | 7 | 11 |
 
 - 레벨업 시 `phase: 'skillup'` → 입력 비활성화 → 스킬 선택 → 완료 후 play
-- 적 레벨업은 서버가 자동 스킬 배분 (Q > E > W 우선순위, R은 6/11/16)
+- 적 레벨업은 LLM이 스킬 선택 (`enemySkillUp` 필드) — AI 성격/상황에 맞게 판단, 서버는 유효성 검증만
 
 ### 3.5 승리 조건
 - **킬**: 상대 HP 0%
@@ -219,6 +219,7 @@ LLM은 `distance`와 스킬 사거리를 비교하여 적중/회피 판정.
   "distance": 100,
   "blocked": false,
   "cs": {"player": 2, "enemy": 1},
+  "enemySkillUp": null,
   "suggestions": [
     {"skill": "Q", "text": "Q1으로 미니언 사이 빈틈 노려서 견제"},
     {"skill": null, "text": "안전하게 CS 챙기기"}
@@ -232,6 +233,7 @@ LLM은 `distance`와 스킬 사거리를 비교하여 적중/회피 판정.
 - `distance`: 턴 후 두 챔프 간 거리 (숫자, 유닛)
 - `blocked`: 두 챔프 사이 미니언 유무
 - `cs`: 이번 턴에 획득한 CS 수
+- `enemySkillUp`: 적 레벨업 시 스킬 선택 (AI 성격/상황 기반)
 - `narrative`, `aiChat`: 서술과 상대방 코멘트
 - `suggestions`: 다음 행동 추천
 
