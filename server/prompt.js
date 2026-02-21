@@ -1,5 +1,28 @@
-// V2 Prompt builder — LLM handles all judgment + state updates
+// V2.1 Prompt builder — LLM handles all judgment + state updates
+// AI personality integration + diff response optimization
 import { loadChampion } from './champions.js';
+import { readFileSync } from 'fs';
+import { dirname, join } from 'path';
+import { fileURLToPath } from 'url';
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
+let personalitiesData = null;
+function loadPersonalities() {
+  if (!personalitiesData) {
+    try {
+      personalitiesData = JSON.parse(readFileSync(join(__dirname, '..', 'data', 'rules', 'ai-personalities.json'), 'utf8'));
+    } catch { personalitiesData = { personalities: {} }; }
+  }
+  return personalitiesData;
+}
+
+function buildPersonalityPrompt(personality) {
+  const data = loadPersonalities();
+  const p = data.personalities[personality];
+  if (!p) return '상대방 성격: 균형잡힌 플레이. 상황에 따라 유동적으로 대응.';
+  const tells = p.readable_tells.join('. ');
+  return `상대방(AI) 성격: "${p.name}" — ${p.description}. ${tells}.`;
+}
 
 // Returns { staticPrompt, dynamicPrompt } for cache-friendly usage
 export function buildPromptParts(gameState) {
@@ -43,8 +66,14 @@ ${skillDesc}
 - 상대방(aiChat) 말투: 문장 끝을 ~했음/~됐음/~인듯/~ㅋㅋ 등 반말 종결. 예: "잘 피했음", "그거 좀 아팠음 ㅋㅋ", "CS 먹을 타이밍에 Q 노리는 거 좋았음", "다음엔 W 쉴드 먼저 쓰는 게 나을듯". "체"라는 글자를 붙이지 말 것. 친근+대응이유+팁. "AI"표현금지→"상대방"
 - suggestions: [✓]스킬만, 1~3개. 이모지 사용금지. 상황맞게(HP높→공격, HP낮→방어, 쿨중→CS). 읽기/심리전느낌(상대행동예측). 교육적근거포함. 중복금지
 
-## JSON응답만 출력
-{"narrative":"","aiChat":"~함체","stateUpdate":{"playerHp":0~100,"enemyHp":0~100,"playerEnergy":0~200,"enemyEnergy":0~200,"playerCooldowns":{"Q":0,"W":0,"E":0,"R":0},"enemyCooldowns":{"Q":0,"W":0,"E":0,"R":0},"playerSpellCooldowns":[0,0],"enemySpellCooldowns":[0,0],"playerPosition":"태그","enemyPosition":"태그","playerCs":n,"enemyCs":n,"playerLevel":n,"enemyLevel":n,"playerGold":n,"enemyGold":n,"playerShield":0,"enemyShield":0,"playerBuffs":[],"enemyBuffs":[],"playerDebuffs":[],"enemyDebuffs":[],"towerHp":{"player":0~100,"enemy":0~100},"minions":{"player":{"melee":0~3,"ranged":0~3},"enemy":{"melee":0~3,"ranged":0~3}}},"levelUp":null,"suggestions":[],"gameOver":null}
+## AI 성격
+${buildPersonalityPrompt(gameState.enemy?.personality)}
+이 성격에 맞게 AI의 행동을 결정할 것. 성격은 확률적 경향이지 절대 규칙이 아님.
+
+## JSON응답 (diff 형식)
+stateUpdate에는 **변경된 필드만** 포함. 변경 없는 필드는 생략. 서버가 이전 상태에 머지함.
+예: HP만 변했으면 {"stateUpdate":{"playerHp":85,"enemyHp":90}} — 나머지 생략
+{"narrative":"","aiChat":"~했음/~됐음/~인듯","stateUpdate":{변경필드만},"levelUp":null,"suggestions":[],"gameOver":null}
 levelUp예: {"newLevel":2,"who":"player","options":["Q","W","E"],"descriptions":["설명1","설명2","설명3"]}
 gameOver예: {"winner":"player","reason":"kill","summary":"요약"}`;
 

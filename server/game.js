@@ -53,11 +53,12 @@ export function fullState(game) {
   };
 }
 
-// Apply validated stateUpdate to game state
+// Apply validated stateUpdate to game state (diff merge — validated already has defaults from validate.js)
 export function applyStateUpdate(gameState, validated) {
   const next = JSON.parse(JSON.stringify(gameState));
   next.turn += 1;
 
+  // Player fields
   next.player.hp = validated.playerHp;
   next.player.energy = validated.playerEnergy;
   next.player.cooldowns = { ...validated.playerCooldowns };
@@ -70,6 +71,7 @@ export function applyStateUpdate(gameState, validated) {
   next.player.debuffs = validated.playerDebuffs;
   if (validated.playerSpellCooldowns) next.player.spellCooldowns = [...validated.playerSpellCooldowns];
 
+  // Enemy fields
   next.enemy.hp = validated.enemyHp;
   next.enemy.energy = validated.enemyEnergy;
   next.enemy.cooldowns = { ...validated.enemyCooldowns };

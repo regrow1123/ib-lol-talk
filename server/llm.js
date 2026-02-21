@@ -9,8 +9,16 @@ export async function callLLM(gameState, playerInput, history = []) {
   const { staticPrompt, dynamicPrompt } = buildPromptParts(gameState);
 
   const messages = [];
-  const recentHistory = history.slice(-6); // 10→6: reduce input tokens
-  for (const h of recentHistory) {
+
+  // History compression: recent 2 turns (4 messages) verbatim, older summarized
+  const recent = history.slice(-4);
+  const older = history.slice(0, -4);
+  if (older.length > 0) {
+    const summary = summarizeHistory(older);
+    messages.push({ role: 'user', content: `[이전 턴 요약] ${summary}` });
+    messages.push({ role: 'assistant', content: '{"narrative":"(요약 확인)"}' });
+  }
+  for (const h of recent) {
     messages.push({ role: h.role, content: h.content });
   }
   messages.push({ role: 'user', content: playerInput });
@@ -112,6 +120,27 @@ function extractJSON(text) {
     }
   }
   return null;
+}
+
+// Summarize older history turns without LLM call
+function summarizeHistory(messages) {
+  const turns = [];
+  for (let i = 0; i < messages.length; i += 2) {
+    const userMsg = messages[i]?.content || '';
+    const assistantMsg = messages[i + 1]?.content || '';
+    // Extract key info from assistant response
+    let hp = '';
+    try {
+      const parsed = extractJSON(assistantMsg);
+      if (parsed?.stateUpdate) {
+        const s = parsed.stateUpdate;
+        hp = ` HP${s.playerHp ?? '?'}/${s.enemyHp ?? '?'}`;
+      }
+    } catch {}
+    const action = userMsg.length > 30 ? userMsg.substring(0, 30) + '…' : userMsg;
+    turns.push(`${action}${hp}`);
+  }
+  return turns.join(' → ') || '(이전 턴 없음)';
 }
 
 function decrementCooldowns(cds) {

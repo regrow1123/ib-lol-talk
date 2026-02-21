@@ -1,9 +1,5 @@
-// Vercel serverless: POST /api/turn — V3 의도 기반 전투 파이프라인
-import { parseIntent } from '../server/intent.js';
-import { resolveIntent } from '../server/combat.js';
-import { decideAiAction, assignPersonality } from '../server/ai.js';
-import { generateSuggestions } from '../server/suggest.js';
-import { narrate } from '../server/narrator.js';
+// Vercel serverless: POST /api/turn — V2.1 LLM 중심 파이프라인
+import { callLLM } from '../server/llm.js';
 import { validateStateUpdate } from '../server/validate.js';
 import { applyStateUpdate } from '../server/game.js';
 
@@ -26,66 +22,44 @@ export default async function handler(req, res) {
   try {
     // 게임 시작 시 enemy personality 없으면 배정
     if (!gameState.enemy.personality) {
-      gameState.enemy.personality = assignPersonality();
+      const types = ['aggressive', 'calculated', 'reactive'];
+      gameState.enemy.personality = types[Math.floor(Math.random() * types.length)];
     }
 
-    // === V3 의도 기반 파이프라인 ===
+    // === V2.1: LLM이 모든 판정 ===
+    const llmResult = await callLLM(gameState, input, history || []);
 
-    // 1. parseIntent → playerIntent (main + sub + skills)
-    const playerIntent = await parseIntent(input, gameState);
-    console.log(`Turn ${gameState.turn}: "${input}" → intent:`, JSON.stringify(playerIntent));
+    // 가드레일 검증
+    const validated = validateStateUpdate(llmResult.stateUpdate || {}, gameState);
 
-    // 2. decideAiAction → enemyIntent (main + sub + skills)
-    const playerHistory = history || [];
-    const enemyIntent = decideAiAction(gameState, playerHistory);
-    console.log(`Turn ${gameState.turn}: AI(${gameState.enemy.personality}) → intent:`, JSON.stringify(enemyIntent));
-
-    // 3. resolveIntent → events + stateChanges
-    const { events, stateChanges } = resolveIntent(playerIntent, enemyIntent, gameState);
-
-    // 4. 가드레일 검증
-    const validated = validateStateUpdate(stateChanges, gameState);
-
-    // 5. 서술 생성 (LLM 경량)
-    const narrateState = {
-      ...gameState,
-      player: { ...gameState.player, hp: validated.playerHp },
-      enemy: { ...gameState.enemy, hp: validated.enemyHp },
-    };
-    const { narrative, aiChat } = await narrate(events, narrateState);
-
-    // 6. Suggestions (규칙 기반)
-    const nextStatePreview = {
-      ...gameState,
-      player: { ...gameState.player, hp: validated.playerHp, energy: validated.playerEnergy, cooldowns: validated.playerCooldowns },
-      enemy: { ...gameState.enemy, hp: validated.enemyHp, energy: validated.enemyEnergy, cooldowns: validated.enemyCooldowns },
-    };
-    const suggestions = generateSuggestions(nextStatePreview);
-
-    // 7. 상태 적용
+    // 상태 적용 (diff merge는 applyStateUpdate 내부에서 처리)
     let nextState = applyStateUpdate(gameState, validated);
 
     // personality 유지
     nextState.enemy.personality = gameState.enemy.personality;
 
-    // 8. gameOver 체크
-    let gameOver = null;
-    if (validated.playerHp <= 0 && validated.enemyHp <= 0) {
-      validated.enemyHp = 0;
-      validated.playerHp = 1;
-      gameOver = { winner: 'player', reason: 'kill', summary: '아슬아슬하게 적을 먼저 처치했습니다!' };
-    } else if (validated.playerHp <= 0) {
-      gameOver = { winner: 'enemy', reason: 'kill', summary: '적에게 처치당했습니다.' };
-    } else if (validated.enemyHp <= 0) {
-      gameOver = { winner: 'player', reason: 'kill', summary: '적을 처치했습니다!' };
-    } else if (validated.playerCs >= 50) {
-      gameOver = { winner: 'player', reason: 'cs', summary: 'CS 50 달성!' };
-    } else if (validated.enemyCs >= 50) {
-      gameOver = { winner: 'enemy', reason: 'cs', summary: '적이 먼저 CS 50에 도달했습니다.' };
-    } else if (validated.towerHp?.enemy <= 0) {
-      gameOver = { winner: 'player', reason: 'tower', summary: '적 타워를 파괴했습니다!' };
-    } else if (validated.towerHp?.player <= 0) {
-      gameOver = { winner: 'enemy', reason: 'tower', summary: '아군 타워가 파괴되었습니다.' };
+    // gameOver 체크 (LLM 응답 우선, 없으면 서버 판정)
+    let gameOver = llmResult.gameOver || null;
+    if (!gameOver) {
+      if (validated.playerHp <= 0 && validated.enemyHp <= 0) {
+        validated.enemyHp = 0;
+        validated.playerHp = 1;
+        nextState.player.hp = 1;
+        nextState.enemy.hp = 0;
+        gameOver = { winner: 'player', reason: 'kill', summary: '아슬아슬하게 적을 먼저 처치했습니다!' };
+      } else if (validated.playerHp <= 0) {
+        gameOver = { winner: 'enemy', reason: 'kill', summary: '적에게 처치당했습니다.' };
+      } else if (validated.enemyHp <= 0) {
+        gameOver = { winner: 'player', reason: 'kill', summary: '적을 처치했습니다!' };
+      } else if (validated.playerCs >= 50) {
+        gameOver = { winner: 'player', reason: 'cs', summary: 'CS 50 달성!' };
+      } else if (validated.enemyCs >= 50) {
+        gameOver = { winner: 'enemy', reason: 'cs', summary: '적이 먼저 CS 50에 도달했습니다.' };
+      } else if (validated.towerHp?.enemy <= 0) {
+        gameOver = { winner: 'player', reason: 'tower', summary: '적 타워를 파괴했습니다!' };
+      } else if (validated.towerHp?.player <= 0) {
+        gameOver = { winner: 'enemy', reason: 'tower', summary: '아군 타워가 파괴되었습니다.' };
+      }
     }
 
     if (gameOver) {
@@ -93,36 +67,43 @@ export default async function handler(req, res) {
       nextState.winner = gameOver.winner;
     }
 
-    // 9. levelUp 체크
-    let levelUp = null;
-    const expectedPlayerLevel = csToLevel(validated.playerCs);
-    const expectedEnemyLevel = csToLevel(validated.enemyCs);
-
-    if (expectedPlayerLevel > gameState.player.level) {
-      nextState.player.level = expectedPlayerLevel;
-      nextState.player.skillPoints = (nextState.player.skillPoints || 0) + (expectedPlayerLevel - gameState.player.level);
-      nextState.phase = 'skillup';
-      const options = ['Q', 'W', 'E'];
-      const descs = ['음파/공명타 강화', '방호/철갑 강화', '폭풍/쇠약 강화'];
-      if (expectedPlayerLevel >= 6 && gameState.player.skillLevels.R < 1) {
-        options.push('R');
-        descs.push('용의 분노 해금');
+    // levelUp 체크
+    let levelUp = llmResult.levelUp || null;
+    if (!levelUp) {
+      const expectedPlayerLevel = csToLevel(validated.playerCs);
+      if (expectedPlayerLevel > gameState.player.level) {
+        nextState.player.level = expectedPlayerLevel;
+        nextState.player.skillPoints = (nextState.player.skillPoints || 0) + (expectedPlayerLevel - gameState.player.level);
+        nextState.phase = 'skillup';
+        const options = ['Q', 'W', 'E'];
+        const descs = ['음파/공명타 강화', '방호/철갑 강화', '폭풍/쇠약 강화'];
+        if (expectedPlayerLevel >= 6 && gameState.player.skillLevels.R < 1) {
+          options.push('R');
+          descs.push('용의 분노 해금');
+        }
+        levelUp = { newLevel: expectedPlayerLevel, who: 'player', options, descriptions: descs };
       }
-      levelUp = { newLevel: expectedPlayerLevel, who: 'player', options, descriptions: descs };
+    } else if (levelUp?.who === 'player') {
+      nextState.phase = 'skillup';
+      nextState.player.skillPoints = (nextState.player.skillPoints || 0) + 1;
     }
 
+    // 적 레벨업 자동 처리
+    const expectedEnemyLevel = csToLevel(validated.enemyCs);
     if (expectedEnemyLevel > gameState.enemy.level) {
       nextState.enemy.level = expectedEnemyLevel;
       nextState.enemy.skillPoints = 0;
       autoSkillUp(nextState.enemy, expectedEnemyLevel - gameState.enemy.level);
     }
 
-    console.log(`Turn ${gameState.turn}: HP ${validated.playerHp}/${validated.enemyHp} | CS ${validated.playerCs}/${validated.enemyCs} | ${events[0]?.resultCode || 'N/A'}`);
+    const suggestions = llmResult.suggestions || [];
+
+    console.log(`Turn ${gameState.turn}: "${input}" → HP ${validated.playerHp}/${validated.enemyHp} | CS ${validated.playerCs}/${validated.enemyCs}`);
 
     res.json({
       state: nextState,
-      narrative,
-      aiChat,
+      narrative: llmResult.narrative || '',
+      aiChat: llmResult.aiChat || null,
       suggestions: levelUp ? [] : suggestions,
       levelUp,
       gameOver,
