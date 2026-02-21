@@ -388,6 +388,8 @@ body {
   margin-top: 12px;
 }
 .action-btn:hover { background: #2d5a8a; }
+.action-btn.secondary { background: #555; margin-top: 8px; }
+.action-btn.secondary:hover { background: #777; }
 
 .gameover-text { font-size: 2em; font-weight: 700; margin-bottom: 8px; }
 .gameover-summary { font-size: 0.85em; color: #666; margin-bottom: 12px; line-height: 1.5; }

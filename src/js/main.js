@@ -340,6 +340,11 @@ function showGameOver(gameOver) {
   $('gameover-overlay').classList.remove('hidden');
   $('gameover-title').textContent = gameOver.winner === 'player' ? '🏆 승리!' : '💀 패배...';
   $('gameover-summary').textContent = gameOver.summary || '';
+  $('review-btn').onclick = () => {
+    $('gameover-overlay').classList.add('hidden');
+    // 채팅 로그 복기 가능, 입력은 비활성화 유지
+    setInput(false);
+  };
   $('restart-btn').onclick = () => {
     $('gameover-overlay').classList.add('hidden');
     $('chat-feed').innerHTML = '';
