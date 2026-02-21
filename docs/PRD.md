@@ -20,16 +20,22 @@ LoL 1v1 라인전을 재현한 LLM 기반 텍스트 전략 게임.
 
 ## 2. 아키텍처
 
-### LLM 중심 구조
+### 하이브리드 구조
 ```
-클라이언트(상태 보유) → 서버(LLM 호출 + 가드레일) → 클라이언트(상태 업데이트)
+클라이언트(상태 보유) → 서버(LLM 호출 → 데미지 엔진 → 상태 업데이트) → 클라이언트
 ```
 
 | 역할 | 담당 |
 |------|------|
-| **LLM** | 의도 해석, AI 행동 결정, 결과 판정, 상태 업데이트 생성, 서술, suggestions 생성 |
-| **서버** | LLM API 호출, JSON 파싱, 가드레일 검증 (범위 체크), 레벨업 판정 |
+| **LLM** | 의도 해석, AI 행동 결정, 적중/회피 판정, 서술, suggestions 생성 |
+| **서버 (데미지 엔진)** | 실제 수치 기반 데미지 계산, 스탯 적용, 기력/쿨다운 처리, 레벨업 판정 |
+| **서버 (가드레일)** | HP/에너지 범위 클램프, CS/레벨 감소 방지 |
 | **클라이언트** | 전체 상태 보유, UI 렌더링, suggestions 필터링, 매 턴 서버에 상태 전송 |
+
+### 핵심 원칙: LLM = 무엇이 일어났는지, 서버 = 얼마나 아픈지
+- LLM이 "Q1 맞았고 Q2로 따라감, 상대는 W1 쉴드로 방어" 판정
+- 서버가 Q1 Lv2 데미지 + Q2 Lv2 데미지 - W1 쉴드량 계산
+- LLM은 수치를 모름 → 서술에 구체적 숫자 안 넣어도 됨
 
 ### Stateless 서버
 - Vercel Serverless Functions
@@ -37,7 +43,7 @@ LoL 1v1 라인전을 재현한 LLM 기반 텍스트 전략 게임.
 
 ### 비용 최적화
 - **Prompt caching**: static(챔피언 데이터+규칙) / dynamic(현재 상태) 분리 → cache_control
-- **Diff 응답**: stateUpdate에 변경된 필드만 포함 → 토큰 절약
+- **LLM은 수치 계산 안 함**: actions 배열만 출력 → 출력 토큰 절약
 - **History 압축**: 최근 2턴 원문, 이전은 1줄 요약
 - **max_tokens 800**: 응답은 간결해야 함
 - **스킬업 시 추가 API 호출 없음**: suggestions를 스킬태그로 미리 받아 클라이언트에서 필터링
@@ -47,9 +53,10 @@ LoL 1v1 라인전을 재현한 LLM 기반 텍스트 전략 게임.
 ## 3. 게임 설계
 
 ### 3.1 HP 시스템
-- **퍼센트 기반 (0~100%)**
-- LLM이 스킬 특성 + 현재 상태 참고하여 피해량 판정
-- 서버는 범위만 검증 (0 이하 → 0, 100 초과 → 100)
+- **실제 수치 기반** (리신 Lv1: 645 HP, 레벨당 +108)
+- UI에는 **퍼센트로 표시** (현재HP / 최대HP × 100)
+- 데미지는 서버의 데미지 엔진이 실제 LoL 공식으로 계산
+- LLM은 적중/회피만 판정, 수치 계산 안 함
 
 ### 3.2 위치 시스템
 그리드 좌표 없음. **한국어 상황 태그**:
@@ -194,7 +201,14 @@ LoL 1v1 라인전을 재현한 LLM 기반 텍스트 전략 게임.
 {
   "narrative": "교전 서술 1~2문장. 스킬 효과 설명 포함.",
   "aiChat": "상대방 코멘트. ~했음/~됐음 체. 대응 이유 + 팁.",
-  "stateUpdate": { "변경된 필드만 포함 (diff)" },
+  "actions": [
+    {"who": "player", "skill": "Q1", "target": "enemy", "hit": true},
+    {"who": "player", "skill": "AA", "target": "enemy", "hit": true},
+    {"who": "player", "skill": "Q2", "target": "enemy", "hit": true},
+    {"who": "enemy", "skill": "E1", "target": "player", "hit": true}
+  ],
+  "positioning": {"player": "근접", "enemy": "근접"},
+  "cs": {"player": 2, "enemy": 1},
   "suggestions": [
     {"skill": "Q", "text": "Q1으로 미니언 사이 빈틈 노려서 견제"},
     {"skill": null, "text": "안전하게 CS 챙기기"}
@@ -203,25 +217,31 @@ LoL 1v1 라인전을 재현한 LLM 기반 텍스트 전략 게임.
 }
 ```
 
-### stateUpdate 가능 필드
-- `playerHp`, `enemyHp` (0~100)
-- `playerEnergy`, `enemyEnergy` (0~200)
-- `playerCooldowns`, `enemyCooldowns` ({Q,W,E,R}: 턴 수)
-- `playerPosition`, `enemyPosition` (한국어 태그)
-- `playerCs`, `enemyCs` (감소 불가)
-- `playerGold`, `enemyGold`
-- `playerShield`, `enemyShield`
-- `playerBuffs`, `enemyBuffs`, `playerDebuffs`, `enemyDebuffs`
-- `playerSpellCooldowns`, `enemySpellCooldowns`
-- `towerHp` ({player, enemy})
-- `minions`
+### LLM이 결정하는 것
+- `actions`: 어떤 스킬이 사용됐고, 맞았는지 빗나갔는지
+- `positioning`: 턴 후 양측 위치
+- `cs`: 이번 턴에 획득한 CS 수
+- `narrative`, `aiChat`: 서술과 상대방 코멘트
+- `suggestions`: 다음 행동 추천
+
+### 서버(데미지 엔진)가 계산하는 것
+- `actions` 기반 실제 데미지 (LoL 공식: base + scaling × AD)
+- 방어력/마저 적용 (물리: 100/(100+armor), 마법: 100/(100+mr))
+- 기력 소모/회복
+- 쿨다운 적용 (사용한 스킬에 레벨별 쿨다운 설정)
+- 쉴드 계산 (W1)
+- 패시브 효과 (연타 기력 회복)
+- 룬 효과 (정복자 스택/감전 발동/착취 회복)
+- 소환사 주문 효과 (점화 지속딜, 탈진 피해감소 등)
+- HP/에너지 클램프
 
 ### 가드레일 (서버 검증)
-- HP: 0~100 클램프
+- HP: 0~maxHp 클램프
 - 에너지: 0~200 클램프
 - CS/레벨: 감소 불가
 - 쿨다운: 0 이상
 - 포지션: 유효 태그만
+- 미습득/쿨다운 중 스킬 사용 시 해당 action 무시
 
 ---
 
@@ -294,8 +314,9 @@ ib-lol-talk/
 ├── server/
 │   ├── llm.js            # LLM API 호출 + JSON 파싱 + 재시도
 │   ├── prompt.js         # 프롬프트 생성 (static/dynamic 분리)
+│   ├── damage.js         # 데미지 엔진 (LoL 공식 기반 수치 계산)
 │   ├── validate.js       # 가드레일 검증
-│   ├── game.js           # 상태 생성 + diff 머지
+│   ├── game.js           # 상태 생성 + 초기화
 │   └── champions.js      # 챔피언 JSON 로더
 ├── data/
 │   └── champions/
@@ -318,7 +339,7 @@ ib-lol-talk/
 ### POST /api/turn
 - Input: `{gameState, input, history}`
 - Output: `{state, narrative, aiChat, suggestions, levelUp, gameOver}`
-- LLM 호출 1회
+- 처리 흐름: LLM 호출 → actions 추출 → 데미지 엔진 → 상태 업데이트 → 가드레일 검증
 
 ### POST /api/skillup
 - Input: `{gameState, skill}`
