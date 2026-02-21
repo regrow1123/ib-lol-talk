@@ -261,6 +261,7 @@ async function showSkillUp() {
   const overlay = $('skillup-overlay');
   const box = $('skillup-buttons');
   box.innerHTML = '';
+  $('suggestions').innerHTML = '';  // 스킬업 중 선택지 숨기기
   overlay.classList.remove('hidden');
 
   const skills = [
