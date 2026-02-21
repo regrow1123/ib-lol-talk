@@ -300,7 +300,7 @@ async function showSkillUp() {
             overlay.classList.add('hidden');
             state.phase = 'play';
             setInput(true);
-            fetchSuggestions(`${s.key} 스킬 레벨업 직후`);
+            fetchPostSkillupTurn(s.key);
           } else {
             showSkillUp();
           }
@@ -314,7 +314,7 @@ async function showSkillUp() {
             overlay.classList.add('hidden');
             state.phase = 'play';
             setInput(true);
-            fetchSuggestions(`${s.key} 스킬 레벨업 직후`);
+            fetchPostSkillupTurn(s.key);
           } else {
             showSkillUp();
           }
@@ -516,16 +516,30 @@ function showTooltipPopup(text) {
   el._timer = setTimeout(() => el.classList.add('hidden'), 4000);
 }
 
-// ── Post-Skillup Suggestions (LLM) ──
-async function fetchSuggestions(context) {
+// ── Post-Skillup: full turn for quality suggestions ──
+async function fetchPostSkillupTurn(skillKey) {
   try {
-    const res = await fetch(`${API_BASE}/api/suggest`, {
+    const res = await fetch(`${API_BASE}/api/turn`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ gameState: state, context }),
+      body: JSON.stringify({
+        gameState: state,
+        input: `[시스템] ${skillKey} 스킬을 레벨업했다. 상대 동향을 살피며 다음 행동을 준비한다.`,
+        history: turnHistory,
+      }),
     });
     const data = await res.json();
+    if (data.state) {
+      state = data.state;
+      renderStatus();
+    }
+    if (data.narrative) addSystemMsg(data.narrative);
+    if (data.aiChat) addEnemyMsg(data.aiChat);
     if (data.suggestions?.length) renderSuggestions(data.suggestions);
+    if (data.narrative) {
+      turnHistory.push({ role: 'user', content: `${skillKey} 스킬 레벨업` });
+      turnHistory.push({ role: 'assistant', content: JSON.stringify(data) });
+    }
   } catch {}
 }
 
