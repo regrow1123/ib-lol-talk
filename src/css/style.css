@@ -401,6 +401,15 @@ body {
   margin-top: 3px;
   justify-content: center;
 }
+.rune-display {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  margin-top: 3px;
+}
+.rune-status-icon { width: 18px; height: 18px; }
+.rune-status-name { font-size: 0.7em; color: #aaa; }
 .cd-icon {
   width: 20px;
   height: 20px;

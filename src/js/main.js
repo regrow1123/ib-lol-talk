@@ -372,6 +372,7 @@ function renderStatus() {
   $('p-gold').textContent = p.gold;
   $('p-level').textContent = `Lv.${p.level}`;
   renderCooldowns('p-cooldowns', p);
+  renderRune('p-rune', p.rune);
 
   $('e-hp-fill').style.width = `${e.hp}%`;
   $('e-hp-text').textContent = `${Math.round(e.hp)}%`;
@@ -387,6 +388,20 @@ function renderStatus() {
   // HP bar color
   setHpColor('p-hp-fill', p.hp);
   setHpColor('e-hp-fill', e.hp);
+}
+
+const RUNE_INFO = {
+  conqueror: { name: '정복자', img: 'https://ddragon.leagueoflegends.com/cdn/img/perk-images/Styles/Precision/Conqueror/Conqueror.png' },
+  electrocute: { name: '감전', img: 'https://ddragon.leagueoflegends.com/cdn/img/perk-images/Styles/Domination/Electrocute/Electrocute.png' },
+  grasp: { name: '착취', img: 'https://ddragon.leagueoflegends.com/cdn/img/perk-images/Styles/Resolve/GraspOfTheUndying/GraspOfTheUndying.png' },
+};
+
+function renderRune(elId, rune) {
+  const el = $(elId);
+  if (!el || !rune) return;
+  const info = RUNE_INFO[rune];
+  if (!info) { el.innerHTML = ''; return; }
+  el.innerHTML = `<img src="${info.img}" class="rune-status-icon" alt="${info.name}"><span class="rune-status-name">${info.name}</span>`;
 }
 
 function setHpColor(id, hp) {
