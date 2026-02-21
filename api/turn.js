@@ -35,10 +35,10 @@ export default async function handler(req, res) {
       gameOver = { winner: 'enemy', reason: 'kill', summary: llmResult.gameOver?.summary || '적에게 처치당했습니다.' };
     } else if (validated.enemyHp <= 0) {
       gameOver = { winner: 'player', reason: 'kill', summary: llmResult.gameOver?.summary || '적을 처치했습니다!' };
-    } else if (validated.playerCs >= 100) {
-      gameOver = { winner: 'player', reason: 'cs', summary: 'CS 100 달성!' };
-    } else if (validated.enemyCs >= 100) {
-      gameOver = { winner: 'enemy', reason: 'cs', summary: '적이 먼저 CS 100에 도달했습니다.' };
+    } else if (validated.playerCs >= 50) {
+      gameOver = { winner: 'player', reason: 'cs', summary: 'CS 50 달성!' };
+    } else if (validated.enemyCs >= 50) {
+      gameOver = { winner: 'enemy', reason: 'cs', summary: '적이 먼저 CS 50에 도달했습니다.' };
     } else if (validated.towerHp.enemy <= 0) {
       gameOver = { winner: 'player', reason: 'tower', summary: '적 타워를 파괴했습니다!' };
     } else if (validated.towerHp.player <= 0) {
