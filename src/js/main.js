@@ -191,7 +191,7 @@ function addEnemyMsg(text) {
   div.innerHTML = `
     <div class="msg-avatar enemy-avatar"><img src="${DDRAGON}/img/champion/LeeSin.png" alt="리신"></div>
     <div class="msg-body">
-      <div class="msg-name">적 리신</div>
+      <div class="msg-name">상대방</div>
       <div class="bubble">${esc(text)}</div>
     </div>
     <div class="msg-time">${timeStr()}</div>`;
