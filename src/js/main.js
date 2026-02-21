@@ -95,6 +95,7 @@ function createFallbackState() {
       skillLevels: { Q: 1, W: 0, E: 0, R: 0 }, cooldowns: { Q: 0, W: 0, E: 0, R: 0 },
       skillPoints: 0, position: '중거리',
       spells: ['flash', 'ignite'], spellCooldowns: [0, 0],
+      rune: ['conqueror','electrocute','grasp'][Math.floor(Math.random()*3)],
       rune: 'conqueror', buffs: [], debuffs: [],
     },
     minions: { player: { melee: 3, ranged: 3 }, enemy: { melee: 3, ranged: 3 } },
@@ -382,6 +383,7 @@ function renderStatus() {
   $('e-gold').textContent = e.gold;
   $('e-level').textContent = `Lv.${e.level}`;
   renderCooldowns('e-cooldowns', e);
+  renderRune('e-rune', e.rune);
 
   // turn display removed
 
