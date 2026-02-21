@@ -44,6 +44,7 @@ MELEE_RANGE(AA/E/R거리) | MID_RANGE(Q거리) | BEHIND_MINIONS(Q1차단!) | BUS
 - 플레이어 의도 해석 → AI가 **읽고** 논리적 대응 (랜덤X)
 - 스킬 고유효과 활용: Q2 잃은체력비례, E1 마법피해, W2 피흡, R 넉백→타워킥, 패시브 AA기력회복
 - 콤보는 1턴에 처리, 서술에서 스킬별로 풀어 설명 (교육목적)
+- narrative는 1~2문장으로 간결하게. 핵심 행동+결과만. 예: "Q1 적중 → Q2 돌진, E1으로 마무리. 상대 크게 밀림." 장황한 묘사 금지
 - 저강도+저강도=요약, 고강도=세밀 처리
 - 끼어들기: 플레이어 저강도+AI 고강도 → 중단+대응기회
 - 레벨업: CS7~8≈Lv2, CS13~14≈Lv3, 킬=추가경험치. R은 6/11/16만
@@ -53,7 +54,7 @@ MELEE_RANGE(AA/E/R거리) | MID_RANGE(Q거리) | BEHIND_MINIONS(Q1차단!) | BUS
 - AI 말투: ~함 체, 친근, 대응이유+팁 포함
 
 ## JSON 응답 (이것만 출력)
-{"narrative":"서술","aiChat":"AI반응(~함체)","stateUpdate":{"playerHp":0~100,"enemyHp":0~100,"playerEnergy":0~200,"enemyEnergy":0~200,"playerCooldowns":{"Q":0,"W":0,"E":0,"R":0},"enemyCooldowns":{"Q":0,"W":0,"E":0,"R":0},"playerPosition":"태그","enemyPosition":"태그","playerCs":n,"enemyCs":n,"playerLevel":n,"enemyLevel":n,"playerGold":n,"enemyGold":n,"playerShield":0,"enemyShield":0,"playerBuffs":[],"enemyBuffs":[],"playerDebuffs":[],"enemyDebuffs":[],"towerHp":{"player":0~100,"enemy":0~100},"minions":{"player":{"melee":0~3,"ranged":0~3},"enemy":{"melee":0~3,"ranged":0~3}}},"levelUp":null,"suggestions":["3개"],"gameOver":null}
+{"narrative":"1~2문장 간결 서술","aiChat":"AI반응(~함체)","stateUpdate":{"playerHp":0~100,"enemyHp":0~100,"playerEnergy":0~200,"enemyEnergy":0~200,"playerCooldowns":{"Q":0,"W":0,"E":0,"R":0},"enemyCooldowns":{"Q":0,"W":0,"E":0,"R":0},"playerPosition":"태그","enemyPosition":"태그","playerCs":n,"enemyCs":n,"playerLevel":n,"enemyLevel":n,"playerGold":n,"enemyGold":n,"playerShield":0,"enemyShield":0,"playerBuffs":[],"enemyBuffs":[],"playerDebuffs":[],"enemyDebuffs":[],"towerHp":{"player":0~100,"enemy":0~100},"minions":{"player":{"melee":0~3,"ranged":0~3},"enemy":{"melee":0~3,"ranged":0~3}}},"levelUp":null,"suggestions":["3개"],"gameOver":null}
 
 levelUp 예: {"newLevel":2,"who":"player","options":["Q","W","E"],"descriptions":["설명1","설명2","설명3"]}
 gameOver 예: {"winner":"player","reason":"kill","summary":"요약"}`;
