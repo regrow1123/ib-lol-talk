@@ -33,12 +33,26 @@ export default async function handler(req, res) {
 
     console.log(`Turn ${gameState.turn}: "${input}" → ${llmResult.playerAction.type} | AI=${llmResult.aiAction.type}`);
 
-    // Append actual damage numbers to narrative
-    let narrative = llmResult.narrative || '';
-    const dmgParts = [];
-    if (dmgLog.playerDealt > 0) dmgParts.push(`내 피해: ${Math.round(dmgLog.playerDealt)}`);
-    if (dmgLog.enemyDealt > 0) dmgParts.push(`받은 피해: ${Math.round(dmgLog.enemyDealt)}`);
-    if (dmgParts.length) narrative += ` [${dmgParts.join(' / ')}]`;
+    // Build narrative from actual server events (not LLM's guess)
+    const skillNames = { Q1:'음파', Q2:'공명타', E1:'폭풍', R:'용의 분노', AA:'기본공격', IGNITE:'점화' };
+    const eventLines = [];
+    for (const ev of dmgLog.events) {
+      const who = ev.who === 'player' ? '내' : '적';
+      const skill = skillNames[ev.skill] || ev.skill;
+      if (ev.result === 'hit') {
+        eventLines.push(`${who} ${skill} 적중! (${ev.dmg} 피해)`);
+      } else if (ev.result === 'miss') {
+        eventLines.push(`${who} ${skill} 빗나감${ev.reason ? ' — ' + ev.reason : ''}`);
+      } else if (ev.result === 'invalid') {
+        eventLines.push(`${who} ${skill} 사용 불가`);
+      }
+    }
+    // Add CS info
+    const pCs = llmResult.resolution?.playerCs || 0;
+    const aCs = llmResult.resolution?.aiCs || 0;
+    if (pCs > 0) eventLines.push(`CS +${pCs}`);
+
+    let narrative = eventLines.length > 0 ? eventLines.join(' / ') : (llmResult.narrative || '소강 상태');
 
     res.json({
       state,

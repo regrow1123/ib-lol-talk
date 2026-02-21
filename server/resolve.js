@@ -41,37 +41,48 @@ export function resolveTurn(game, llmResult) {
   game.enemy.inBush = isBush(game.enemy.x, game.enemy.y);
 
   // ── Process player hits ──
-  const dmgLog = { playerDealt: 0, enemyDealt: 0 };
+  const dmgLog = { playerDealt: 0, enemyDealt: 0, events: [] };
 
   let playerHitCount = 0, enemyHitCount = 0;
 
   for (const hit of (resolution.playerHits || [])) {
-    if (!hit.hit) continue;
+    if (!hit.hit) {
+      dmgLog.events.push({ who: 'player', skill: hit.skill, result: 'miss', reason: hit.reason || '' });
+      continue;
+    }
     let dmg = calcHitDamage(hit.skill, game.player, game.enemy);
     if (dmg > 0) {
-      if (!validateSkillUse(game.player, hit.skill, game.enemy)) continue;
+      if (!validateSkillUse(game.player, hit.skill, game.enemy)) {
+        dmgLog.events.push({ who: 'player', skill: hit.skill, result: 'invalid', reason: '사용 불가' });
+        continue;
+      }
       consumeSkillResources(game.player, hit.skill);
-      // Exhaust reduces outgoing damage
       if (game.player.exhausted > 0) dmg *= (1 - SPELLS.exhaust.damageReduction);
-      // Conqueror bonus AD at max stacks is already in attacker.ad (applied via runeState)
-      const result = applyDamage(game.enemy, dmg);
+      applyDamage(game.enemy, dmg);
       dmgLog.playerDealt += dmg;
+      dmgLog.events.push({ who: 'player', skill: hit.skill, result: 'hit', dmg: Math.round(dmg) });
       playerHitCount++;
-      // Conqueror healing at max stacks
       applyConquerorHeal(game.player, dmg);
     }
   }
 
   // ── Process AI hits ──
   for (const hit of (resolution.aiHits || [])) {
-    if (!hit.hit) continue;
+    if (!hit.hit) {
+      dmgLog.events.push({ who: 'enemy', skill: hit.skill, result: 'miss', reason: hit.reason || '' });
+      continue;
+    }
     let dmg = calcHitDamage(hit.skill, game.enemy, game.player);
     if (dmg > 0) {
-      if (!validateSkillUse(game.enemy, hit.skill, game.player)) continue;
+      if (!validateSkillUse(game.enemy, hit.skill, game.player)) {
+        dmgLog.events.push({ who: 'enemy', skill: hit.skill, result: 'invalid', reason: '사용 불가' });
+        continue;
+      }
       consumeSkillResources(game.enemy, hit.skill);
       if (game.enemy.exhausted > 0) dmg *= (1 - SPELLS.exhaust.damageReduction);
-      const result = applyDamage(game.player, dmg);
+      applyDamage(game.player, dmg);
       dmgLog.enemyDealt += dmg;
+      dmgLog.events.push({ who: 'enemy', skill: hit.skill, result: 'hit', dmg: Math.round(dmg) });
       enemyHitCount++;
       applyConquerorHeal(game.enemy, dmg);
     }
