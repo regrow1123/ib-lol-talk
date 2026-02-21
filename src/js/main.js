@@ -7,6 +7,7 @@ let state = null;
 let sending = false;
 let turnHistory = [];
 let setupChoices = { spells: [], rune: null };
+let lastSuggestions = []; // 레벨업 후 복원용
 
 // ═══════════════════════════════════════
 // Setup Screen
@@ -181,14 +182,8 @@ async function doSkillUp(key) {
     showSkillUpChoices();
   } else {
     state.phase = 'play';
-    // Show context-aware starting suggestions
-    const learned = Object.entries(state.player.skillLevels).filter(([,v]) => v > 0).map(([k]) => k);
-    const startSuggestions = [];
-    if (learned.includes('Q')) startSuggestions.push('미니언 뒤에서 CS 먹으면서 Q 견제 노리기');
-    if (learned.includes('W')) startSuggestions.push('안전하게 CS 챙기면서 상대 패턴 파악');
-    if (learned.includes('E')) startSuggestions.push('가까이 붙어서 E로 짧은 교환 시도');
-    if (!startSuggestions.length) startSuggestions.push('CS 먹으며 상대 움직임 관찰');
-    renderSuggestions(startSuggestions);
+    // Restore LLM suggestions from the turn that triggered levelup
+    renderSuggestions(lastSuggestions);
     setInput(true);
     $('player-input').focus();
   }
@@ -241,11 +236,13 @@ async function submit() {
         state.winner = data.gameOver.winner;
         showGameOver(data.gameOver);
       } else if (data.levelUp && data.levelUp.who !== 'enemy') {
-        // LLM returned levelUp → show skill choices (suggestions cleared by handlePhase)
+        // 서버가 레벨업 감지 → 스킬 선택, suggestions는 저장
+        lastSuggestions = data.suggestions || [];
         handlePhase();
       } else {
         state.phase = 'play';
-        renderSuggestions(data.suggestions || []);
+        lastSuggestions = data.suggestions || [];
+        renderSuggestions(lastSuggestions);
         setInput(true);
       }
     }

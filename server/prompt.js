@@ -59,7 +59,6 @@ ${skillDesc}
 - narrative 1~2문장. 핵심만. 장황X
 - 저강도+저강도=요약, 고강도=세밀
 - 끼어들기: 플레이어저강도+AI고강도→중단+대응기회
-- 레벨업: CS7~8≈Lv2, CS13~14≈Lv3, 킬=추가경험치. R은6/11/16만
 - 승리: 킬(HP0%)/CS50/타워파괴. 동시사망없음—먼저 맞힌쪽이 킬
 - 스킬표기: Q1/Q2/W1/W2/E1/E2/R
 - 미습득/쿨/기력부족 사용금지. 불가능스킬→알려주고 대체행동
@@ -73,8 +72,7 @@ ${buildPersonalityPrompt(gameState.enemy?.personality)}
 ## JSON응답 (diff 형식)
 stateUpdate에는 **변경된 필드만** 포함. 변경 없는 필드는 생략. 서버가 이전 상태에 머지함.
 예: HP만 변했으면 {"stateUpdate":{"playerHp":85,"enemyHp":90}} — 나머지 생략
-{"narrative":"","aiChat":"~했음/~됐음/~인듯","stateUpdate":{변경필드만},"levelUp":null,"suggestions":[],"gameOver":null}
-levelUp예: {"newLevel":2,"who":"player","options":["Q","W","E"],"descriptions":["설명1","설명2","설명3"]}
+{"narrative":"","aiChat":"~했음/~됐음/~인듯","stateUpdate":{변경필드만},"suggestions":[],"gameOver":null}
 gameOver예: {"winner":"player","reason":"kill","summary":"요약"}`;
 
   // Dynamic: current turn state (changes every turn)

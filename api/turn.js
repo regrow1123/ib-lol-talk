@@ -67,25 +67,23 @@ export default async function handler(req, res) {
       nextState.winner = gameOver.winner;
     }
 
-    // levelUp 체크
-    let levelUp = llmResult.levelUp || null;
-    if (!levelUp) {
-      const expectedPlayerLevel = csToLevel(validated.playerCs);
-      if (expectedPlayerLevel > gameState.player.level) {
-        nextState.player.level = expectedPlayerLevel;
-        nextState.player.skillPoints = (nextState.player.skillPoints || 0) + (expectedPlayerLevel - gameState.player.level);
-        nextState.phase = 'skillup';
-        const options = ['Q', 'W', 'E'];
-        const descs = ['음파/공명타 강화', '방호/철갑 강화', '폭풍/쇠약 강화'];
-        if (expectedPlayerLevel >= 6 && gameState.player.skillLevels.R < 1) {
-          options.push('R');
-          descs.push('용의 분노 해금');
-        }
-        levelUp = { newLevel: expectedPlayerLevel, who: 'player', options, descriptions: descs };
-      }
-    } else if (levelUp?.who === 'player') {
+    // === 레벨업: 서버가 100% 관리 (LLM의 levelUp 무시) ===
+    let levelUp = null;
+
+    // 플레이어 레벨업
+    const expectedPlayerLevel = csToLevel(validated.playerCs);
+    if (expectedPlayerLevel > gameState.player.level) {
+      const gained = expectedPlayerLevel - gameState.player.level;
+      nextState.player.level = expectedPlayerLevel;
+      nextState.player.skillPoints = (nextState.player.skillPoints || 0) + gained;
       nextState.phase = 'skillup';
-      nextState.player.skillPoints = (nextState.player.skillPoints || 0) + 1;
+      const options = ['Q', 'W', 'E'];
+      const descs = ['음파/공명타 강화', '방호/철갑 강화', '폭풍/쇠약 강화'];
+      if (expectedPlayerLevel >= 6 && gameState.player.skillLevels.R < 1) {
+        options.push('R');
+        descs.push('용의 분노 해금');
+      }
+      levelUp = { newLevel: expectedPlayerLevel, who: 'player', options, descriptions: descs };
     }
 
     // 적 레벨업 자동 처리
@@ -96,6 +94,7 @@ export default async function handler(req, res) {
       autoSkillUp(nextState.enemy, expectedEnemyLevel - gameState.enemy.level);
     }
 
+    // suggestions: 항상 LLM이 생성 (레벨업 여부 무관)
     const suggestions = llmResult.suggestions || [];
 
     console.log(`Turn ${gameState.turn}: "${input}" → HP ${validated.playerHp}/${validated.enemyHp} | CS ${validated.playerCs}/${validated.enemyCs}`);
@@ -104,7 +103,7 @@ export default async function handler(req, res) {
       state: nextState,
       narrative: llmResult.narrative || '',
       aiChat: llmResult.aiChat || null,
-      suggestions: levelUp ? [] : suggestions,
+      suggestions,
       levelUp,
       gameOver,
     });
