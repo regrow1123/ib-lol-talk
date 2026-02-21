@@ -149,17 +149,21 @@ async function submit() {
       if (data.aiChat) addEnemyMsg(data.aiChat);
 
       if (data.state) state = data.state;
-      renderSuggestions(data.suggestions || []);
       renderStatus();
 
       if (data.gameOver) {
         state.phase = 'gameover';
         state.winner = data.gameOver.winner;
+        renderSuggestions([]);
         showGameOver(data.gameOver);
       } else if (data.levelUp && data.levelUp.who !== 'enemy') {
-        checkPhase();
+        // Show skill options as suggestions instead of overlay
+        addSystemMsg(`⬆️ 레벨 ${data.levelUp.newLevel}! 스킬을 선택하세요`);
+        renderSkillUpSuggestions(data.levelUp);
+        setInput(false);
       } else {
         state.phase = 'play';
+        renderSuggestions(data.suggestions || []);
         setInput(true);
       }
     }
@@ -246,82 +250,16 @@ function setInput(on) {
 function checkPhase() {
   if (!state) return;
   if (state.phase === 'skillup' && state.player.skillPoints > 0) {
-    showSkillUp();
+    addSystemMsg('⬆️ 스킬을 선택하세요');
+    const opts = ['Q','W','E'];
+    if (state.player.level >= 6 && state.player.skillLevels.R < 1) opts.push('R');
+    renderSkillUpSuggestions({ newLevel: state.player.level, options: opts, descriptions: [] });
     setInput(false);
   } else if (state.phase === 'gameover') {
     setInput(false);
   } else {
     state.phase = 'play';
     setInput(true);
-    $('skillup-overlay').classList.add('hidden');
-  }
-}
-
-// ── Skill Up ──
-async function showSkillUp() {
-  const overlay = $('skillup-overlay');
-  const box = $('skillup-buttons');
-  box.innerHTML = '';
-  $('suggestions').innerHTML = '';  // 스킬업 중 선택지 숨기기
-  overlay.classList.remove('hidden');
-
-  const skills = [
-    { key: 'Q', name: '음파/공명타', desc: ['Lv1: 55dmg', 'Lv2: 80dmg', 'Lv3: 105dmg', 'Lv4: 130dmg', 'Lv5: 155dmg'] },
-    { key: 'W', name: '방호/철갑', desc: ['Lv1: 쉴드70', 'Lv2: 쉴드115', 'Lv3: 쉴드160', 'Lv4: 쉴드205', 'Lv5: 쉴드250'] },
-    { key: 'E', name: '폭풍/쇠약', desc: ['Lv1: 35+AD', 'Lv2: 60+AD', 'Lv3: 85+AD', 'Lv4: 110+AD', 'Lv5: 135+AD'] },
-    { key: 'R', name: '용의 분노', desc: ['Lv1: 175dmg', 'Lv2: 400dmg', 'Lv3: 625dmg'] },
-  ];
-
-  for (const s of skills) {
-    const lv = state.player.skillLevels[s.key];
-    const maxLv = s.key === 'R' ? 3 : 5;
-    const canLevel = lv < maxLv && state.player.skillPoints > 0;
-    const rBlock = s.key === 'R' && ![6, 11, 16].includes(state.player.level);
-
-    const btn = document.createElement('button');
-    btn.className = 'skill-btn';
-    const nextDesc = lv < s.desc.length ? s.desc[lv] : 'MAX';
-    btn.textContent = `${s.key} — ${s.name}  [Lv.${lv}] → ${nextDesc}`;
-    btn.disabled = !canLevel || rBlock;
-
-    if (canLevel && !rBlock) {
-      btn.onclick = async () => {
-        try {
-          const res = await fetch(`${API_BASE}/api/skillup`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ gameState: state, skill: s.key }),
-          });
-          const data = await res.json();
-          if (data.state) state = data.state;
-          renderStatus();
-          addSystemMsg(`${s.key} (${s.name}) 스킬을 배웠습니다!`);
-          if (state.player.skillPoints <= 0) {
-            overlay.classList.add('hidden');
-            state.phase = 'play';
-            setInput(true);
-            fetchPostSkillupTurn(s.key);
-          } else {
-            showSkillUp();
-          }
-        } catch {
-          // Fallback: client-side
-          state.player.skillLevels[s.key]++;
-          state.player.skillPoints--;
-          renderStatus();
-          addSystemMsg(`${s.key} (${s.name}) 스킬을 배웠습니다!`);
-          if (state.player.skillPoints <= 0) {
-            overlay.classList.add('hidden');
-            state.phase = 'play';
-            setInput(true);
-            fetchPostSkillupTurn(s.key);
-          } else {
-            showSkillUp();
-          }
-        }
-      };
-    }
-    box.appendChild(btn);
   }
 }
 
@@ -517,41 +455,51 @@ function showTooltipPopup(text) {
 }
 
 // ── Post-Skillup: full turn for quality suggestions ──
-async function fetchPostSkillupTurn(skillKey) {
-  try {
-    // Ensure phase is 'play' before sending
-    state.phase = 'play';
-    const res = await fetch(`${API_BASE}/api/turn`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        gameState: state,
-        input: `[시스템] ${skillKey} 스킬을 레벨업했다. 상대 동향을 살피며 다음 행동을 준비한다.`,
-        history: turnHistory,
-      }),
-    });
-    const data = await res.json();
-    if (data.error) { console.error('postSkillup error:', data.error); return; }
-    if (data.state) {
-      // Keep phase as 'play' — don't let another skillup override
-      const phase = data.state.phase;
-      state = data.state;
-      if (phase === 'skillup') {
-        // LLM triggered another levelup — handle it
-        state.phase = 'skillup';
+// ── Skill-Up as Suggestions ──
+function renderSkillUpSuggestions(levelUp) {
+  const box = $('suggestions');
+  box.innerHTML = '';
+  const skillNames = { Q: '음파', W: '방호', E: '폭풍', R: '용의 분노' };
+  for (let i = 0; i < levelUp.options.length; i++) {
+    const key = levelUp.options[i];
+    const desc = levelUp.descriptions[i] || '';
+    const btn = document.createElement('button');
+    btn.className = 'suggestion-btn skillup-btn';
+    btn.textContent = `${key} ${skillNames[key]} 레벨업`;
+    btn.title = desc;
+    btn.onclick = async () => {
+      // Disable all buttons
+      box.querySelectorAll('.skillup-btn').forEach(b => { b.disabled = true; });
+      try {
+        const res = await fetch(`${API_BASE}/api/skillup`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ gameState: state, skill: key }),
+        });
+        const data = await res.json();
+        if (data.state) state = data.state;
         renderStatus();
-        if (data.levelUp) showSkillUp();
-        return;
+        addSystemMsg(`${key} (${skillNames[key]}) 스킬을 배웠습니다!`);
+        if (state.player.skillPoints > 0) {
+          // More skill points — show again
+          renderSkillUpSuggestions({ ...levelUp, options: ['Q','W','E'], descriptions: ['','',''] });
+        } else {
+          state.phase = 'play';
+          renderSuggestions([]);
+          setInput(true);
+        }
+      } catch {
+        // Fallback
+        state.player.skillLevels[key]++;
+        state.player.skillPoints--;
+        renderStatus();
+        addSystemMsg(`${key} (${skillNames[key]}) 스킬을 배웠습니다!`);
+        state.phase = 'play';
+        renderSuggestions([]);
+        setInput(true);
       }
-      renderStatus();
-    }
-    if (data.narrative) addSystemMsg(data.narrative);
-    if (data.aiChat) addEnemyMsg(data.aiChat);
-    if (data.suggestions?.length) renderSuggestions(data.suggestions);
-    turnHistory.push({ role: 'user', content: `${skillKey} 스킬 레벨업` });
-    turnHistory.push({ role: 'assistant', content: JSON.stringify({ narrative: data.narrative, aiChat: data.aiChat }) });
-  } catch (err) {
-    console.error('fetchPostSkillupTurn failed:', err);
+    };
+    box.appendChild(btn);
   }
 }
 
