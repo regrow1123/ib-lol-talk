@@ -144,7 +144,7 @@ async function submit() {
       turnHistory.push({ role: 'assistant', content: `${data.narrative || ''} | ${data.aiChat || ''}` });
       if (turnHistory.length > 10) turnHistory = turnHistory.slice(-10);
 
-      if (data.narrative) addNarratorMsg(data.narrative);
+      if (data.narrative) addSystemMsg(data.narrative);
       if (data.aiChat) addEnemyMsg(data.aiChat);
 
       if (data.state) state = data.state;
@@ -199,20 +199,6 @@ function addEnemyMsg(text) {
   scrollBottom();
 }
 
-function addNarratorMsg(text) {
-  const feed = $('chat-feed');
-  const div = document.createElement('div');
-  div.className = 'msg them narrator';
-  div.innerHTML = `
-    <div class="msg-avatar narrator-avatar">⚔️</div>
-    <div class="msg-body">
-      <div class="msg-name">심판</div>
-      <div class="bubble">${esc(text)}</div>
-    </div>`;
-  feed.appendChild(div);
-  scrollBottom();
-}
-
 function addSystemMsg(text) {
   const feed = $('chat-feed');
   const div = document.createElement('div');
@@ -227,7 +213,7 @@ function addTypingIndicator() {
   const div = document.createElement('div');
   div.className = 'msg them';
   div.innerHTML = `
-    <div class="msg-avatar narrator-avatar">⚔️</div>
+    <div class="msg-avatar">🟦</div>
     <div class="msg-body">
       <div class="bubble"><div class="typing-indicator"><span></span><span></span><span></span></div></div>
     </div>`;
