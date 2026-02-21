@@ -9,7 +9,7 @@
 <body>
   <div class="chat-app">
 
-    <!-- Top Bar (like KakaoTalk room header) -->
+    <!-- Top Bar -->
     <div class="topbar">
       <div class="topbar-left">
         <span class="topbar-title">리신 vs 리신</span>
@@ -17,39 +17,39 @@
       </div>
     </div>
 
-    <!-- Game Info (always visible) -->
+    <!-- Game Info -->
     <div class="info-drawer" id="info-drawer">
       <div class="info-stats">
         <div class="info-side enemy-info">
           <div class="info-name enemy">🟦 적 <span id="e-level">Lv.1</span></div>
           <div class="info-bar">
             <div class="info-bar-fill hp" id="e-hp-fill" style="width:100%"></div>
-            <span class="info-bar-text" id="e-hp-text">645/645</span>
+            <span class="info-bar-text" id="e-hp-text">100%</span>
           </div>
           <div class="info-bar energy">
             <div class="info-bar-fill en" id="e-energy-fill" style="width:100%"></div>
-            <span class="info-bar-text" id="e-energy-text">200/200</span>
+            <span class="info-bar-text" id="e-energy-text">200</span>
           </div>
           <div class="info-row">
             <span>CS <b id="e-cs">0</b></span>
             <span><b id="e-gold">0</b>G</span>
-            <span class="info-tags" id="e-tags"></span>
+            <span class="info-position" id="e-position">MID_RANGE</span>
           </div>
         </div>
         <div class="info-side player-info">
           <div class="info-name player">🟥 나 <span id="p-level">Lv.1</span></div>
           <div class="info-bar">
             <div class="info-bar-fill hp" id="p-hp-fill" style="width:100%"></div>
-            <span class="info-bar-text" id="p-hp-text">645/645</span>
+            <span class="info-bar-text" id="p-hp-text">100%</span>
           </div>
           <div class="info-bar energy">
             <div class="info-bar-fill en" id="p-energy-fill" style="width:100%"></div>
-            <span class="info-bar-text" id="p-energy-text">200/200</span>
+            <span class="info-bar-text" id="p-energy-text">200</span>
           </div>
           <div class="info-row">
             <span>CS <b id="p-cs">0</b></span>
             <span><b id="p-gold">0</b>G</span>
-            <span class="info-tags" id="p-tags"></span>
+            <span class="info-position" id="p-position">MID_RANGE</span>
           </div>
         </div>
       </div>
@@ -58,7 +58,7 @@
     <!-- Chat Feed -->
     <div class="chat-feed" id="chat-feed"></div>
 
-    <!-- Input Bar (KakaoTalk style) -->
+    <!-- Input Bar -->
     <div class="input-bar">
       <div class="suggestions" id="suggestions"></div>
       <div class="input-row">
@@ -79,21 +79,22 @@
     <!-- Game Over Overlay -->
     <div class="overlay hidden" id="gameover-overlay">
       <div class="overlay-box">
-        <div id="gameover-text" class="gameover-text"></div>
+        <div id="gameover-title" class="gameover-text"></div>
+        <div id="gameover-summary" class="gameover-summary"></div>
         <button id="restart-btn" class="action-btn">다시 시작</button>
       </div>
     </div>
 
-    <!-- Setup Overlay (Spells + Runes) -->
+    <!-- Setup Overlay -->
     <div class="overlay" id="setup-overlay">
       <div class="overlay-box setup-box">
         <div class="overlay-title">⚔️ 라인전 준비</div>
 
         <div class="setup-section">
-          <div class="setup-label">🔮 소환사 주문</div>
-          <div class="setup-sub">점멸 + 하나를 선택하세요</div>
+          <div class="setup-label">🔮 소환사 주문 (2개 선택)</div>
+          <div class="setup-sub">5개 중 2개를 자유롭게 선택하세요</div>
           <div class="spell-grid" id="spell-grid">
-            <div class="spell-card selected locked" data-spell="flash">
+            <div class="spell-card" data-spell="flash">
               <div class="spell-icon">⚡</div>
               <div class="spell-name">점멸</div>
             </div>
@@ -111,7 +112,7 @@
             </div>
             <div class="spell-card" data-spell="tp">
               <div class="spell-icon">🌀</div>
-              <div class="spell-name">순간이동</div>
+              <div class="spell-name">텔레포트</div>
             </div>
           </div>
         </div>
@@ -121,18 +122,24 @@
           <div class="rune-grid" id="rune-grid">
             <div class="rune-card" data-rune="conqueror">
               <div class="rune-icon">⚔️</div>
-              <div class="rune-name">정복자</div>
-              <div class="rune-desc">지속 교전 시 AD 증가 + 체력 회복</div>
+              <div class="rune-info">
+                <div class="rune-name">정복자</div>
+                <div class="rune-desc">지속 교전 시 AD 증가 + 체력 회복</div>
+              </div>
             </div>
             <div class="rune-card" data-rune="electrocute">
               <div class="rune-icon">⚡</div>
-              <div class="rune-name">감전</div>
-              <div class="rune-desc">3회 공격 시 추가 피해</div>
+              <div class="rune-info">
+                <div class="rune-name">감전</div>
+                <div class="rune-desc">3회 공격 시 추가 피해</div>
+              </div>
             </div>
             <div class="rune-card" data-rune="grasp">
               <div class="rune-icon">🌿</div>
-              <div class="rune-name">착취의 손아귀</div>
-              <div class="rune-desc">4초마다 AA에 추가 피해 + 체력 회복</div>
+              <div class="rune-info">
+                <div class="rune-name">착취의 손아귀</div>
+                <div class="rune-desc">4초마다 AA에 추가 피해 + 체력 회복</div>
+              </div>
             </div>
           </div>
         </div>

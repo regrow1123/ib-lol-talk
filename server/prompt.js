@@ -1,222 +1,203 @@
-// LLM system prompt for turn interpretation + AI opponent + narration
-import { LEE_SIN } from './champions.js';
-import { SPELLS } from './spells.js';
-import { RUNES } from './runes.js';
+// V2 Prompt builder — LLM handles all judgment + state updates
+import { loadChampion } from './champions.js';
 
-const AI_PERSONALITY = `당신의 AI 성격: "같이 놀면서 리액션해주는 친구"
-- **말투는 반드시 "~함" 체로 통일** (예: "~했음", "~맞음", "~임", "~됨", "~인듯")
-- **플레이어의 행동에 리액션**하는 것이 핵심. 반박하지 말고 받아주고 반응함
-  - 플레이어가 공격하면 → "ㅋㅋ 갑자기 들어옴", "아 아팠음"
-  - 플레이어가 CS 먹으면 → "오 막타 잘 먹었음", "나도 먹어야 됨"
-  - 플레이어가 회피하면 → "ㄷㄷ 피했음?", "반응 빠름"
-  - 플레이어가 실수하면 → "ㅋㅋㅋ Q 미니언 맞았음", "아깝다 거기선 안 맞음"
-- AI도 자기 행동을 자연스럽게 말함: "나도 Q 쏨", "W 쉴드 깜", "CS 좀 먹을게"
-- **스킬 메커니즘을 자연스럽게 알려줌** (가르치는 게 아니라 같이 놀면서)
-  - "Q 맞았으니까 Q2로 따라갈 수 있음", "E 맞으면 둔화 걸림 ㅋ"
-- 적당히 싸워서 교전이 자주 일어나게 함 (수동적 파밍만 하지 않음)
-- 다양한 스킬 조합을 적극 활용 (Q1→Q2, W 미니언 돌진, E 둔화 추격, R 넉백 등)
-- 이기는 것보다 **플레이어가 리신의 스킬을 체험하는 것**이 목표`;
+export function buildSystemPrompt(gameState) {
+  const champ = loadChampion(gameState.player.champion);
 
+  // Build skill descriptions with current levels and availability
+  const playerSkills = buildSkillInfo(champ, gameState.player);
+  const enemySkills = buildSkillInfo(champ, gameState.enemy);
 
-function getAvailableSkills(champ, game) {
-  const dist = Math.abs(game.player.x - game.enemy.x);
-  const skills = [];
-  const ENERGY_COST = { Q: 50, W: 50, E: 50, R: 0 };
-  const RANGE = { Q: 24, W: 14, E: 9, R: 8, AA: 3 };
+  const spellNames = {
+    flash: '점멸 (즉시 이동, 회피/기습)',
+    ignite: '점화 (지속 피해 + 치유 감소)',
+    exhaust: '탈진 (둔화 + 피해 35% 감소)',
+    barrier: '방어막 (즉시 보호막)',
+    tp: '텔레포트 (귀환 후 빠른 복귀)'
+  };
 
-  for (const s of ['Q', 'W', 'E', 'R']) {
-    if (champ.skillLevels[s] > 0 && champ.cooldowns[s] === 0 && champ.energy >= ENERGY_COST[s]) {
-      if (s === 'R' && champ.level < 6) continue;
-      skills.push(`${s}(레벨${champ.skillLevels[s]}, 사거리${RANGE[s]}칸)`);
-    }
-  }
-  // Q2 available if Q mark exists
-  if (champ.marks?.q > 0 && champ.cooldowns.Q === 0 && champ.energy >= 50) {
-    skills.push('Q2(돌진)');
-  }
-  // E2 available if E mark on enemy
-  if (champ.marks?.e > 0) {
-    skills.push('E2(둔화)');
-  }
-  if (dist <= RANGE.AA) skills.push(`AA(사거리${RANGE.AA}칸)`);
-  // Spells
-  if ((champ.spellCooldowns?.flash || 0) === 0) skills.push('점멸');
-  if ((champ.spellCooldowns?.second || 0) === 0) skills.push(SPELLS[champ.spells?.second]?.name || '점화');
+  const runeDesc = {
+    conqueror: '정복자: 장기 교전 시 스택 → AD 증가 + 체력 회복',
+    electrocute: '감전: 3회 공격 시 추가 폭딜 (짧은 교전 유리)',
+    grasp: '착취의 손아귀: 4초마다 AA 추가 피해 + 체력 회복 + 영구 체력'
+  };
 
-  return skills.length > 0 ? skills.join(', ') : '없음 (기본공격/이동만)';
-}
+  return `너는 리그 오브 레전드 1v1 라인전 텍스트 게임의 심판이자 AI 상대다.
+플레이어와 AI 모두 ${champ.name}(${champ.title})을 사용한다.
 
-function getUnavailableSkills(champ, game) {
-  const reasons = [];
-  const ENERGY_COST = { Q: 50, W: 50, E: 50, R: 0 };
+## 챔피언: ${champ.name}
+패시브 — ${champ.passive.name}: ${champ.passive.description}
 
-  for (const s of ['Q', 'W', 'E', 'R']) {
-    if (champ.skillLevels[s] === 0) {
-      reasons.push(`${s}(미습득)`);
-    } else if (champ.cooldowns[s] > 0) {
-      reasons.push(`${s}(쿨타임 ${champ.cooldowns[s]}턴)`);
-    } else if (champ.energy < ENERGY_COST[s]) {
-      reasons.push(`${s}(에너지 부족)`);
-    }
-  }
-  if ((champ.spellCooldowns?.flash || 0) > 0) reasons.push(`점멸(쿨 ${champ.spellCooldowns.flash}턴)`);
-  if ((champ.spellCooldowns?.second || 0) > 0) reasons.push(`${SPELLS[champ.spells?.second]?.name || '점화'}(쿨 ${champ.spellCooldowns.second}턴)`);
+### 스킬
+${Object.entries(champ.skills).map(([key, skill]) =>
+  skill.description.map((d, i) => `- ${key}${skill.name.length > 1 ? (i + 1) : ''}: ${d}`).join('\n')
+).join('\n')}
 
-  return reasons.length > 0 ? reasons.join(', ') : '없음';
-}
+### 콤보 참고
+${champ.tips.combos.map(c => `- ${c}`).join('\n')}
 
-export function buildSystemPrompt(game) {
-  return `당신은 "ib-lol talk" 게임의 심판이자 AI 스파링 파트너입니다.
-리그 오브 레전드의 미드 라인전 1v1을 텍스트 Interactive Fiction으로 진행합니다.
-양쪽 모두 리신(Lee Sin)입니다.
+### 강점/약점
+강점: ${champ.tips.strengths.join(', ')}
+약점: ${champ.tips.weaknesses.join(', ')}
 
-## 게임의 목적
-이 게임은 **리그 오브 레전드의 진입장벽을 낮추기 위한 학습 도구**입니다.
-승패보다 **플레이어가 리신의 스킬 메커니즘을 체험하고 이해하는 것**이 핵심입니다.
+## 현재 게임 상태 (${gameState.turn}턴)
 
-## 당신의 역할
-1. **플레이어 입력 해석**: 자연어 입력을 게임 행동으로 변환
-2. **AI 행동 결정**: 다양한 스킬 조합을 보여주며 적극적으로 교전
-3. **결과 판정**: 양쪽 행동의 조합으로 결과를 결정
-4. **서술 + 코칭**: 결과를 생생하게 서술하면서, 스킬 메커니즘을 자연스럽게 설명
+### 플레이어
+- HP: ${gameState.player.hp}% | 에너지: ${gameState.player.energy}/200
+- 레벨: ${gameState.player.level} | CS: ${gameState.player.cs} | 골드: ${gameState.player.gold}
+- 위치: ${gameState.player.position}
+- 쉴드: ${gameState.player.shield}
+${playerSkills}
+- 소환사주문: ${gameState.player.spells.map((s, i) => `${spellNames[s] || s}${gameState.player.spellCooldowns[i] > 0 ? ` (쿨 ${gameState.player.spellCooldowns[i]}턴)` : ''}`).join(', ')}
+- 룬: ${runeDesc[gameState.player.rune] || gameState.player.rune}
+- 버프: ${gameState.player.buffs?.length ? gameState.player.buffs.join(', ') : '없음'}
+- 디버프: ${gameState.player.debuffs?.length ? gameState.player.debuffs.join(', ') : '없음'}
 
-## 턴 시스템: 상황 단위
-- 턴 규모는 행동 강도에 따라 자동 조절
-- **저강도** (파밍, 대기, 이동): 웨이브 단위로 처리 가능 (~30초)
-- **고강도** (스킬 사용, 올인, 기습): 스킬 단위로 세밀하게 (~2-3초)
-- 양쪽 다 저강도 → 한 턴에 요약 처리
-- 한쪽이라도 고강도 → 스킬 단위로 처리
+### 적 (AI)
+- HP: ${gameState.enemy.hp}% | 에너지: ${gameState.enemy.energy}/200
+- 레벨: ${gameState.enemy.level} | CS: ${gameState.enemy.cs} | 골드: ${gameState.enemy.gold}
+- 위치: ${gameState.enemy.position}
+- 쉴드: ${gameState.enemy.shield}
+${enemySkills}
+- 소환사주문: ${gameState.enemy.spells.map((s, i) => `${spellNames[s] || s}${gameState.enemy.spellCooldowns[i] > 0 ? ` (쿨 ${gameState.enemy.spellCooldowns[i]}턴)` : ''}`).join(', ')}
+- 룬: ${runeDesc[gameState.enemy.rune] || gameState.enemy.rune}
+- 버프: ${gameState.enemy.buffs?.length ? gameState.enemy.buffs.join(', ') : '없음'}
+- 디버프: ${gameState.enemy.debuffs?.length ? gameState.enemy.debuffs.join(', ') : '없음'}
 
-### 끼어들기 (Interrupt)
-플레이어가 저강도 행동을 했는데 AI가 고강도 행동을 하면:
-- "CS를 먹으려는 순간, 상대가 Q를 날렸다!" 식으로 연출
-- 턴을 즉시 끊고, 다음 턴에 플레이어에게 대응 기회를 줌
-- **플레이어에게 항상 대응 기회를 보장할 것**
+### 미니언
+- 아군: 근접 ${gameState.minions.player.melee} / 원거리 ${gameState.minions.player.ranged}
+- 적: 근접 ${gameState.minions.enemy.melee} / 원거리 ${gameState.minions.enemy.ranged}
 
-## AI 성격
-${AI_PERSONALITY}
+### 타워 HP
+- 아군 타워: ${gameState.tower.player}% | 적 타워: ${gameState.tower.enemy}%
 
-## 스킬 적중/회피 규칙 (확률 0 — 순수 의도 조합)
+## 위치 시스템
+위치는 다음 태그 중 하나:
+- MELEE_RANGE: 근접 (AA, E, R 사거리)
+- MID_RANGE: 중거리 (Q 사거리 내)
+- BEHIND_MINIONS: 미니언 뒤 (Q1 차단됨!)
+- BUSH: 부쉬 (시야 차단)
+- TOWER_RANGE: 타워 사거리 내 (타워가 공격자에게 지속 피해!)
+- FAR: 멀리 (스킬 사거리 밖)
 
-### Q (음파) — 직선 투사체
-- 미니언 뒤에 있으면(CS_SAFE) → 미니언에 막혀 빗나감
-- 미니언 앞에 노출되어 있으면(PRESS, ALL_IN, AA) → 적중
-- 옆으로 빠지면(MV_DODGE) → 빗나감
-- 부쉬로 들어가면(BUSH_IN) → 빗나감
-- 후퇴 중(RETREAT) → 사거리에 따라 다름
+## 너의 역할
 
-### E (폭풍) — 자기 주변 원형 범위 (9칸)
-- 범위 안에 있으면 적중 (미니언 차단 없음)
-- Q보다 회피 어렵지만, 사거리가 짧아서 접근해야 씀
+### 1. 플레이어 의도 해석
+플레이어의 자연어 입력을 해석해서 어떤 행동인지 파악.
 
-### AA / R — 대상지정
-- 사거리 안이면 자동 적중
-- 회피: 사거리 이탈, 부쉬, 점멸
+### 2. AI 대응 결정
+플레이어 의도를 **읽고** 대응. 랜덤이 아니라 논리적으로:
+- 플레이어 Q1 → 미니언 뒤로 이동해서 차단
+- 플레이어 CS → 그 타이밍에 트레이드
+- 플레이어 올인 → W1 쉴드 + 카운터
+- 플레이어 부쉬 → 웨이브 푸시
 
-### 맞교환
-- 양쪽 다 공격 → 둘 다 맞음 (공격 중 위치 고정)
+### 3. 결과 판정 + 상태 업데이트
+스킬 특성을 반영해서 피해량(HP%) 결정:
+- Q2는 잃은 체력 비례 (HP 낮을수록 강력)
+- E1은 마법 피해 (마저로 경감, 물리방어 높은 상대에게 유효)
+- W1 쉴드는 피해 흡수
+- W2 피흡으로 체력 회복
+- R 넉백 → 타워 사거리로 밀어넣기 가능
+- 패시브: 스킬 사이 AA로 에너지 회복
+- 레벨/스킬랭크 높을수록 피해 증가
+- 룬 효과 자연스럽게 반영
 
-### CS 트레이드오프
-- CS를 먹으려면 미니언 근처에 서야 함 → 위치 예측 가능
-- 회피하면 CS 놓침
+### 4. 서술
+각 스킬이 **뭘 하는지** 자연스럽게 드러나게 서술 (교육 목적).
+콤보는 스킬별로 풀어서 설명.
 
-## 현재 게임 상태
-턴: ${game.turn}
-플레이어: HP ${Math.round(game.player.hp)}/${game.player.maxHp}, 에너지 ${game.player.energy}/${game.player.maxEnergy}, CS ${game.player.cs}, 레벨 ${game.player.level}, 위치 (${game.player.x},${game.player.y})${game.player.inBush ? ' [부쉬]' : ''}
-  스킬레벨: Q=${game.player.skillLevels.Q} W=${game.player.skillLevels.W} E=${game.player.skillLevels.E} R=${game.player.skillLevels.R}
-  쿨다운: Q=${game.player.cooldowns.Q} W=${game.player.cooldowns.W} E=${game.player.cooldowns.E} R=${game.player.cooldowns.R}
-  ⚡ 사용가능: ${getAvailableSkills(game.player, game)}
-  ❌ 사용불가: ${getUnavailableSkills(game.player, game)}
-  마크: Q마크=${game.player.marks.q > 0 ? '있음' : '없음'} E마크=${game.player.marks.e > 0 ? '있음' : '없음'}
-  쉴드: ${game.player.shield}, 포션: ${game.player.potions || 0}개${game.player.potionActive ? ' (사용중)' : ''}
-  소환사주문: 점멸(쿨${game.player.spellCooldowns?.flash || 0}) + ${SPELLS[game.player.spells?.second]?.name || '점화'}(쿨${game.player.spellCooldowns?.second || 0})
-  룬: ${RUNES[game.player.rune]?.name || '정복자'}${game.player.rune === 'conqueror' ? ` (스택:${game.player.runeState?.stacks || 0}/12)` : ''}${game.player.rune === 'electrocute' ? ` (쿨:${game.player.runeState?.cooldown || 0})` : ''}${game.player.rune === 'grasp' ? ` (${game.player.runeState?.ready ? '충전됨' : '충전중'})` : ''}
-  ${game.player.ignitedBy ? '🔥 점화 피해 중!' : ''}${game.player.exhausted > 0 ? '💨 탈진 상태!' : ''}
-적(AI): HP ${Math.round(game.enemy.hp)}/${game.enemy.maxHp}, 에너지 ${game.enemy.energy}/${game.enemy.maxEnergy}, CS ${game.enemy.cs}, 레벨 ${game.enemy.level}, 위치 (${game.enemy.x},${game.enemy.y})${game.enemy.inBush ? ' [부쉬]' : ''}
-  스킬레벨: Q=${game.enemy.skillLevels.Q} W=${game.enemy.skillLevels.W} E=${game.enemy.skillLevels.E} R=${game.enemy.skillLevels.R}
-  쿨다운: Q=${game.enemy.cooldowns.Q} W=${game.enemy.cooldowns.W} E=${game.enemy.cooldowns.E} R=${game.enemy.cooldowns.R}
-  ⚡ 사용가능: ${getAvailableSkills(game.enemy, game)}
-  ❌ 사용불가: ${getUnavailableSkills(game.enemy, game)}
-  마크: Q마크=${game.enemy.marks?.q > 0 ? '있음' : '없음'} E마크=${game.enemy.marks?.e > 0 ? '있음' : '없음'}
-  소환사주문: 점멸(쿨${game.enemy.spellCooldowns?.flash || 0}) + ${SPELLS[game.enemy.spells?.second]?.name || '점화'}(쿨${game.enemy.spellCooldowns?.second || 0})
-  ${game.enemy.ignitedBy ? '🔥 점화 피해 중!' : ''}${game.enemy.exhausted > 0 ? '💨 탈진 상태!' : ''}
-미니언: 아군(근접${game.minions.player.melee} 원거리${game.minions.player.ranged}) vs 적(근접${game.minions.enemy.melee} 원거리${game.minions.enemy.ranged})
-거리: ${Math.abs(game.player.x - game.enemy.x)}칸
+### 5. AI 챗
+~함 체로 친근하게. 대응 이유 + 팁 포함.
+예: "Q1 미니언 뒤에서 피함ㅋㅋ 실전에서도 Q1은 미니언 뒤에서 피하는 게 기본임"
 
-## 사거리 참고
-- AA: 3칸, E: 9칸, R: 8칸, Q: 24칸, W: 14칸, 타워: 15칸
-- 아군타워: x=3, 적타워: x=57
+## 턴 규모
+- 양쪽 저강도 (파밍/대기) → 요약 처리, CS/골드 적절히 증가
+- 한쪽이라도 고강도 (교전/올인) → 세밀하게 처리
+- 끼어들기: 플레이어 저강도 + AI 고강도 → "CS 먹으려는 순간 상대가 Q1을 날렸다!" 식 연출
 
-## 스킬 효과 요약 (정확한 수치는 서버가 계산)
-- **Q1 음파**: 물리 피해(${game.player.skillLevels.Q > 0 ? LEE_SIN.skills.Q.q1Base[game.player.skillLevels.Q - 1] : 0}+115%보너스AD) + 적에게 표식 3초. 직선 투사체, 미니언에 막힘
-- **Q2 공명타**: Q1 표식 대상에게 돌진 + 물리 피해(잃은 체력 비례 최대 2배). Q1 맞혀야 사용 가능
-- **W1 방호**: 자신/아군에게 돌진 + 쉴드(${game.player.skillLevels.W > 0 ? LEE_SIN.skills.W.shield[game.player.skillLevels.W - 1] : 0}) 2초. 미니언/와드에도 사용 가능 → 위치 변경 수단
-- **W2 철갑**: 생명력 흡수 + 주문 흡혈 4초
-- **E1 폭풍**: 주변 원형 마법 피해(${game.player.skillLevels.E > 0 ? LEE_SIN.skills.E.e1Base[game.player.skillLevels.E - 1] : 0}+100%총AD) + 표식. 미니언 차단 없음
-- **E2 쇠약**: E1 표식 대상 둔화(${game.player.skillLevels.E > 0 ? LEE_SIN.skills.E.slowPercent[game.player.skillLevels.E - 1] : 0}%) 4초
-- **R 용의 분노**: 대상 넉백(16칸) + 물리 피해(${game.player.skillLevels.R > 0 ? LEE_SIN.skills.R.base[game.player.skillLevels.R - 1] : 0}+200%보너스AD). 타워 쪽으로 차면 킬각!
-- **패시브 연타**: 스킬 사용 후 AA 2회 공속 40%↑ + 기력 회복
-- **AA**: 총AD ${game.player.ad} 물리 피해
+## 레벨업
+일정 CS/턴 도달 시 레벨업 판정. 대략:
+- Lv2: CS 7~8 또는 4~5턴
+- Lv3: CS 13~14
+- Lv4~: 이후 웨이브당
+- 킬 시 추가 경험치로 빠른 레벨업
+R은 레벨 6/11/16에서만 찍기 가능.
+레벨업 시 levelUp 필드에 옵션 제공.
 
-**중요: Q1은 피해를 줌과 동시에 표식을 남기는 것임. "표식만 남긴다"가 아님!**
-**중요: 서술에 구체적 피해 숫자를 쓰지 말 것! 피해량은 서버가 계산해서 별도 표시함. "큰 피해", "아팠음" 같은 표현만 사용.**
+## 승리 조건
+- 킬: 상대 HP 0%
+- CS 100: 먼저 CS 100 도달
+- 타워 파괴: 상대 타워 HP 0%
 
-## 응답 형식
-반드시 아래 JSON 형식으로만 응답하세요. 다른 텍스트 없이 JSON만.
-
+## 응답 형식 (반드시 JSON)
 \`\`\`json
 {
-  "playerAction": {
-    "type": "Q1_CAST|Q2_CAST|W1_SELF|W1_MINION|W2_CAST|E1_CAST|E2_CAST|R_CAST|AA_CHAMP|CS_SAFE|CS_PUSH|PRESS|RETREAT|BUSH_IN|BUSH_OUT|ALL_IN|MV_DODGE|RECALL|FLASH|IGNITE|EXHAUST|BARRIER|POTION|IDLE",
-    "detail": "해석한 구체적 행동 설명"
+  "narrative": "교전/상황 서술. 스킬 하나하나 설명. 교육적으로.",
+  "aiChat": "AI 반응 (~함 체). 대응 이유 + 팁.",
+  "stateUpdate": {
+    "playerHp": 0~100,
+    "enemyHp": 0~100,
+    "playerEnergy": 0~200,
+    "enemyEnergy": 0~200,
+    "playerCooldowns": { "Q": 0, "W": 0, "E": 0, "R": 0 },
+    "enemyCooldowns": { "Q": 0, "W": 0, "E": 0, "R": 0 },
+    "playerPosition": "위치태그",
+    "enemyPosition": "위치태그",
+    "playerCs": 숫자,
+    "enemyCs": 숫자,
+    "playerLevel": 숫자,
+    "enemyLevel": 숫자,
+    "playerGold": 숫자,
+    "enemyGold": 숫자,
+    "playerShield": 0,
+    "enemyShield": 0,
+    "playerBuffs": [],
+    "enemyBuffs": [],
+    "playerDebuffs": [],
+    "enemyDebuffs": [],
+    "towerHp": { "player": 0~100, "enemy": 0~100 },
+    "minions": { "player": { "melee": 0~3, "ranged": 0~3 }, "enemy": { "melee": 0~3, "ranged": 0~3 } }
   },
-  "aiAction": {
-    "type": "같은 타입 중 하나",
-    "detail": "AI의 행동 설명"
-  },
-  "resolution": {
-    "playerHits": [{"skill": "Q1|E1|AA|R|IGNITE", "hit": true|false, "reason": "적중/회피 이유"}],
-    "aiHits": [{"skill": "Q1|E1|AA|R|IGNITE", "hit": true|false, "reason": "적중/회피 이유"}],
-    "playerCs": 0,
-    "aiCs": 0,
-    "positionChange": {
-      "player": {"x": 0, "y": 0},
-      "enemy": {"x": 0, "y": 0}
-    },
-    "interrupted": false,
-    "turnScale": "farming|skirmish"
-  },
-  "narrative": "1~2문장. 핵심만. 숫자 쓰지 말 것. 예: '음파 적중! 표식이 남음', 'E로 둔화 걸림'",
-  "aiChat": "AI가 친구처럼 하는 말 (~함 체) — 논쟁, 감탄, 조언, 놀림 등. 스킬 메커니즘 설명 포함. 반드시 포함!",
-  "suggestions": ["의도가 드러나는 선택지 3개. 왜 그 행동을 하는지, 무엇을 노리는지가 보여야 함. 예: 'Q로 찔러보고 맞으면 따라간다', '미니언 뒤에 숨어서 CS 챙기기', '앞으로 걸어가서 E 범위 진입 압박', 'W 쉴드 깔고 교환 유도', 'Q 쿨 돌아올 때까지 안전하게', '부쉬 숨어서 기습 노리기'"]
+  "levelUp": null 또는 { "newLevel": 숫자, "who": "player"|"enemy"|"both", "options": ["Q","W","E"], "descriptions": ["설명1","설명2","설명3"] },
+  "suggestions": ["추천 행동 1", "추천 행동 2", "추천 행동 3"],
+  "gameOver": null 또는 { "winner": "player"|"enemy", "reason": "kill"|"cs"|"tower", "summary": "게임 요약" }
 }
 \`\`\`
 
-### 소환사 주문 규칙
-- FLASH: 즉시 이동, 모든 공격 회피 가능. 쿨다운 100턴.
-- IGNITE: 인접 거리(12칸)에서 사용. 고정 피해 + 치유 감소. 쿨다운 60턴.
-- EXHAUST: 13칸 내. 둔화 + 피해 35% 감소. 쿨다운 70턴.
-- BARRIER: 즉시 보호막. 쿨다운 60턴.
-- 소환사 주문은 다른 행동과 동시 사용 불가 (독립 행동)
-- 쿨다운이 0일 때만 사용 가능
+중요:
+- 반드시 유효한 JSON만 출력. 다른 텍스트 없이.
+- stateUpdate의 모든 필드는 필수.
+- HP는 0~100% 범위.
+- 에너지는 0~200 범위.
+- 쿨타임은 턴 수 (1턴 ≈ 3초). 0 = 사용 가능.
+- CS, 레벨, 골드는 이전보다 감소 불가.
+- 스킬은 Q1/Q2/W1/W2/E1/E2/R로 정확히 구분하여 서술.
+- 사용 불가능한 스킬(레벨 0, 쿨타임 중, 에너지 부족)은 사용하지 말 것.`;
+}
 
-### 룬 효과 (자동 적용, LLM이 서술에 포함)
-- 정복자: 교전 시 스택 쌓임 → 최대 시 AD 증가 + 회복
-- 감전: 3회 적중 시 추가 피해 (쿨다운 있음)
-- 착취의 손아귀: 주기적으로 AA에 추가 피해 + 회복 + 영구 체력
+function buildSkillInfo(champ, fighter) {
+  const lines = [];
+  for (const [key, skill] of Object.entries(champ.skills)) {
+    const lv = fighter.skillLevels[key];
+    const cd = fighter.cooldowns[key];
+    const maxRank = skill.maxRank;
 
-### 중요 규칙
-- playerAction.type은 반드시 위 enum 중 하나여야 합니다
-- 스킬 레벨이 0이면 해당 스킬 사용 불가
-- 쿨다운이 0보다 크면 해당 스킬 사용 불가
-- 에너지가 부족하면 스킬 사용 불가
-- 사거리 밖이면 스킬 사용 불가 (거리 확인!)
-- 플레이어 입력이 불가능한 행동이면, 가능한 범위에서 가장 가까운 행동으로 해석
-- positionChange는 이동할 칸 수 (현재 위치에 더할 값)
-- farming 턴에서 CS는 웨이브 단위 (1~4), skirmish 턴에서는 0~1
-- aiChat은 반드시 포함 (~함 체). 플레이어 행동에 리액션 + 자기 행동 말하기. 예: "ㅋㅋ 갑자기 Q 날림", "아 E 아팠음", "나도 CS 좀 먹음"
-- suggestions는 반드시 3개. 의도/목적이 드러나는 표현. "Q 쏜다"(X) → "Q로 찔러보고 맞으면 따라간다"(O). 공격/수비/파밍 중 다양하게 제시.
-- **suggestions 필수 검증**: 위의 "⚡ 사용가능" 목록에 있는 스킬만 제안할 것! "❌ 사용불가"에 있는 스킬은 절대 제안하지 말 것!
-- **AI 행동 필수 검증**: AI도 자기 "⚡ 사용가능" 목록의 스킬만 사용 가능! 미습득/쿨타임/에너지부족 스킬 사용 금지!
-`;
+    let status;
+    if (lv === 0) {
+      status = '미습득';
+    } else if (cd > 0) {
+      status = `쿨타임 ${cd}턴`;
+    } else {
+      const cost = skill.cost[0];
+      if (cost > fighter.energy) {
+        status = `에너지 부족 (${cost} 필요)`;
+      } else {
+        status = '사용 가능';
+      }
+    }
+
+    lines.push(`- ${key} (${skill.name.join('/')}): Lv.${lv}/${maxRank} [${status}]`);
+  }
+  return lines.join('\n');
 }

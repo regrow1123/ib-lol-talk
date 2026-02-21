@@ -114,15 +114,15 @@ body {
   font-size: 0.58em; color: #8a9aaa; margin-top: 2px;
 }
 .info-tags { display: flex; gap: 3px; margin-left: auto; }
-.tag {
-  padding: 1px 4px;
+.info-position {
+  padding: 1px 6px;
   background: #243040;
   border: 1px solid #2a3a4a;
   border-radius: 3px;
   font-size: 0.85em;
+  color: #8ac;
+  margin-left: auto;
 }
-.tag.on-cd { opacity: 0.3; }
-.tag.rune-tag { background: #2a2040; border-color: #3a2a5a; }
 
 /* ── Chat Feed ── */
 .chat-feed {
@@ -390,6 +390,7 @@ body {
 .action-btn:hover { background: #2d5a8a; }
 
 .gameover-text { font-size: 2em; font-weight: 700; margin-bottom: 8px; }
+.gameover-summary { font-size: 0.85em; color: #666; margin-bottom: 12px; line-height: 1.5; }
 
 /* ── Setup Screen ── */
 .setup-box {
@@ -460,7 +461,7 @@ body {
 .rune-icon { font-size: 1.4em; flex-shrink: 0; }
 .rune-name { font-weight: 700; font-size: 0.85em; }
 .rune-desc { font-size: 0.68em; color: #888; }
-.rune-card > div:last-child { display: flex; flex-direction: column; }
+.rune-info { display: flex; flex-direction: column; }
 
 .diff-grid {
   display: flex;

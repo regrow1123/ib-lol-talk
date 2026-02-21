@@ -1,8 +1,7 @@
-// Vercel serverless: POST /api/turn
-// Stateless — client sends full game state + input, server calls LLM + resolves
-import { interpretTurn } from '../server/llm.js';
-import { resolveTurn } from '../server/resolve.js';
-import { fullState } from '../server/game.js';
+// Vercel serverless: POST /api/turn — V2
+import { callLLM } from '../server/llm.js';
+import { validateStateUpdate } from '../server/validate.js';
+import { applyStateUpdate } from '../server/game.js';
 
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -17,50 +16,60 @@ export default async function handler(req, res) {
   }
 
   if (gameState.phase === 'gameover') {
-    return res.json({
-      state: gameState,
-      narrative: '게임이 이미 종료되었습니다.',
-      enemyAction: null,
-    });
+    return res.json({ state: gameState, narrative: '게임이 이미 종료되었습니다.', aiChat: null, suggestions: [] });
   }
 
   try {
-    // LLM interprets player input + decides AI action
-    const llmResult = await interpretTurn(gameState, input, history || []);
+    // 1. LLM call
+    const llmResult = await callLLM(gameState, input, history || []);
 
-    // Server validates and applies exact damage/state changes
-    const { dmgLog, state } = resolveTurn(gameState, llmResult);
+    // 2. Validate stateUpdate
+    const validated = validateStateUpdate(llmResult.stateUpdate, gameState);
 
-    console.log(`Turn ${gameState.turn}: "${input}" → ${llmResult.playerAction.type} | AI=${llmResult.aiAction.type}`);
+    // 3. Apply to state
+    let nextState = applyStateUpdate(gameState, validated);
 
-    // Build narrative from actual server events (not LLM's guess)
-    const skillNames = { Q1:'음파', Q2:'공명타', E1:'폭풍', R:'용의 분노', AA:'기본공격', IGNITE:'점화' };
-    const eventLines = [];
-    for (const ev of dmgLog.events) {
-      const who = ev.who === 'player' ? '내' : '적';
-      const skill = skillNames[ev.skill] || ev.skill;
-      if (ev.result === 'hit') {
-        eventLines.push(`${who} ${skill} 적중! (${ev.dmg} 피해)`);
-      } else if (ev.result === 'miss') {
-        eventLines.push(`${who} ${skill} 빗나감${ev.reason ? ' — ' + ev.reason : ''}`);
-      } else if (ev.result === 'invalid') {
-        eventLines.push(`${who} ${skill} 사용 불가`);
-      }
+    // 4. Check gameOver
+    let gameOver = llmResult.gameOver || null;
+    if (validated.playerHp <= 0) {
+      gameOver = { winner: 'enemy', reason: 'kill', summary: llmResult.gameOver?.summary || '적에게 처치당했습니다.' };
+    } else if (validated.enemyHp <= 0) {
+      gameOver = { winner: 'player', reason: 'kill', summary: llmResult.gameOver?.summary || '적을 처치했습니다!' };
+    } else if (validated.playerCs >= 100) {
+      gameOver = { winner: 'player', reason: 'cs', summary: 'CS 100 달성!' };
+    } else if (validated.enemyCs >= 100) {
+      gameOver = { winner: 'enemy', reason: 'cs', summary: '적이 먼저 CS 100에 도달했습니다.' };
+    } else if (validated.towerHp.enemy <= 0) {
+      gameOver = { winner: 'player', reason: 'tower', summary: '적 타워를 파괴했습니다!' };
+    } else if (validated.towerHp.player <= 0) {
+      gameOver = { winner: 'enemy', reason: 'tower', summary: '아군 타워가 파괴되었습니다.' };
     }
-    // Add CS info
-    const pCs = llmResult.resolution?.playerCs || 0;
-    const aCs = llmResult.resolution?.aiCs || 0;
-    if (pCs > 0) eventLines.push(`CS +${pCs}`);
 
-    let narrative = eventLines.length > 0 ? eventLines.join(' / ') : (llmResult.narrative || '소강 상태');
+    if (gameOver) {
+      nextState.phase = 'gameover';
+      nextState.winner = gameOver.winner;
+    }
+
+    // 5. Check levelUp
+    let levelUp = llmResult.levelUp || null;
+    if (levelUp && levelUp.who !== 'enemy') {
+      nextState.phase = 'skillup';
+      nextState.player.skillPoints = (nextState.player.skillPoints || 0) + 1;
+    }
+    // Enemy auto level-up (AI picks skill)
+    if (levelUp && (levelUp.who === 'enemy' || levelUp.who === 'both')) {
+      nextState.enemy.skillPoints = 0; // AI already decided
+    }
+
+    console.log(`Turn ${gameState.turn}: "${input}" → HP ${validated.playerHp}/${validated.enemyHp}`);
 
     res.json({
-      state,
-      narrative,
-      enemyAction: llmResult.aiChat,
-      playerAction: llmResult.playerAction.detail,
-      aiAction: llmResult.aiAction.detail,
+      state: nextState,
+      narrative: llmResult.narrative,
+      aiChat: llmResult.aiChat,
       suggestions: llmResult.suggestions || [],
+      levelUp,
+      gameOver,
     });
   } catch (err) {
     console.error('Turn error:', err.message);

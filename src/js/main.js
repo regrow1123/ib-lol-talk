@@ -1,27 +1,31 @@
-// ib-lol talk — KakaoTalk-style chat UI
+// ib-lol talk V2 — KakaoTalk-style chat UI
 const $ = id => document.getElementById(id);
 
-const API_BASE = window.location.hostname === 'localhost'
-  ? 'http://localhost:3001'
-  : '';
+const API_BASE = window.location.hostname === 'localhost' ? 'http://localhost:3001' : '';
 
-let gameId = null;
 let state = null;
 let sending = false;
-let drawerOpen = false;
-let setupChoices = { spell: null, rune: null };
-let turnHistory = []; // {role, content} pairs for LLM context
+let turnHistory = [];
+let setupChoices = { spells: [], rune: null };
 
 // ── Setup Screen ──
 function initSetup() {
-  const overlay = $('setup-overlay');
-
-  // Spell selection (flash is locked, pick second)
-  document.querySelectorAll('#spell-grid .spell-card:not(.locked)').forEach(el => {
+  // Spell selection: pick 2 from 5
+  document.querySelectorAll('#spell-grid .spell-card').forEach(el => {
     el.onclick = () => {
-      document.querySelectorAll('#spell-grid .spell-card:not(.locked)').forEach(c => c.classList.remove('selected'));
-      el.classList.add('selected');
-      setupChoices.spell = el.dataset.spell;
+      const spell = el.dataset.spell;
+      if (el.classList.contains('selected')) {
+        el.classList.remove('selected');
+        setupChoices.spells = setupChoices.spells.filter(s => s !== spell);
+      } else {
+        if (setupChoices.spells.length >= 2) {
+          // Deselect first one
+          const first = setupChoices.spells.shift();
+          document.querySelector(`#spell-grid [data-spell="${first}"]`).classList.remove('selected');
+        }
+        setupChoices.spells.push(spell);
+        el.classList.add('selected');
+      }
       updateStartBtn();
     };
   });
@@ -40,56 +44,66 @@ function initSetup() {
     $('setup-start-btn').disabled = true;
     $('setup-start-btn').textContent = '로딩...';
     await startGame();
-    overlay.classList.add('hidden');
+    $('setup-overlay').classList.add('hidden');
   };
 }
 
 function updateStartBtn() {
-  $('setup-start-btn').disabled = !(setupChoices.spell && setupChoices.rune);
+  $('setup-start-btn').disabled = !(setupChoices.spells.length === 2 && setupChoices.rune);
 }
 
-// ── Init ──
+// ── Game Start ──
 async function startGame() {
-  // Start new game via server
   try {
     const res = await fetch(`${API_BASE}/api/start`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        spell: setupChoices.spell,
-        rune: setupChoices.rune,
-      }),
+      body: JSON.stringify({ spells: setupChoices.spells, rune: setupChoices.rune }),
     });
     const data = await res.json();
-    gameId = data.gameId;
     state = data.state;
 
-    // Store player choices in state
-    state.playerSetup = { ...setupChoices };
-
-    const spellNames = { ignite: '점화', exhaust: '탈진', barrier: '방어막', tp: '순간이동' };
+    const spellNames = { flash: '점멸', ignite: '점화', exhaust: '탈진', barrier: '방어막', tp: '텔레포트' };
     const runeNames = { conqueror: '정복자', electrocute: '감전', grasp: '착취의 손아귀' };
-    addSystemMsg(`📜 ${runeNames[setupChoices.rune]} | ⚡점멸 + ${spellNames[setupChoices.spell]}`);
-    addSystemMsg(data.narrative || '⚔️ 리신 vs 리신 — 라인전 시작');
-    renderSuggestions(['미니언 뒤에서 안전하게 CS 챙기기', 'Q로 찔러보고 맞으면 따라간다', '앞으로 걸어가서 압박 넣기']);
+    const spellText = setupChoices.spells.map(s => spellNames[s]).join(' + ');
+    addSystemMsg(`📜 ${runeNames[setupChoices.rune]} | 🔮 ${spellText}`);
+    addSystemMsg(data.narrative || '⚔️ 리신 vs 리신 — 라인전 시작!');
+    renderSuggestions(data.suggestions || []);
   } catch {
-    addSystemMsg('⚠️ 서버 연결 실패 — 로컬 모드로 진행합니다');
-    gameId = null;
-    // Fallback local state
-    state = {
-      turn: 0, phase: 'skillup',
-      player: { hp:645,maxHp:645,energy:200,maxEnergy:200,cs:0,gold:0,level:1,shield:0,
-                skillLevels:{Q:0,W:0,E:0,R:0},cooldowns:{Q:0,W:0,E:0,R:99},skillPoints:1 },
-      enemy:  { hp:645,maxHp:645,energy:200,maxEnergy:200,cs:0,gold:0,level:1,shield:0,
-                skillLevels:{Q:1,W:0,E:0,R:0},cooldowns:{Q:0,W:0,E:0,R:99},skillPoints:0 },
-    };
-    state.playerSetup = { ...setupChoices };
+    addSystemMsg('⚠️ 서버 연결 실패');
+    state = createFallbackState();
   }
 
   renderStatus();
   checkPhase();
 }
 
+function createFallbackState() {
+  return {
+    turn: 1, phase: 'skillup',
+    player: {
+      champion: 'lee-sin', hp: 100, maxHp: 100, energy: 200, maxEnergy: 200,
+      cs: 0, gold: 0, level: 1, shield: 0,
+      skillLevels: { Q: 0, W: 0, E: 0, R: 0 }, cooldowns: { Q: 0, W: 0, E: 0, R: 0 },
+      skillPoints: 1, position: 'MID_RANGE',
+      spells: setupChoices.spells, spellCooldowns: [0, 0],
+      rune: setupChoices.rune, buffs: [], debuffs: [],
+    },
+    enemy: {
+      champion: 'lee-sin', hp: 100, maxHp: 100, energy: 200, maxEnergy: 200,
+      cs: 0, gold: 0, level: 1, shield: 0,
+      skillLevels: { Q: 1, W: 0, E: 0, R: 0 }, cooldowns: { Q: 0, W: 0, E: 0, R: 0 },
+      skillPoints: 0, position: 'MID_RANGE',
+      spells: ['flash', 'ignite'], spellCooldowns: [0, 0],
+      rune: 'conqueror', buffs: [], debuffs: [],
+    },
+    minions: { player: { melee: 3, ranged: 3 }, enemy: { melee: 3, ranged: 3 } },
+    tower: { player: 100, enemy: 100 },
+    winner: null,
+  };
+}
+
+// ── Init ──
 function init() {
   setInput(false);
   initSetup();
@@ -98,21 +112,9 @@ function init() {
   $('player-input').addEventListener('keydown', e => {
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); submit(); }
   });
-
-  $('info-toggle').onclick = () => {
-    drawerOpen = !drawerOpen;
-    $('info-drawer').classList.toggle('hidden', !drawerOpen);
-  };
-
-  document.querySelectorAll('.chip').forEach(el => {
-    el.onclick = () => {
-      $('player-input').value = el.dataset.text;
-      $('player-input').focus();
-    };
-  });
 }
 
-// ── Submit ──
+// ── Submit Turn ──
 async function submit() {
   if (sending || !state || state.phase !== 'play') return;
   const input = $('player-input').value.trim();
@@ -122,11 +124,8 @@ async function submit() {
   $('player-input').value = '';
   $('suggestions').innerHTML = '';
   setInput(false);
-
-  // My message
   addMyMsg(input);
 
-  // Typing indicator
   const typing = addTypingIndicator();
 
   try {
@@ -141,19 +140,27 @@ async function submit() {
     if (data.error) {
       addSystemMsg(`⚠️ ${data.error}`);
     } else {
-      // Store turn in history for LLM context
       turnHistory.push({ role: 'user', content: input });
-      const assistantSummary = [data.narrative, data.enemyAction].filter(Boolean).join(' | ');
-      turnHistory.push({ role: 'assistant', content: assistantSummary });
-      // Keep last 10 messages (5 turns)
+      turnHistory.push({ role: 'assistant', content: `${data.narrative || ''} | ${data.aiChat || ''}` });
       if (turnHistory.length > 10) turnHistory = turnHistory.slice(-10);
 
-      if (data.narrative) addSystemMsg(data.narrative);
-      if (data.enemyAction) addEnemyMsg(data.enemyAction);
+      if (data.narrative) addNarratorMsg(data.narrative);
+      if (data.aiChat) addEnemyMsg(data.aiChat);
+
       if (data.state) state = data.state;
       renderSuggestions(data.suggestions || []);
       renderStatus();
-      checkPhase();
+
+      if (data.gameOver) {
+        state.phase = 'gameover';
+        state.winner = data.gameOver.winner;
+        showGameOver(data.gameOver);
+      } else if (data.levelUp && data.levelUp.who !== 'enemy') {
+        checkPhase();
+      } else {
+        state.phase = 'play';
+        setInput(true);
+      }
     }
   } catch {
     typing.remove();
@@ -161,18 +168,18 @@ async function submit() {
   }
 
   sending = false;
-  setInput(true);
-  $('player-input').focus();
+  if (state?.phase === 'play') {
+    setInput(true);
+    $('player-input').focus();
+  }
 }
 
-// ── Message helpers ──
+// ── Messages ──
 function addMyMsg(text) {
   const feed = $('chat-feed');
   const div = document.createElement('div');
   div.className = 'msg me';
-  div.innerHTML = `
-    <div class="msg-time">${timeStr()}</div>
-    <div class="msg-body"><div class="bubble">${esc(text)}</div></div>`;
+  div.innerHTML = `<div class="msg-time">${timeStr()}</div><div class="msg-body"><div class="bubble">${esc(text)}</div></div>`;
   feed.appendChild(div);
   scrollBottom();
 }
@@ -243,13 +250,12 @@ function timeStr() {
 
 function esc(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
 
-// ── Input state ──
 function setInput(on) {
   $('player-input').disabled = !on;
   $('send-btn').disabled = !on;
 }
 
-// ── Phase ──
+// ── Phase Check ──
 function checkPhase() {
   if (!state) return;
   if (state.phase === 'skillup' && state.player.skillPoints > 0) {
@@ -257,7 +263,6 @@ function checkPhase() {
     setInput(false);
   } else if (state.phase === 'gameover') {
     setInput(false);
-    showGameOver();
   } else {
     state.phase = 'play';
     setInput(true);
@@ -266,43 +271,63 @@ function checkPhase() {
 }
 
 // ── Skill Up ──
-function showSkillUp() {
+async function showSkillUp() {
   const overlay = $('skillup-overlay');
   const box = $('skillup-buttons');
   box.innerHTML = '';
   overlay.classList.remove('hidden');
 
   const skills = [
-    { key:'Q', name:'음파/공명타', vals:['55','80','105','130','155'] },
-    { key:'W', name:'방호/철갑', vals:['70','115','160','205','250'] },
-    { key:'E', name:'폭풍/쇠약', vals:['35','60','85','110','135'] },
-    { key:'R', name:'용의 분노', vals:['175','400','625'] },
+    { key: 'Q', name: '음파/공명타', desc: ['Lv1: 55dmg', 'Lv2: 80dmg', 'Lv3: 105dmg', 'Lv4: 130dmg', 'Lv5: 155dmg'] },
+    { key: 'W', name: '방호/철갑', desc: ['Lv1: 쉴드70', 'Lv2: 쉴드115', 'Lv3: 쉴드160', 'Lv4: 쉴드205', 'Lv5: 쉴드250'] },
+    { key: 'E', name: '폭풍/쇠약', desc: ['Lv1: 35+AD', 'Lv2: 60+AD', 'Lv3: 85+AD', 'Lv4: 110+AD', 'Lv5: 135+AD'] },
+    { key: 'R', name: '용의 분노', desc: ['Lv1: 175dmg', 'Lv2: 400dmg', 'Lv3: 625dmg'] },
   ];
 
   for (const s of skills) {
     const lv = state.player.skillLevels[s.key];
     const maxLv = s.key === 'R' ? 3 : 5;
     const canLevel = lv < maxLv && state.player.skillPoints > 0;
-    const rBlock = s.key === 'R' && ![6,11,16].includes(state.player.level);
+    const rBlock = s.key === 'R' && ![6, 11, 16].includes(state.player.level);
 
     const btn = document.createElement('button');
     btn.className = 'skill-btn';
-    const next = lv < s.vals.length ? s.vals[lv] : '-';
-    btn.textContent = `${s.key} — ${s.name}  [Lv.${lv}]  → ${next}`;
+    const nextDesc = lv < s.desc.length ? s.desc[lv] : 'MAX';
+    btn.textContent = `${s.key} — ${s.name}  [Lv.${lv}] → ${nextDesc}`;
     btn.disabled = !canLevel || rBlock;
 
     if (canLevel && !rBlock) {
-      btn.onclick = () => {
-        state.player.skillLevels[s.key]++;
-        state.player.skillPoints--;
-        renderStatus();
-        if (state.player.skillPoints <= 0) {
-          overlay.classList.add('hidden');
-          state.phase = 'play';
-          checkPhase();
-          addSystemMsg(`${s.key} 스킬을 배웠습니다`);
-        } else {
-          showSkillUp();
+      btn.onclick = async () => {
+        try {
+          const res = await fetch(`${API_BASE}/api/skillup`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ gameState: state, skill: s.key }),
+          });
+          const data = await res.json();
+          if (data.state) state = data.state;
+          renderStatus();
+          addSystemMsg(`${s.key} (${s.name}) 스킬을 배웠습니다!`);
+          if (state.player.skillPoints <= 0) {
+            overlay.classList.add('hidden');
+            state.phase = 'play';
+            setInput(true);
+          } else {
+            showSkillUp();
+          }
+        } catch {
+          // Fallback: client-side
+          state.player.skillLevels[s.key]++;
+          state.player.skillPoints--;
+          renderStatus();
+          addSystemMsg(`${s.key} (${s.name}) 스킬을 배웠습니다!`);
+          if (state.player.skillPoints <= 0) {
+            overlay.classList.add('hidden');
+            state.phase = 'play';
+            setInput(true);
+          } else {
+            showSkillUp();
+          }
         }
       };
     }
@@ -311,59 +336,72 @@ function showSkillUp() {
 }
 
 // ── Game Over ──
-function showGameOver() {
+function showGameOver(gameOver) {
   $('gameover-overlay').classList.remove('hidden');
-  $('gameover-text').textContent = state.winner === 'player' ? '🏆 승리!' : '💀 패배...';
+  $('gameover-title').textContent = gameOver.winner === 'player' ? '🏆 승리!' : '💀 패배...';
+  $('gameover-summary').textContent = gameOver.summary || '';
   $('restart-btn').onclick = () => {
     $('gameover-overlay').classList.add('hidden');
     $('chat-feed').innerHTML = '';
     state = null;
     turnHistory = [];
-    $('setup-overlay').classList.remove('hidden');
-    $('setup-start-btn').disabled = false;
+    setupChoices = { spells: [], rune: null };
+    // Reset setup UI
+    document.querySelectorAll('#spell-grid .spell-card').forEach(c => c.classList.remove('selected'));
+    document.querySelectorAll('#rune-grid .rune-card').forEach(c => c.classList.remove('selected'));
+    $('setup-start-btn').disabled = true;
     $('setup-start-btn').textContent = '게임 시작';
+    $('setup-overlay').classList.remove('hidden');
   };
 }
 
-// ── Status ──
+// ── Status Rendering ──
 function renderStatus() {
   if (!state) return;
   const p = state.player, e = state.enemy;
-  $('p-hp-fill').style.width = `${(p.hp/p.maxHp)*100}%`;
-  $('p-hp-text').textContent = `${Math.round(p.hp)}/${p.maxHp}`;
-  $('p-energy-fill').style.width = `${(p.energy/p.maxEnergy)*100}%`;
-  $('p-energy-text').textContent = `${Math.round(p.energy)}/${p.maxEnergy}`;
+
+  $('p-hp-fill').style.width = `${p.hp}%`;
+  $('p-hp-text').textContent = `${Math.round(p.hp)}%`;
+  $('p-energy-fill').style.width = `${(p.energy / 200) * 100}%`;
+  $('p-energy-text').textContent = `${Math.round(p.energy)}`;
   $('p-cs').textContent = p.cs;
   $('p-gold').textContent = p.gold;
   $('p-level').textContent = `Lv.${p.level}`;
+  $('p-position').textContent = positionLabel(p.position);
 
-  $('e-hp-fill').style.width = `${(e.hp/e.maxHp)*100}%`;
-  $('e-hp-text').textContent = `${Math.round(e.hp)}/${e.maxHp}`;
-  $('e-energy-fill').style.width = `${(e.energy/e.maxEnergy)*100}%`;
-  $('e-energy-text').textContent = `${Math.round(e.energy)}/${e.maxEnergy}`;
+  $('e-hp-fill').style.width = `${e.hp}%`;
+  $('e-hp-text').textContent = `${Math.round(e.hp)}%`;
+  $('e-energy-fill').style.width = `${(e.energy / 200) * 100}%`;
+  $('e-energy-text').textContent = `${Math.round(e.energy)}`;
   $('e-cs').textContent = e.cs;
   $('e-gold').textContent = e.gold;
   $('e-level').textContent = `Lv.${e.level}`;
+  $('e-position').textContent = positionLabel(e.position);
 
   $('turn-text').textContent = `${state.turn}턴`;
 
-  const spellIcons = { flash:'⚡', ignite:'🔥', exhaust:'💨', barrier:'🛡️', tp:'🌀' };
-  const runeIcons = { conqueror:'⚔️', electrocute:'⚡', grasp:'🌿' };
-  const spellNames = { flash:'점멸', ignite:'점화', exhaust:'탈진', barrier:'방어막', tp:'순이' };
-  const runeNames = { conqueror:'정복자', electrocute:'감전', grasp:'착취' };
+  // HP bar color
+  setHpColor('p-hp-fill', p.hp);
+  setHpColor('e-hp-fill', e.hp);
+}
 
-  for (const [pre, f] of [['p', p], ['e', e]]) {
-    const tags = $(`${pre}-tags`);
-    if (!tags) continue;
-    const spell2 = f.spells?.second || 'ignite';
-    const rune = f.rune || 'conqueror';
-    const flashCd = f.spellCooldowns?.flash || 0;
-    const spellCd = f.spellCooldowns?.second || 0;
-    tags.innerHTML =
-      `<span class="tag${flashCd > 0 ? ' on-cd' : ''}">${spellIcons.flash}</span>` +
-      `<span class="tag${spellCd > 0 ? ' on-cd' : ''}">${spellIcons[spell2] || '?'}</span>` +
-      `<span class="tag rune-tag">${runeIcons[rune] || '?'}</span>`;
-  }
+function setHpColor(id, hp) {
+  const el = $(id);
+  if (hp <= 25) el.style.background = 'linear-gradient(90deg, #c0392b, #e74c3c)';
+  else if (hp <= 50) el.style.background = 'linear-gradient(90deg, #e67e22, #f39c12)';
+  else el.style.background = 'linear-gradient(90deg, #27ae60, #2ecc71)';
+}
+
+function positionLabel(pos) {
+  const labels = {
+    MELEE_RANGE: '근접',
+    MID_RANGE: '중거리',
+    BEHIND_MINIONS: '미니언뒤',
+    BUSH: '부쉬',
+    TOWER_RANGE: '타워밑',
+    FAR: '먼거리',
+  };
+  return labels[pos] || pos;
 }
 
 // ── Suggestions ──
