@@ -88,7 +88,7 @@ export default async function handler(req, res) {
       state: nextState,
       narrative: llmResult.narrative,
       aiChat: llmResult.aiChat,
-      suggestions: llmResult.suggestions || [],
+      suggestions: levelUp ? [] : (llmResult.suggestions || []),
       levelUp,
       gameOver,
     });
