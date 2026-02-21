@@ -384,6 +384,20 @@ function setHpColor(id, hp) {
 }
 
 const DDRAGON = 'https://ddragon.leagueoflegends.com/cdn/14.20.1';
+const SKILL_DESC = {
+  Q: ['Q1 음파: 직선 투사체, 적중 시 물리 피해 + 표식 3초. 미니언에 막힘', 'Q2 공명타: 표식 대상에게 돌진 + 물리 피해. 잃은 체력 비례 최대 2배'],
+  W: ['W1 방호: 아군/미니언에게 돌진 + 쉴드', 'W2 철갑: 생명력 흡수 + 주문 흡혈 증가'],
+  E: ['E1 폭풍: 주변 원형 마법 피해 + 표식', 'E2 쇠약: 표식 대상 둔화'],
+  R: ['R 용의 분노: 대상 넉백 + 강한 물리 피해. 넉백된 적에 부딪힌 적도 피해'],
+};
+const SPELL_DESC = {
+  flash: '점멸: 즉시 짧은 거리 이동. 회피/기습용',
+  ignite: '점화: 지속 피해 + 치유 감소. 킬각용',
+  exhaust: '탈진: 둔화 + 피해 35% 감소. 올인 방어',
+  barrier: '방어막: 즉시 보호막 생성',
+  teleport: '텔레포트: 귀환 후 빠른 복귀',
+};
+
 const SKILL_ICONS = {
   Q: `${DDRAGON}/img/spell/LeeSinQOne.png`,
   W: `${DDRAGON}/img/spell/LeeSinWOne.png`,
@@ -417,6 +431,7 @@ function renderCooldowns(containerId, fighter) {
     } else {
       el.classList.add('cd-ready');
     }
+    el.onclick = () => showSkillTooltip(s, lv, cd);
     box.appendChild(el);
   }
 
@@ -434,8 +449,41 @@ function renderCooldowns(containerId, fighter) {
     } else {
       el.classList.add('cd-ready');
     }
+    const spellId = spells[i];
+    el.onclick = () => showSpellTooltip(spellId, cd);
     box.appendChild(el);
   }
+}
+
+// ── Skill/Spell Tooltip ──
+function showSkillTooltip(key, lv, cd) {
+  const desc = SKILL_DESC[key];
+  if (!desc) return;
+  const status = lv === 0 ? '미습득' : cd > 0 ? `쿨타임 ${cd}턴` : '사용 가능';
+  const text = `[${key} Lv.${lv}] ${status}\n${desc.join('\n')}`;
+  showTooltipPopup(text);
+}
+
+function showSpellTooltip(spellId, cd) {
+  const desc = SPELL_DESC[spellId];
+  if (!desc) return;
+  const status = cd > 0 ? `쿨타임 ${cd}턴` : '사용 가능';
+  showTooltipPopup(`[${status}] ${desc}`);
+}
+
+function showTooltipPopup(text) {
+  let el = $('skill-tooltip');
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'skill-tooltip';
+    el.className = 'skill-tooltip';
+    el.onclick = () => el.classList.add('hidden');
+    document.querySelector('.chat-app').appendChild(el);
+  }
+  el.textContent = text;
+  el.classList.remove('hidden');
+  clearTimeout(el._timer);
+  el._timer = setTimeout(() => el.classList.add('hidden'), 4000);
 }
 
 // ── Suggestions ──
