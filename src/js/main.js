@@ -70,6 +70,7 @@ async function startGame() {
     const spellText = setupChoices.spells.map(s => spellNames[s]).join(' + ');
     addSystemMsg(`📜 ${runeNames[setupChoices.rune]} | 🔮 ${spellText}`);
     addSystemMsg(data.narrative || '⚔️ 리신 vs 리신 — 라인전 시작!');
+    allSuggestions = data.suggestions || [];
   } catch {
     addSystemMsg('⚠️ 서버 연결 실패');
     state = createFallbackState();
@@ -118,6 +119,7 @@ function handlePhase() {
     setInput(false);
   } else {
     state.phase = 'play';
+    renderSuggestions(allSuggestions);
     setInput(true);
   }
 }
