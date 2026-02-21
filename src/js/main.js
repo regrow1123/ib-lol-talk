@@ -1,16 +1,17 @@
-// ib-lol talk V2 — KakaoTalk-style chat UI
+// ib-lol talk V2 — KakaoTalk-style chat UI (refactored)
 const $ = id => document.getElementById(id);
-
 const API_BASE = window.location.hostname === 'localhost' ? 'http://localhost:3001' : '';
+const DDRAGON = 'https://ddragon.leagueoflegends.com/cdn/14.20.1';
 
 let state = null;
 let sending = false;
 let turnHistory = [];
 let setupChoices = { spells: [], rune: null };
 
-// ── Setup Screen ──
+// ═══════════════════════════════════════
+// Setup Screen
+// ═══════════════════════════════════════
 function initSetup() {
-  // Spell selection: pick 2 from 5
   document.querySelectorAll('#spell-grid .spell-card').forEach(el => {
     el.onclick = () => {
       const spell = el.dataset.spell;
@@ -19,7 +20,6 @@ function initSetup() {
         setupChoices.spells = setupChoices.spells.filter(s => s !== spell);
       } else {
         if (setupChoices.spells.length >= 2) {
-          // Deselect first one
           const first = setupChoices.spells.shift();
           document.querySelector(`#spell-grid [data-spell="${first}"]`).classList.remove('selected');
         }
@@ -30,7 +30,6 @@ function initSetup() {
     };
   });
 
-  // Rune selection
   document.querySelectorAll('#rune-grid .rune-card').forEach(el => {
     el.onclick = () => {
       document.querySelectorAll('#rune-grid .rune-card').forEach(c => c.classList.remove('selected'));
@@ -52,7 +51,9 @@ function updateStartBtn() {
   $('setup-start-btn').disabled = !(setupChoices.spells.length === 2 && setupChoices.rune);
 }
 
-// ── Game Start ──
+// ═══════════════════════════════════════
+// Game Start
+// ═══════════════════════════════════════
 async function startGame() {
   try {
     const res = await fetch(`${API_BASE}/api/start`, {
@@ -68,17 +69,17 @@ async function startGame() {
     const spellText = setupChoices.spells.map(s => spellNames[s]).join(' + ');
     addSystemMsg(`📜 ${runeNames[setupChoices.rune]} | 🔮 ${spellText}`);
     addSystemMsg(data.narrative || '⚔️ 리신 vs 리신 — 라인전 시작!');
-    renderSuggestions(data.suggestions || []);
   } catch {
     addSystemMsg('⚠️ 서버 연결 실패');
     state = createFallbackState();
   }
 
   renderStatus();
-  checkPhase();
+  handlePhase(); // This will show skillup suggestions if needed
 }
 
 function createFallbackState() {
+  const runes = ['conqueror', 'electrocute', 'grasp'];
   return {
     turn: 1, phase: 'skillup',
     player: {
@@ -95,8 +96,7 @@ function createFallbackState() {
       skillLevels: { Q: 1, W: 0, E: 0, R: 0 }, cooldowns: { Q: 0, W: 0, E: 0, R: 0 },
       skillPoints: 0, position: '중거리',
       spells: ['flash', 'ignite'], spellCooldowns: [0, 0],
-      rune: ['conqueror','electrocute','grasp'][Math.floor(Math.random()*3)],
-      rune: 'conqueror', buffs: [], debuffs: [],
+      rune: runes[Math.floor(Math.random() * 3)], buffs: [], debuffs: [],
     },
     minions: { player: { melee: 3, ranged: 3 }, enemy: { melee: 3, ranged: 3 } },
     tower: { player: 100, enemy: 100 },
@@ -104,18 +104,92 @@ function createFallbackState() {
   };
 }
 
-// ── Init ──
-function init() {
-  setInput(false);
-  initSetup();
+// ═══════════════════════════════════════
+// Phase Handler (single source of truth)
+// ═══════════════════════════════════════
+function handlePhase() {
+  if (!state) return;
 
-  $('send-btn').onclick = submit;
-  $('player-input').addEventListener('keydown', e => {
-    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); submit(); }
-  });
+  if (state.phase === 'skillup' && state.player.skillPoints > 0) {
+    setInput(false);
+    showSkillUpChoices();
+  } else if (state.phase === 'gameover') {
+    setInput(false);
+  } else {
+    state.phase = 'play';
+    setInput(true);
+  }
 }
 
-// ── Submit Turn ──
+// ═══════════════════════════════════════
+// Skill Level-Up (via suggestions area)
+// ═══════════════════════════════════════
+const SKILL_NAMES = { Q: '음파', W: '방호', E: '폭풍', R: '용의 분노' };
+
+function showSkillUpChoices() {
+  addSystemMsg('⬆️ 스킬을 선택하세요');
+  const box = $('suggestions');
+  box.innerHTML = '';
+
+  const opts = ['Q', 'W', 'E'];
+  if (state.player.level >= 6 && state.player.skillLevels.R < 1) opts.push('R');
+
+  // Filter out maxed skills
+  const available = opts.filter(k => {
+    const maxLv = k === 'R' ? 3 : 5;
+    return state.player.skillLevels[k] < maxLv;
+  });
+
+  for (const key of available) {
+    const btn = document.createElement('button');
+    btn.className = 'suggestion-btn skillup-btn';
+    const lv = state.player.skillLevels[key];
+    btn.textContent = `${key} ${SKILL_NAMES[key]} (Lv${lv}→${lv + 1})`;
+    btn.onclick = () => doSkillUp(key);
+    box.appendChild(btn);
+  }
+}
+
+async function doSkillUp(key) {
+  // Disable all skillup buttons immediately
+  $('suggestions').querySelectorAll('.skillup-btn').forEach(b => { b.disabled = true; });
+
+  try {
+    const res = await fetch(`${API_BASE}/api/skillup`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ gameState: state, skill: key }),
+    });
+    const data = await res.json();
+    if (data.error) {
+      addSystemMsg(`⚠️ ${data.error}`);
+      showSkillUpChoices(); // Re-show choices
+      return;
+    }
+    if (data.state) state = data.state;
+  } catch {
+    // Fallback: client-side
+    state.player.skillLevels[key]++;
+    state.player.skillPoints--;
+  }
+
+  renderStatus();
+  addSystemMsg(`${key} (${SKILL_NAMES[key]}) 스킬을 배웠습니다!`);
+
+  // Check if more skill points remain
+  if (state.player.skillPoints > 0) {
+    showSkillUpChoices();
+  } else {
+    state.phase = 'play';
+    renderSuggestions([]); // Clear skillup buttons, next turn will have LLM suggestions
+    setInput(true);
+    $('player-input').focus();
+  }
+}
+
+// ═══════════════════════════════════════
+// Submit Turn
+// ═══════════════════════════════════════
 async function submit() {
   if (sending || !state || state.phase !== 'play') return;
   const input = $('player-input').value.trim();
@@ -123,7 +197,7 @@ async function submit() {
 
   sending = true;
   $('player-input').value = '';
-  $('suggestions').innerHTML = '';
+  renderSuggestions([]);
   setInput(false);
   addMyMsg(input);
 
@@ -141,26 +215,27 @@ async function submit() {
     if (data.error) {
       addSystemMsg(`⚠️ ${data.error}`);
     } else {
+      // Update history
       turnHistory.push({ role: 'user', content: input });
       turnHistory.push({ role: 'assistant', content: `${data.narrative || ''} | ${data.aiChat || ''}` });
-      if (turnHistory.length > 10) turnHistory = turnHistory.slice(-10);
+      if (turnHistory.length > 12) turnHistory = turnHistory.slice(-12);
 
+      // Render messages
       if (data.narrative) addSystemMsg(data.narrative);
       if (data.aiChat) addEnemyMsg(data.aiChat);
 
+      // Update state
       if (data.state) state = data.state;
       renderStatus();
 
+      // Handle result
       if (data.gameOver) {
         state.phase = 'gameover';
         state.winner = data.gameOver.winner;
-        renderSuggestions([]);
         showGameOver(data.gameOver);
       } else if (data.levelUp && data.levelUp.who !== 'enemy') {
-        // Show skill options as suggestions instead of overlay
-        addSystemMsg(`⬆️ 레벨 ${data.levelUp.newLevel}! 스킬을 선택하세요`);
-        renderSkillUpSuggestions(data.levelUp);
-        setInput(false);
+        // LLM returned levelUp → show skill choices (suggestions cleared by handlePhase)
+        handlePhase();
       } else {
         state.phase = 'play';
         renderSuggestions(data.suggestions || []);
@@ -179,7 +254,9 @@ async function submit() {
   }
 }
 
-// ── Messages ──
+// ═══════════════════════════════════════
+// Messages
+// ═══════════════════════════════════════
 function addMyMsg(text) {
   const feed = $('chat-feed');
   const div = document.createElement('div');
@@ -246,41 +323,22 @@ function setInput(on) {
   $('send-btn').disabled = !on;
 }
 
-// ── Phase Check ──
-function checkPhase() {
-  if (!state) return;
-  if (state.phase === 'skillup' && state.player.skillPoints > 0) {
-    addSystemMsg('⬆️ 스킬을 선택하세요');
-    const opts = ['Q','W','E'];
-    if (state.player.level >= 6 && state.player.skillLevels.R < 1) opts.push('R');
-    renderSkillUpSuggestions({ newLevel: state.player.level, options: opts, descriptions: [] });
-    setInput(false);
-  } else if (state.phase === 'gameover') {
-    setInput(false);
-  } else {
-    state.phase = 'play';
-    setInput(true);
-  }
-}
-
-// ── Game Over ──
+// ═══════════════════════════════════════
+// Game Over
+// ═══════════════════════════════════════
 function showGameOver(gameOver) {
   $('gameover-overlay').classList.remove('hidden');
   $('gameover-title').textContent = gameOver.winner === 'player' ? '🏆 승리!' : '💀 패배...';
   $('gameover-summary').textContent = gameOver.summary || '';
   $('review-btn').onclick = () => {
     $('gameover-overlay').classList.add('hidden');
-    // 채팅 로그 복기 가능, 입력은 비활성화 유지
     setInput(false);
-    // 선택지 영역에 새 게임 버튼
     const box = $('suggestions');
     box.innerHTML = '';
     const btn = document.createElement('button');
     btn.className = 'suggestion-btn';
     btn.textContent = '🔄 새 게임 시작';
-    btn.onclick = () => {
-      $('restart-btn').click();
-    };
+    btn.onclick = () => $('restart-btn').click();
     box.appendChild(btn);
   };
   $('restart-btn').onclick = () => {
@@ -289,16 +347,18 @@ function showGameOver(gameOver) {
     state = null;
     turnHistory = [];
     setupChoices = { spells: [], rune: null };
-    // Reset setup UI
     document.querySelectorAll('#spell-grid .spell-card').forEach(c => c.classList.remove('selected'));
     document.querySelectorAll('#rune-grid .rune-card').forEach(c => c.classList.remove('selected'));
     $('setup-start-btn').disabled = true;
     $('setup-start-btn').textContent = '게임 시작';
     $('setup-overlay').classList.remove('hidden');
+    renderSuggestions([]);
   };
 }
 
-// ── Status Rendering ──
+// ═══════════════════════════════════════
+// Status Rendering
+// ═══════════════════════════════════════
 function renderStatus() {
   if (!state) return;
   const p = state.player, e = state.enemy;
@@ -323,9 +383,6 @@ function renderStatus() {
   renderCooldowns('e-cooldowns', e);
   renderRune('e-rune', e.rune);
 
-  // turn display removed
-
-  // HP bar color
   setHpColor('p-hp-fill', p.hp);
   setHpColor('e-hp-fill', e.hp);
 }
@@ -351,7 +408,9 @@ function setHpColor(id, hp) {
   else el.style.background = 'linear-gradient(90deg, #27ae60, #2ecc71)';
 }
 
-const DDRAGON = 'https://ddragon.leagueoflegends.com/cdn/14.20.1';
+// ═══════════════════════════════════════
+// Cooldowns & Tooltips
+// ═══════════════════════════════════════
 const SKILL_DESC = {
   Q: ['Q1 음파: 직선 투사체(12티모🍄), 물리 피해 + 표식 3초. 미니언에 막힘', 'Q2 공명타: 표식 대상에게 돌진 + 물리 피해. 잃은 체력 비례 최대 2배'],
   W: ['W1 방호: 아군/미니언에게 돌진(7티모🍄) + 쉴드', 'W2 철갑: 생명력 흡수 + 주문 흡혈 증가'],
@@ -365,7 +424,6 @@ const SPELL_DESC = {
   barrier: '방어막: 즉시 보호막 생성',
   teleport: '텔레포트: 귀환 후 빠른 복귀',
 };
-
 const SKILL_ICONS = {
   Q: `${DDRAGON}/img/spell/LeeSinQOne.png`,
   W: `${DDRAGON}/img/spell/LeeSinWOne.png`,
@@ -384,21 +442,15 @@ function renderCooldowns(containerId, fighter) {
   const box = $(containerId);
   box.innerHTML = '';
 
-  const skills = ['Q', 'W', 'E', 'R'];
-  for (const s of skills) {
+  for (const s of ['Q', 'W', 'E', 'R']) {
     const lv = fighter.skillLevels?.[s] || 0;
     const cd = fighter.cooldowns?.[s] || 0;
     const el = document.createElement('div');
     el.className = 'cd-icon';
     el.innerHTML = `<img src="${SKILL_ICONS[s]}" alt="${s}">`;
-    if (lv === 0) {
-      el.classList.add('cd-locked');
-    } else if (cd > 0) {
-      el.classList.add('cd-active');
-      el.innerHTML += `<div class="cd-overlay">${cd}</div>`;
-    } else {
-      el.classList.add('cd-ready');
-    }
+    if (lv === 0) el.classList.add('cd-locked');
+    else if (cd > 0) { el.classList.add('cd-active'); el.innerHTML += `<div class="cd-overlay">${cd}</div>`; }
+    else el.classList.add('cd-ready');
     el.onclick = () => showSkillTooltip(s, lv, cd);
     box.appendChild(el);
   }
@@ -409,34 +461,26 @@ function renderCooldowns(containerId, fighter) {
     const cd = spellCds[i] || 0;
     const el = document.createElement('div');
     el.className = 'cd-icon cd-spell';
-    const icon = SPELL_ICONS[spells[i]] || SPELL_ICONS.flash;
-    el.innerHTML = `<img src="${icon}" alt="${spells[i]}">`;
-    if (cd > 0) {
-      el.classList.add('cd-active');
-      el.innerHTML += `<div class="cd-overlay">${cd}</div>`;
-    } else {
-      el.classList.add('cd-ready');
-    }
+    el.innerHTML = `<img src="${SPELL_ICONS[spells[i]] || SPELL_ICONS.flash}" alt="${spells[i]}">`;
+    if (cd > 0) { el.classList.add('cd-active'); el.innerHTML += `<div class="cd-overlay">${cd}</div>`; }
+    else el.classList.add('cd-ready');
     const spellId = spells[i];
     el.onclick = () => showSpellTooltip(spellId, cd);
     box.appendChild(el);
   }
 }
 
-// ── Skill/Spell Tooltip ──
 function showSkillTooltip(key, lv, cd) {
   const desc = SKILL_DESC[key];
   if (!desc) return;
   const status = lv === 0 ? '미습득' : cd > 0 ? `쿨타임 ${cd}턴` : '사용 가능';
-  const text = `[${key} Lv.${lv}] ${status}\n${desc.join('\n')}`;
-  showTooltipPopup(text);
+  showTooltipPopup(`[${key} Lv.${lv}] ${status}\n${desc.join('\n')}`);
 }
 
 function showSpellTooltip(spellId, cd) {
   const desc = SPELL_DESC[spellId];
   if (!desc) return;
-  const status = cd > 0 ? `쿨타임 ${cd}턴` : '사용 가능';
-  showTooltipPopup(`[${status}] ${desc}`);
+  showTooltipPopup(`[${cd > 0 ? `쿨타임 ${cd}턴` : '사용 가능'}] ${desc}`);
 }
 
 function showTooltipPopup(text) {
@@ -454,56 +498,9 @@ function showTooltipPopup(text) {
   el._timer = setTimeout(() => el.classList.add('hidden'), 4000);
 }
 
-// ── Post-Skillup: full turn for quality suggestions ──
-// ── Skill-Up as Suggestions ──
-function renderSkillUpSuggestions(levelUp) {
-  const box = $('suggestions');
-  box.innerHTML = '';
-  const skillNames = { Q: '음파', W: '방호', E: '폭풍', R: '용의 분노' };
-  for (let i = 0; i < levelUp.options.length; i++) {
-    const key = levelUp.options[i];
-    const desc = levelUp.descriptions[i] || '';
-    const btn = document.createElement('button');
-    btn.className = 'suggestion-btn skillup-btn';
-    btn.textContent = `${key} ${skillNames[key]} 레벨업`;
-    btn.title = desc;
-    btn.onclick = async () => {
-      // Disable all buttons
-      box.querySelectorAll('.skillup-btn').forEach(b => { b.disabled = true; });
-      try {
-        const res = await fetch(`${API_BASE}/api/skillup`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ gameState: state, skill: key }),
-        });
-        const data = await res.json();
-        if (data.state) state = data.state;
-        renderStatus();
-        addSystemMsg(`${key} (${skillNames[key]}) 스킬을 배웠습니다!`);
-        if (state.player.skillPoints > 0) {
-          // More skill points — show again
-          renderSkillUpSuggestions({ ...levelUp, options: ['Q','W','E'], descriptions: ['','',''] });
-        } else {
-          state.phase = 'play';
-          renderSuggestions([]);
-          setInput(true);
-        }
-      } catch {
-        // Fallback
-        state.player.skillLevels[key]++;
-        state.player.skillPoints--;
-        renderStatus();
-        addSystemMsg(`${key} (${skillNames[key]}) 스킬을 배웠습니다!`);
-        state.phase = 'play';
-        renderSuggestions([]);
-        setInput(true);
-      }
-    };
-    box.appendChild(btn);
-  }
-}
-
-// ── Suggestions ──
+// ═══════════════════════════════════════
+// Suggestions
+// ═══════════════════════════════════════
 function renderSuggestions(suggestions) {
   const box = $('suggestions');
   box.innerHTML = '';
@@ -517,6 +514,18 @@ function renderSuggestions(suggestions) {
     };
     box.appendChild(btn);
   }
+}
+
+// ═══════════════════════════════════════
+// Init
+// ═══════════════════════════════════════
+function init() {
+  setInput(false);
+  initSetup();
+  $('send-btn').onclick = submit;
+  $('player-input').addEventListener('keydown', e => {
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); submit(); }
+  });
 }
 
 document.addEventListener('DOMContentLoaded', init);
