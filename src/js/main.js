@@ -478,7 +478,7 @@ function showTooltipPopup(text) {
     el.id = 'skill-tooltip';
     el.className = 'skill-tooltip';
     el.onclick = () => el.classList.add('hidden');
-    document.querySelector('.chat-app').appendChild(el);
+    $('info-drawer').appendChild(el);
   }
   el.textContent = text;
   el.classList.remove('hidden');

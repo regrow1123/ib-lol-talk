@@ -63,7 +63,8 @@ body {
   background: #1a2636;
   border-bottom: 1px solid #2a3a4a;
   flex-shrink: 0;
-  overflow: hidden;
+  overflow: visible;
+  position: relative;
   animation: slideDown 0.2s ease;
 }
 @keyframes slideDown { from { max-height: 0; } to { max-height: 400px; } }
@@ -445,21 +446,23 @@ body {
 
 /* Skill tooltip */
 .skill-tooltip {
-  position: fixed;
-  bottom: 80px;
+  position: absolute;
+  top: 100%;
   left: 50%;
   transform: translateX(-50%);
-  background: rgba(0,0,0,0.9);
+  margin-top: 4px;
+  background: rgba(0,0,0,0.92);
   color: #fff;
-  padding: 10px 14px;
-  border-radius: 8px;
-  font-size: 12px;
+  padding: 8px 12px;
+  border-radius: 6px;
+  font-size: 11px;
   line-height: 1.5;
   white-space: pre-line;
-  max-width: 90vw;
+  max-width: 85vw;
   z-index: 100;
   pointer-events: auto;
   transition: opacity 0.2s;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.5);
 }
 .skill-tooltip.hidden {
   opacity: 0;
