@@ -1,7 +1,7 @@
-// Vercel serverless: POST /api/turn — V3 하이브리드 파이프라인
+// Vercel serverless: POST /api/turn — V3 의도 기반 전투 파이프라인
 import { parseIntent } from '../server/intent.js';
-import { resolveAction, mergeChanges } from '../server/combat.js';
-import { decideAiAction } from '../server/ai.js';
+import { resolveIntent } from '../server/combat.js';
+import { decideAiAction, assignPersonality } from '../server/ai.js';
 import { generateSuggestions } from '../server/suggest.js';
 import { narrate } from '../server/narrator.js';
 import { validateStateUpdate } from '../server/validate.js';
@@ -24,44 +24,51 @@ export default async function handler(req, res) {
   }
 
   try {
-    // === V3 파이프라인 ===
+    // 게임 시작 시 enemy personality 없으면 배정
+    if (!gameState.enemy.personality) {
+      gameState.enemy.personality = assignPersonality();
+    }
 
-    // 1. Intent 해석 (LLM 경량)
-    const intent = await parseIntent(input, gameState);
-    console.log(`Turn ${gameState.turn}: "${input}" → intent:`, JSON.stringify(intent));
+    // === V3 의도 기반 파이프라인 ===
 
-    // 2. 플레이어 액션 규칙 엔진
-    const playerResult = resolveAction(intent, gameState, 'player');
+    // 1. parseIntent → playerIntent (main + sub + skills)
+    const playerIntent = await parseIntent(input, gameState);
+    console.log(`Turn ${gameState.turn}: "${input}" → intent:`, JSON.stringify(playerIntent));
 
-    // 3. AI 행동 결정 (규칙 엔진)
-    const aiIntent = decideAiAction(gameState, playerResult);
+    // 2. decideAiAction → enemyIntent (main + sub + skills)
+    const playerHistory = history || [];
+    const enemyIntent = decideAiAction(gameState, playerHistory);
+    console.log(`Turn ${gameState.turn}: AI(${gameState.enemy.personality}) → intent:`, JSON.stringify(enemyIntent));
 
-    // 4. AI 액션 규칙 엔진 — 플레이어 결과를 반영한 중간 상태로
-    const midState = applyMidState(gameState, playerResult.stateChanges);
-    const aiResult = resolveAction(aiIntent, midState, 'enemy');
+    // 3. resolveIntent → events + stateChanges
+    const { events, stateChanges } = resolveIntent(playerIntent, enemyIntent, gameState);
 
-    // 5. 상태 병합
-    const merged = mergePlayerAndAi(gameState, playerResult.stateChanges, aiResult.stateChanges);
+    // 4. 가드레일 검증
+    const validated = validateStateUpdate(stateChanges, gameState);
 
-    // 6. 가드레일 검증
-    const validated = validateStateUpdate(merged, gameState);
-
-    // 7. 서술 생성 (LLM 경량)
-    const allEvents = [...playerResult.events, ...aiResult.events];
-    const { narrative, aiChat } = await narrate(allEvents, {
+    // 5. 서술 생성 (LLM 경량)
+    const narrateState = {
       ...gameState,
       player: { ...gameState.player, hp: validated.playerHp },
       enemy: { ...gameState.enemy, hp: validated.enemyHp },
-    });
+    };
+    const { narrative, aiChat } = await narrate(events, narrateState);
 
-    // 8. Suggestions (규칙 기반)
-    const nextStatePreview = { ...gameState, player: { ...gameState.player, hp: validated.playerHp, energy: validated.playerEnergy, cooldowns: validated.playerCooldowns }, enemy: { ...gameState.enemy, hp: validated.enemyHp, energy: validated.enemyEnergy, cooldowns: validated.enemyCooldowns } };
+    // 6. Suggestions (규칙 기반)
+    const nextStatePreview = {
+      ...gameState,
+      player: { ...gameState.player, hp: validated.playerHp, energy: validated.playerEnergy, cooldowns: validated.playerCooldowns },
+      enemy: { ...gameState.enemy, hp: validated.enemyHp, energy: validated.enemyEnergy, cooldowns: validated.enemyCooldowns },
+    };
     const suggestions = generateSuggestions(nextStatePreview);
 
-    // 9. 상태 적용
+    // 7. 상태 적용
     let nextState = applyStateUpdate(gameState, validated);
 
-    // 10. gameOver 체크
+    // personality 유지
+    nextState.enemy.personality = gameState.enemy.personality;
+
+    // 8. gameOver 체크
     let gameOver = null;
     if (validated.playerHp <= 0 && validated.enemyHp <= 0) {
       validated.enemyHp = 0;
@@ -86,12 +93,10 @@ export default async function handler(req, res) {
       nextState.winner = gameOver.winner;
     }
 
-    // 11. levelUp 체크
+    // 9. levelUp 체크
     let levelUp = null;
-    const newPlayerCs = validated.playerCs;
-    const newEnemyCs = validated.enemyCs;
-    const expectedPlayerLevel = csToLevel(newPlayerCs);
-    const expectedEnemyLevel = csToLevel(newEnemyCs);
+    const expectedPlayerLevel = csToLevel(validated.playerCs);
+    const expectedEnemyLevel = csToLevel(validated.enemyCs);
 
     if (expectedPlayerLevel > gameState.player.level) {
       nextState.player.level = expectedPlayerLevel;
@@ -109,11 +114,10 @@ export default async function handler(req, res) {
     if (expectedEnemyLevel > gameState.enemy.level) {
       nextState.enemy.level = expectedEnemyLevel;
       nextState.enemy.skillPoints = 0;
-      // AI auto skill-up
       autoSkillUp(nextState.enemy, expectedEnemyLevel - gameState.enemy.level);
     }
 
-    console.log(`Turn ${gameState.turn}: HP ${validated.playerHp}/${validated.enemyHp} | CS ${validated.playerCs}/${validated.enemyCs}`);
+    console.log(`Turn ${gameState.turn}: HP ${validated.playerHp}/${validated.enemyHp} | CS ${validated.playerCs}/${validated.enemyCs} | ${events[0]?.resultCode || 'N/A'}`);
 
     res.json({
       state: nextState,
@@ -127,65 +131,6 @@ export default async function handler(req, res) {
     console.error('Turn error:', err.message, err.stack);
     res.status(500).json({ error: '턴 처리 중 오류: ' + err.message });
   }
-}
-
-// 플레이어 결과를 중간 상태로 적용 (AI가 이 상태 기준으로 행동)
-function applyMidState(gameState, playerChanges) {
-  return {
-    ...gameState,
-    player: {
-      ...gameState.player,
-      hp: playerChanges.attackerHp,
-      energy: playerChanges.attackerEnergy,
-      cooldowns: { ...playerChanges.attackerCooldowns },
-      position: playerChanges.attackerPosition,
-      shield: playerChanges.attackerShield,
-      cs: playerChanges.attackerCs,
-      gold: playerChanges.attackerGold,
-    },
-    enemy: {
-      ...gameState.enemy,
-      hp: playerChanges.defenderHp,
-      energy: playerChanges.defenderEnergy,
-      cooldowns: { ...playerChanges.defenderCooldowns },
-      position: playerChanges.defenderPosition,
-      shield: playerChanges.defenderShield,
-      cs: playerChanges.defenderCs,
-      gold: playerChanges.defenderGold,
-      buffs: playerChanges.defenderBuffs || [],
-      debuffs: playerChanges.defenderDebuffs || [],
-    },
-  };
-}
-
-// 두 결과 병합 (플레이어→적 공격 + AI→플레이어 공격)
-function mergePlayerAndAi(gameState, pChanges, aiChanges) {
-  return {
-    playerHp: aiChanges.defenderHp,
-    enemyHp: aiChanges.attackerHp,
-    playerEnergy: aiChanges.defenderEnergy,
-    enemyEnergy: aiChanges.attackerEnergy,
-    playerCooldowns: aiChanges.defenderCooldowns,
-    enemyCooldowns: aiChanges.attackerCooldowns,
-    playerPosition: aiChanges.defenderPosition,
-    enemyPosition: aiChanges.attackerPosition,
-    playerCs: aiChanges.defenderCs,
-    enemyCs: aiChanges.attackerCs,
-    playerLevel: gameState.player.level,
-    enemyLevel: gameState.enemy.level,
-    playerGold: aiChanges.defenderGold,
-    enemyGold: aiChanges.attackerGold,
-    playerShield: aiChanges.defenderShield,
-    enemyShield: aiChanges.attackerShield,
-    playerBuffs: aiChanges.defenderBuffs || [],
-    enemyBuffs: aiChanges.attackerBuffs || [],
-    playerDebuffs: aiChanges.defenderDebuffs || [],
-    enemyDebuffs: aiChanges.attackerDebuffs || [],
-    playerSpellCooldowns: aiChanges.defenderSpellCooldowns || [0, 0],
-    enemySpellCooldowns: aiChanges.attackerSpellCooldowns || [0, 0],
-    towerHp: { ...gameState.tower },
-    minions: JSON.parse(JSON.stringify(gameState.minions)),
-  };
 }
 
 function csToLevel(cs) {
@@ -203,24 +148,11 @@ function csToLevel(cs) {
 function autoSkillUp(enemy, points) {
   const priority = ['Q', 'E', 'W'];
   for (let i = 0; i < points; i++) {
-    // R at 6, 11, 16
-    if (enemy.level >= 6 && enemy.skillLevels.R < 1) {
-      enemy.skillLevels.R++;
-      continue;
-    }
-    if (enemy.level >= 11 && enemy.skillLevels.R < 2) {
-      enemy.skillLevels.R++;
-      continue;
-    }
-    if (enemy.level >= 16 && enemy.skillLevels.R < 3) {
-      enemy.skillLevels.R++;
-      continue;
-    }
+    if (enemy.level >= 6 && enemy.skillLevels.R < 1) { enemy.skillLevels.R++; continue; }
+    if (enemy.level >= 11 && enemy.skillLevels.R < 2) { enemy.skillLevels.R++; continue; }
+    if (enemy.level >= 16 && enemy.skillLevels.R < 3) { enemy.skillLevels.R++; continue; }
     for (const sk of priority) {
-      if (enemy.skillLevels[sk] < 5) {
-        enemy.skillLevels[sk]++;
-        break;
-      }
+      if (enemy.skillLevels[sk] < 5) { enemy.skillLevels[sk]++; break; }
     }
   }
 }

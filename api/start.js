@@ -1,5 +1,6 @@
-// Vercel serverless: POST /api/start — V2
+// Vercel serverless: POST /api/start — V3 의도 기반 전투
 import { createGame, fullState } from '../server/game.js';
+import { assignPersonality } from '../server/ai.js';
 
 export default function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -12,6 +13,7 @@ export default function handler(req, res) {
     const { spells = ['flash', 'ignite'], rune = 'conqueror' } = req.body || {};
     const game = createGame(spells, rune);
     game.player.rune = rune;
+    game.enemy.personality = assignPersonality();
 
     res.json({
       gameId: game.id,

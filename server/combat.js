@@ -1,264 +1,347 @@
-// V3 Combat Engine — 적중 판정 + 데미지 계산 (규칙 기반, LLM 없음)
+// V3 Intent Combat Engine — 의도 기반 심리전 (확률 없음, 100% 결정적)
 import { readFileSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const hitMatrix = JSON.parse(readFileSync(join(__dirname, '..', 'data', 'rules', 'hit-matrix.json'), 'utf-8'));
+const intentMatrix = JSON.parse(readFileSync(join(__dirname, '..', 'data', 'rules', 'intent-matrix.json'), 'utf-8'));
 const damageTable = JSON.parse(readFileSync(join(__dirname, '..', 'data', 'rules', 'damage-table.json'), 'utf-8'));
 
 /**
- * resolveAction(intent, gameState, actor)
- * actor: 'player' | 'enemy'
- * returns { events: [...], stateChanges: {...} }
+ * resolveIntent(playerIntent, enemyIntent, gameState) → events[]
+ * 100% 결정적: 의도 조합 → 결과 코드 → 데미지 배율
+ * 확률 사용 금지
  */
-export function resolveAction(intent, gameState, actor = 'player') {
-  const attacker = actor === 'player' ? gameState.player : gameState.enemy;
-  const defender = actor === 'player' ? gameState.enemy : gameState.player;
+export function resolveIntent(playerIntent, enemyIntent, gameState) {
+  const player = gameState.player;
+  const enemy = gameState.enemy;
   const events = [];
-  const changes = {
-    attackerHp: attacker.hp,
-    defenderHp: defender.hp,
-    attackerEnergy: attacker.energy,
-    defenderEnergy: defender.energy,
-    attackerCooldowns: { ...attacker.cooldowns },
-    defenderCooldowns: { ...defender.cooldowns },
-    attackerPosition: attacker.position,
-    defenderPosition: defender.position,
-    attackerShield: attacker.shield,
-    defenderShield: defender.shield,
-    attackerCs: attacker.cs,
-    defenderCs: defender.cs,
-    attackerGold: attacker.gold,
-    defenderGold: defender.gold,
-    attackerBuffs: [...(attacker.buffs || [])],
-    defenderBuffs: [...(defender.buffs || [])],
-    attackerDebuffs: [...(attacker.debuffs || [])],
-    defenderDebuffs: [...(defender.debuffs || [])],
-    attackerSpellCooldowns: [...(attacker.spellCooldowns || [0, 0])],
-    defenderSpellCooldowns: [...(defender.spellCooldowns || [0, 0])],
+
+  const pMain = playerIntent.main || 'farm';
+  const eMain = enemyIntent.main || 'farm';
+  const pSub = playerIntent.sub || null;
+  const eSub = enemyIntent.sub || null;
+  const pSkills = playerIntent.skills || [];
+  const eSkills = enemyIntent.skills || [];
+
+  // 1. 메인 매트릭스 조회
+  let resultCode = intentMatrix.matrix[pMain]?.[eMain] || 'MISS';
+
+  // 2. 부행동 보정 적용
+  const subResult = applySubModifiers(resultCode, pMain, eMain, pSub, eSub);
+  resultCode = subResult.resultCode;
+  const playerDamageScale = subResult.playerDamageScale;
+  const enemyDamageScale = subResult.enemyDamageScale;
+
+  // 3. 결과 코드 → 배율
+  const multipliers = intentMatrix.resultMultipliers[resultCode] || { player: 0, enemy: 0 };
+  const pMult = multipliers.player * playerDamageScale;
+  const eMult = multipliers.enemy * enemyDamageScale;
+
+  // 4. 스킬별 데미지 계산
+  const levelDiff = player.level - enemy.level;
+  const pLevelScale = 1 + levelDiff * (damageTable.levelScale?.perLevel || 0.03);
+  const eLevelScale = 1 + (-levelDiff) * (damageTable.levelScale?.perLevel || 0.03);
+
+  let playerTotalDmg = 0;
+  let enemyTotalDmg = 0;
+  const playerSkillEvents = [];
+  const enemySkillEvents = [];
+
+  // 플레이어 쿨/기력 복사 (변경 추적)
+  const pCooldowns = { ...player.cooldowns };
+  const eCooldowns = { ...enemy.cooldowns };
+  let pEnergy = player.energy;
+  let eEnergy = enemy.energy;
+  let pShield = player.shield || 0;
+  let eShield = enemy.shield || 0;
+
+  // 플레이어 스킬 처리
+  for (const skill of pSkills) {
+    const result = processSkill(skill, player, pCooldowns, pEnergy, pLevelScale);
+    pEnergy = result.energy;
+    pCooldowns[result.skillKey] = result.cooldown ?? pCooldowns[result.skillKey];
+    if (result.shield) pShield += result.shield;
+    if (result.valid) {
+      playerTotalDmg += result.damage;
+      playerSkillEvents.push({ skill, ...result });
+    } else {
+      playerSkillEvents.push({ skill, ...result });
+    }
+  }
+
+  // 적 스킬 처리
+  for (const skill of eSkills) {
+    const result = processSkill(skill, enemy, eCooldowns, eEnergy, eLevelScale);
+    eEnergy = result.energy;
+    eCooldowns[result.skillKey] = result.cooldown ?? eCooldowns[result.skillKey];
+    if (result.shield) eShield += result.shield;
+    if (result.valid) {
+      enemyTotalDmg += result.damage;
+      enemySkillEvents.push({ skill, ...result });
+    } else {
+      enemySkillEvents.push({ skill, ...result });
+    }
+  }
+
+  // 5. 배율 적용
+  const playerDealDmg = Math.round(playerTotalDmg * pMult);
+  const enemyDealDmg = Math.round(enemyTotalDmg * eMult);
+
+  // 6. 데미지 적용 (쉴드 우선 차감)
+  let finalPlayerHp = player.hp;
+  let finalEnemyHp = enemy.hp;
+
+  // 적에게 가하는 데미지
+  if (playerDealDmg > 0) {
+    let dmg = playerDealDmg;
+    if (eShield > 0) {
+      const absorbed = Math.min(eShield, dmg);
+      eShield -= absorbed;
+      dmg -= absorbed;
+    }
+    finalEnemyHp = Math.max(0, finalEnemyHp - dmg);
+  }
+
+  // 플레이어가 받는 데미지
+  if (enemyDealDmg > 0) {
+    let dmg = enemyDealDmg;
+    if (pShield > 0) {
+      const absorbed = Math.min(pShield, dmg);
+      pShield -= absorbed;
+      dmg -= absorbed;
+    }
+    finalPlayerHp = Math.max(0, finalPlayerHp - dmg);
+  }
+
+  // 7. 위치 업데이트
+  const pPos = intentMatrix.positionResults[pMain] || player.position;
+  const ePos = intentMatrix.positionResults[eMain] || enemy.position;
+
+  // zone 부행동: 상대 farm이면 CS 0, 상대 dodge이면 원거리로 밀림
+  let enemyPosFinal = ePos || enemy.position;
+  let playerPosFinal = pPos || player.position;
+  if (pSub === 'zone' && eMain === 'dodge') enemyPosFinal = '원거리';
+  if (eSub === 'zone' && pMain === 'dodge') playerPosFinal = '원거리';
+
+  // 8. CS 처리
+  let pCsGain = 0;
+  let eCsGain = 0;
+
+  if (resultCode === 'FARM_BOTH') {
+    pCsGain = 2;
+    eCsGain = 2;
+  }
+  if (pMain === 'farm' && resultCode !== 'PUNISH_E' && resultCode !== 'FARM_BOTH') {
+    pCsGain = 2;
+  }
+  if (eMain === 'farm' && resultCode !== 'PUNISH_P' && resultCode !== 'FARM_BOTH') {
+    eCsGain = 2;
+  }
+
+  // farm_side 부행동: CS +1
+  if (pSub === 'farm_side') pCsGain += 1;
+  if (eSub === 'farm_side') eCsGain += 1;
+
+  // zone 부행동: 상대 farm이면 CS 0
+  if (pSub === 'zone' && eMain === 'farm') eCsGain = 0;
+  if (eSub === 'zone' && pMain === 'farm') pCsGain = 0;
+
+  // 9. 기력 자연 회복 (비전투 행동)
+  if (['farm', 'defend', 'dodge'].includes(pMain)) pEnergy = Math.min(200, pEnergy + 20);
+  if (['farm', 'defend', 'dodge'].includes(eMain)) eEnergy = Math.min(200, eEnergy + 20);
+
+  // 10. 쿨다운 감소 (턴 끝)
+  for (const k of ['Q', 'W', 'E', 'R']) {
+    pCooldowns[k] = Math.max(0, (pCooldowns[k] || 0) - 1);
+    eCooldowns[k] = Math.max(0, (eCooldowns[k] || 0) - 1);
+  }
+
+  // 이벤트 생성
+  events.push({
+    type: 'intent_resolution',
+    playerMain: pMain,
+    playerSub: pSub,
+    enemyMain: eMain,
+    enemySub: eSub,
+    resultCode,
+    playerDamageDealt: playerDealDmg,
+    enemyDamageDealt: enemyDealDmg,
+    playerSkills: playerSkillEvents,
+    enemySkills: enemySkillEvents,
+  });
+
+  // 상태 변경 요약
+  const stateChanges = {
+    playerHp: finalPlayerHp,
+    enemyHp: finalEnemyHp,
+    playerEnergy: Math.min(200, pEnergy),
+    enemyEnergy: Math.min(200, eEnergy),
+    playerCooldowns: pCooldowns,
+    enemyCooldowns: eCooldowns,
+    playerPosition: playerPosFinal,
+    enemyPosition: enemyPosFinal,
+    playerCs: player.cs + pCsGain,
+    enemyCs: enemy.cs + eCsGain,
+    playerGold: player.gold + pCsGain * 20,
+    enemyGold: enemy.gold + eCsGain * 20,
+    playerShield: pShield,
+    enemyShield: eShield,
+    playerBuffs: [...(player.buffs || [])],
+    enemyBuffs: [...(enemy.buffs || [])],
+    playerDebuffs: [...(player.debuffs || [])],
+    enemyDebuffs: [...(enemy.debuffs || [])],
+    playerSpellCooldowns: [...(player.spellCooldowns || [0, 0])],
+    enemySpellCooldowns: [...(enemy.spellCooldowns || [0, 0])],
+    playerLevel: player.level,
+    enemyLevel: enemy.level,
+    towerHp: { ...gameState.tower },
+    minions: JSON.parse(JSON.stringify(gameState.minions)),
   };
 
-  const levelDiff = attacker.level - defender.level;
-  const levelScale = 1 + levelDiff * (damageTable.levelScale?.perLevel || 0.03);
-
-  if (intent.type === 'skill' || intent.type === 'combo') {
-    const skills = intent.type === 'combo' ? intent.skills : [intent.skill || intent.skills?.[0]];
-    for (const skill of skills) {
-      if (!skill) continue;
-      const ev = resolveSkill(skill, changes, attacker, defender, levelScale, intent);
-      events.push(ev);
-      if (changes.defenderHp <= 0) break;
-    }
-  } else if (intent.type === 'farm') {
-    const csGain = intent.count || 1;
-    changes.attackerCs += csGain;
-    changes.attackerGold += csGain * 20;
-    // 기력 자연 회복
-    changes.attackerEnergy = Math.min(200, changes.attackerEnergy + 20);
-    events.push({ actor, action: 'farm', result: 'success', csGain, gold: csGain * 20 });
-  } else if (intent.type === 'move') {
-    const pos = intent.position || '중거리';
-    changes.attackerPosition = pos;
-    changes.attackerEnergy = Math.min(200, changes.attackerEnergy + 15);
-    events.push({ actor, action: 'move', result: 'success', position: pos });
-  } else if (intent.type === 'spell') {
-    const ev = resolveSpell(intent, changes, attacker, defender, actor);
-    events.push(ev);
-  } else if (intent.type === 'passive' || intent.type === 'recall') {
-    // 대기/리콜 — 에너지 회복
-    const recover = intent.type === 'recall' ? 50 : 30;
-    changes.attackerEnergy = Math.min(200, changes.attackerEnergy + recover);
-    if (intent.type === 'recall') {
-      changes.attackerHp = Math.min(100, changes.attackerHp + 15);
-      changes.attackerPosition = '타워사거리';
-    }
-    events.push({ actor, action: intent.type, result: 'success', energyRecover: recover });
-  }
-
-  // 쿨다운 감소 (턴 끝)
-  for (const k of ['Q', 'W', 'E', 'R']) {
-    changes.attackerCooldowns[k] = Math.max(0, changes.attackerCooldowns[k] - 1);
-    changes.defenderCooldowns[k] = Math.max(0, changes.defenderCooldowns[k] - 1);
-  }
   // 소환사 주문 쿨 감소
-  changes.attackerSpellCooldowns = changes.attackerSpellCooldowns.map(c => Math.max(0, c - 1));
-  changes.defenderSpellCooldowns = changes.defenderSpellCooldowns.map(c => Math.max(0, c - 1));
+  stateChanges.playerSpellCooldowns = stateChanges.playerSpellCooldowns.map(c => Math.max(0, c - 1));
+  stateChanges.enemySpellCooldowns = stateChanges.enemySpellCooldowns.map(c => Math.max(0, c - 1));
 
-  return { events, stateChanges: changes };
+  return { events, stateChanges };
 }
 
-function resolveSkill(skill, changes, attacker, defender, levelScale, intent) {
-  const skillKey = skill.replace(/[12]/, ''); // Q1→Q, E2→E
+/**
+ * 부행동 보정 적용
+ */
+function applySubModifiers(resultCode, pMain, eMain, pSub, eSub) {
+  let playerDamageScale = 1.0;
+  let enemyDamageScale = 1.0;
+  let code = resultCode;
+
+  // 플레이어 dodge_ready: 받는 데미지 70%, PUNISH 취소
+  if (pSub === 'dodge_ready') {
+    if (code === 'PUNISH_E' || code === 'E_HIT' || code === 'E_ADV' || code === 'TRADE') {
+      enemyDamageScale *= 0.7;
+    }
+    if (code === 'PUNISH_E') {
+      code = 'E_HIT'; // PUNISH → 일반 HIT
+    }
+  }
+
+  // 적 dodge_ready: 적이 받는 데미지 70%, PUNISH 취소
+  if (eSub === 'dodge_ready') {
+    if (code === 'PUNISH_P' || code === 'P_HIT' || code === 'P_ADV' || code === 'TRADE') {
+      playerDamageScale *= 0.7;
+    }
+    if (code === 'PUNISH_P') {
+      code = 'P_HIT'; // PUNISH → 일반 HIT
+    }
+  }
+
+  // 플레이어 poke_ready: farm/defend + 상대 farm/dodge → P_HIT
+  if (pSub === 'poke_ready') {
+    if (['farm', 'defend'].includes(pMain) && ['farm', 'dodge'].includes(eMain)) {
+      code = 'P_HIT';
+    }
+  }
+
+  // 적 poke_ready
+  if (eSub === 'poke_ready') {
+    if (['farm', 'defend'].includes(eMain) && ['farm', 'dodge'].includes(pMain)) {
+      code = 'E_HIT';
+    }
+  }
+
+  // 플레이어 bait: 상대가 all_in/trade로 달려들면 BAIT_SUCCESS
+  if (pSub === 'bait') {
+    if (['all_in', 'trade'].includes(eMain)) {
+      code = 'BAIT_SUCCESS';
+    } else {
+      // 안 물면 시간 낭비
+      if (code === 'MISS' || code === 'FARM_BOTH') {
+        // 유지
+      } else {
+        code = 'MISS';
+      }
+    }
+  }
+
+  // 적 bait
+  if (eSub === 'bait') {
+    if (['all_in', 'trade'].includes(pMain)) {
+      // 적의 bait 성공 = 플레이어가 속음
+      code = 'E_ADV'; // 적에게 유리하게 (BAIT_SUCCESS 반전)
+      enemyDamageScale = 1.2;
+      playerDamageScale = 0.5;
+    } else {
+      if (code === 'MISS' || code === 'FARM_BOTH') {
+        // 유지
+      } else {
+        code = 'MISS';
+      }
+    }
+  }
+
+  return { resultCode: code, playerDamageScale, enemyDamageScale };
+}
+
+/**
+ * 스킬 처리: 쿨다운/기력 체크, 데미지 계산
+ */
+function processSkill(skill, fighter, cooldowns, energy, levelScale) {
+  const skillKey = skill.replace(/[12]/, '');
   const skillNum = skill.match(/[12]/)?.[0] || '1';
-  const tableKey = skill; // Q1, Q2, W1, etc.
-  const skillData = damageTable.skills[tableKey];
-  const skillLevel = attacker.skillLevels[skillKey] || 0;
+  const skillData = damageTable.skills[skill];
+  const skillLevel = fighter.skillLevels?.[skillKey] || 0;
 
-  // 미습득 체크
   if (skillLevel === 0) {
-    return { actor: 'attacker', action: skill, result: 'unavailable', reason: '미습득' };
+    return { valid: false, reason: '미습득', damage: 0, energy, skillKey };
   }
 
-  // 쿨다운 체크
-  if (changes.attackerCooldowns[skillKey] > 0 && skillNum === '1') {
-    return { actor: 'attacker', action: skill, result: 'cooldown', reason: `쿨타임 ${changes.attackerCooldowns[skillKey]}턴` };
+  if (skillNum === '1' && cooldowns[skillKey] > 0) {
+    return { valid: false, reason: `쿨타임 ${cooldowns[skillKey]}턴`, damage: 0, energy, skillKey };
   }
 
-  // 기력 체크
   const cost = skillData?.cost || 0;
-  if (changes.attackerEnergy < cost) {
-    return { actor: 'attacker', action: skill, result: 'no_energy', reason: `기력 부족 (${changes.attackerEnergy}/${cost})` };
+  if (energy < cost) {
+    return { valid: false, reason: `기력 부족`, damage: 0, energy, skillKey };
   }
 
-  // 기력 소모
-  changes.attackerEnergy -= cost;
+  energy -= cost;
 
-  // 패시브 기력 회복 (스킬 사용 후 AA 효과 간략화)
+  // 패시브 기력 회복
   const passiveRecover = damageTable.passive?.energyRecover;
   if (passiveRecover) {
-    const lvIdx = Math.min(attacker.level - 1, passiveRecover.first.length - 1);
-    changes.attackerEnergy = Math.min(200, changes.attackerEnergy + Math.floor(passiveRecover.first[lvIdx] * 0.5));
+    const lvIdx = Math.min(fighter.level - 1, passiveRecover.first.length - 1);
+    energy = Math.min(200, energy + Math.floor(passiveRecover.first[lvIdx] * 0.5));
   }
 
-  // Q2 특수 처리: 표식 있으면 무조건 적중
-  const hasQMark = skill === 'Q2' && (changes.defenderDebuffs || []).includes('음파표식');
-  
-  // 적중 판정
-  const defenderPos = changes.defenderPosition;
-  const canHit = hitMatrix.matrix[tableKey]?.[defenderPos] ?? false;
-  
-  if (!canHit && !hasQMark) {
-    // 회피
-    return { actor: 'attacker', action: skill, result: 'miss', reason: `상대 위치(${defenderPos})에서 ${skill} 회피` };
-  }
-
-  // 데미지 계산
   let damage = 0;
+  let shield = 0;
+  let cooldown = undefined;
+
+  if (skill === 'W1') {
+    shield = skillData.shield?.[skillLevel] || 0;
+    cooldown = skillData.cooldown?.[skillLevel] || 12;
+    return { valid: true, damage: 0, shield, energy, skillKey, cooldown };
+  }
+
+  if (skill === 'W2' || skill === 'E2') {
+    // 버프/디버프 — 0 데미지
+    return { valid: true, damage: 0, energy, skillKey };
+  }
+
   if (skill === 'Q2') {
-    const base = (skillData.baseDamage?.[skillLevel] || 0);
-    const missingHpRatio = (100 - changes.defenderHp) / 100;
-    damage = Math.round(base * (1 + missingHpRatio) * levelScale);
-    // Q2 사용 시 표식 제거
-    changes.defenderDebuffs = (changes.defenderDebuffs || []).filter(d => d !== '음파표식');
-    // Q2는 근접으로 이동
-    changes.attackerPosition = '근접';
-  } else if (skill === 'W1') {
-    // 쉴드 부여 (데미지 없음)
-    const shieldAmt = skillData.shield?.[skillLevel] || 0;
-    changes.attackerShield += shieldAmt;
-    if (skillNum === '1') changes.attackerCooldowns[skillKey] = skillData.cooldown?.[skillLevel] || 12;
-    return { actor: 'attacker', action: skill, result: 'shield', shieldAmount: shieldAmt };
-  } else if (skill === 'W2') {
-    // 피흡 버프
-    const ls = skillData.lifesteal?.[skillLevel] || 0;
-    changes.attackerBuffs.push(`피흡${ls}%`);
-    return { actor: 'attacker', action: skill, result: 'buff', lifesteal: ls };
-  } else if (skill === 'E2') {
-    // 둔화
-    const slow = skillData.slow?.[skillLevel] || 0;
-    changes.defenderDebuffs.push(`둔화${slow}%`);
-    return { actor: 'attacker', action: skill, result: 'slow', slowAmount: slow };
+    const base = skillData.baseDamage?.[skillLevel] || 0;
+    // Q2: 잃은 체력 비례 (대상의 잃은 체력은 모르므로 기본 1.5배로 근사)
+    damage = Math.round(base * 1.5 * levelScale);
   } else if (skill === 'AA') {
-    const lvIdx = Math.min(attacker.level - 1, (skillData.damage?.length || 1) - 1);
+    const lvIdx = Math.min(fighter.level - 1, (skillData.damage?.length || 1) - 1);
     damage = Math.round((skillData.damage?.[lvIdx] || 4) * levelScale);
   } else {
     damage = Math.round((skillData?.damage?.[skillLevel] || 0) * levelScale);
   }
 
-  // Q1 적중 시 표식 부여
-  if (skill === 'Q1') {
-    changes.defenderDebuffs.push('음파표식');
-  }
-
-  // R 넉백 효과
-  if (skill === 'R') {
-    changes.defenderPosition = '원거리';
-    changes.defenderDebuffs.push('넉백');
-  }
-
-  // 쿨다운 설정 (1단계 스킬만)
+  // 쿨다운 설정 (1단계 스킬)
   if (skillNum === '1' && skillData?.cooldown) {
-    changes.attackerCooldowns[skillKey] = skillData.cooldown[skillLevel] || 0;
+    cooldown = skillData.cooldown[skillLevel] || 0;
   }
 
-  // 쉴드 우선 차감
-  if (damage > 0) {
-    if (changes.defenderShield > 0) {
-      const absorbed = Math.min(changes.defenderShield, damage);
-      changes.defenderShield -= absorbed;
-      damage -= absorbed;
-    }
-    changes.defenderHp = Math.max(0, changes.defenderHp - damage);
-  }
-
-  return { actor: 'attacker', action: skill, result: 'hit', damage, defenderHp: changes.defenderHp };
-}
-
-function resolveSpell(intent, changes, attacker, defender, actor) {
-  const spell = intent.spell;
-  const spellIdx = attacker.spells?.indexOf(spell);
-  
-  if (spellIdx === -1 || spellIdx === undefined) {
-    return { actor, action: spell, result: 'unavailable', reason: '소환사 주문 없음' };
-  }
-  if (changes.attackerSpellCooldowns[spellIdx] > 0) {
-    return { actor, action: spell, result: 'cooldown', reason: `쿨타임 ${changes.attackerSpellCooldowns[spellIdx]}턴` };
-  }
-
-  // 쿨다운 설정
-  const spellCooldowns = { flash: 30, ignite: 18, exhaust: 21, barrier: 18, tp: 36 };
-  changes.attackerSpellCooldowns[spellIdx] = spellCooldowns[spell] || 20;
-
-  if (spell === 'flash') {
-    const target = intent.purpose === 'escape' ? '타워사거리' : '근접';
-    changes.attackerPosition = target;
-    return { actor, action: 'flash', result: 'success', position: target };
-  } else if (spell === 'ignite') {
-    const damage = 5 + attacker.level;
-    changes.defenderHp = Math.max(0, changes.defenderHp - damage);
-    return { actor, action: 'ignite', result: 'hit', damage, defenderHp: changes.defenderHp };
-  } else if (spell === 'exhaust') {
-    changes.defenderDebuffs.push('탈진');
-    return { actor, action: 'exhaust', result: 'success' };
-  } else if (spell === 'barrier') {
-    changes.attackerShield += 10;
-    return { actor, action: 'barrier', result: 'success', shield: 10 };
-  }
-
-  return { actor, action: spell, result: 'success' };
-}
-
-/**
- * Merge stateChanges back into a flat stateUpdate format (compatible with validate.js)
- */
-export function mergeChanges(gameState, playerChanges, aiChanges) {
-  const p = gameState.player, e = gameState.enemy;
-  
-  return {
-    playerHp: aiChanges ? aiChanges.defenderHp : playerChanges.attackerHp,
-    enemyHp: aiChanges ? aiChanges.attackerHp : playerChanges.defenderHp,
-    playerEnergy: aiChanges ? Math.min(200, aiChanges.defenderEnergy) : playerChanges.attackerEnergy,
-    enemyEnergy: aiChanges ? aiChanges.attackerEnergy : playerChanges.defenderEnergy,
-    playerCooldowns: aiChanges ? aiChanges.defenderCooldowns : playerChanges.attackerCooldowns,
-    enemyCooldowns: aiChanges ? aiChanges.attackerCooldowns : playerChanges.defenderCooldowns,
-    playerPosition: aiChanges ? aiChanges.defenderPosition : playerChanges.attackerPosition,
-    enemyPosition: aiChanges ? aiChanges.attackerPosition : playerChanges.defenderPosition,
-    playerCs: aiChanges ? aiChanges.defenderCs : playerChanges.attackerCs,
-    enemyCs: aiChanges ? aiChanges.attackerCs : playerChanges.defenderCs,
-    playerLevel: p.level,
-    enemyLevel: e.level,
-    playerGold: aiChanges ? aiChanges.defenderGold : playerChanges.attackerGold,
-    enemyGold: aiChanges ? aiChanges.attackerGold : playerChanges.defenderGold,
-    playerShield: aiChanges ? aiChanges.defenderShield : playerChanges.attackerShield,
-    enemyShield: aiChanges ? aiChanges.attackerShield : playerChanges.defenderShield,
-    playerBuffs: aiChanges ? aiChanges.defenderBuffs : playerChanges.attackerBuffs,
-    enemyBuffs: aiChanges ? aiChanges.attackerBuffs : playerChanges.defenderBuffs,
-    playerDebuffs: aiChanges ? aiChanges.defenderDebuffs : playerChanges.attackerDebuffs,
-    enemyDebuffs: aiChanges ? aiChanges.attackerDebuffs : playerChanges.defenderDebuffs,
-    playerSpellCooldowns: aiChanges ? aiChanges.defenderSpellCooldowns : playerChanges.attackerSpellCooldowns,
-    enemySpellCooldowns: aiChanges ? aiChanges.attackerSpellCooldowns : playerChanges.defenderSpellCooldowns,
-    towerHp: { ...gameState.tower },
-    minions: JSON.parse(JSON.stringify(gameState.minions)),
-  };
+  return { valid: true, damage, energy, skillKey, cooldown };
 }

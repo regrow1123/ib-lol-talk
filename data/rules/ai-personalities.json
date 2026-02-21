@@ -1,0 +1,87 @@
+{
+  "description": "AI 성격 시스템 — 읽을 수 있는 패턴",
+  "personalities": {
+    "aggressive": {
+      "name": "호전적",
+      "description": "HP 우위면 무조건 들어감, 킬각 보이면 올인",
+      "tendencies": {
+        "hp_advantage":    { "all_in": 45, "trade": 35, "poke": 15, "farm": 5 },
+        "hp_even":         { "trade": 40, "poke": 30, "farm": 20, "all_in": 10 },
+        "hp_disadvantage": { "trade": 30, "poke": 25, "defend": 25, "farm": 15, "dodge": 5 },
+        "kill_range":      { "all_in": 70, "trade": 20, "poke": 10 },
+        "skills_on_cd":    { "farm": 30, "poke": 25, "trade": 25, "defend": 15, "dodge": 5 },
+        "energy_low":      { "farm": 35, "defend": 25, "dodge": 20, "poke": 15, "trade": 5 },
+        "default":         { "trade": 35, "poke": 25, "farm": 20, "all_in": 15, "dodge": 5 }
+      },
+      "sub_preferences": {
+        "all_in": ["zone", null],
+        "trade":  ["dodge_ready", "zone", null],
+        "poke":   ["bait", null],
+        "farm":   ["poke_ready", "farm_side"],
+        "dodge":  [null],
+        "defend": ["poke_ready", null]
+      },
+      "readable_tells": [
+        "HP 우위에서 거의 항상 trade/all_in",
+        "HP 불리해도 쉽게 물러나지 않음",
+        "킬각이면 무조건 올인"
+      ]
+    },
+    "calculated": {
+      "name": "계산적",
+      "description": "쿨타임/기력 계산하고, 유리할 때만 교환",
+      "tendencies": {
+        "skills_ready":     { "trade": 40, "poke": 30, "all_in": 20, "farm": 10 },
+        "skills_on_cd":     { "farm": 45, "defend": 30, "dodge": 20, "poke": 5 },
+        "energy_low":       { "farm": 50, "defend": 30, "dodge": 20 },
+        "level_advantage":  { "all_in": 35, "trade": 35, "poke": 20, "farm": 10 },
+        "hp_advantage":     { "trade": 35, "poke": 30, "all_in": 25, "farm": 10 },
+        "hp_even":          { "poke": 35, "farm": 30, "trade": 25, "defend": 10 },
+        "hp_disadvantage":  { "farm": 40, "defend": 30, "dodge": 20, "poke": 10 },
+        "kill_range":       { "all_in": 50, "trade": 30, "poke": 20 },
+        "default":          { "farm": 30, "poke": 30, "trade": 25, "defend": 10, "dodge": 5 }
+      },
+      "sub_preferences": {
+        "all_in": ["dodge_ready", null],
+        "trade":  ["dodge_ready", "farm_side"],
+        "poke":   ["farm_side", null],
+        "farm":   ["poke_ready", "farm_side", "zone"],
+        "dodge":  [null],
+        "defend": ["farm_side", null]
+      },
+      "readable_tells": [
+        "스킬 쿨타임이면 절대 싸우지 않음",
+        "기력 없으면 무조건 수비",
+        "유리할 때만 공격적"
+      ]
+    },
+    "reactive": {
+      "name": "반응형",
+      "description": "상대 행동에 맞춰 카운터, 먼저 공격 안 함",
+      "tendencies": {
+        "player_aggressive": { "dodge": 30, "defend": 30, "trade": 25, "poke": 15 },
+        "player_passive":    { "poke": 35, "trade": 30, "farm": 25, "all_in": 10 },
+        "player_farming":    { "poke": 40, "trade": 30, "farm": 20, "all_in": 10 },
+        "hp_advantage":      { "poke": 30, "trade": 30, "farm": 25, "all_in": 15 },
+        "hp_disadvantage":   { "dodge": 30, "defend": 30, "farm": 25, "poke": 15 },
+        "kill_range":        { "all_in": 40, "trade": 30, "dodge": 20, "poke": 10 },
+        "skills_on_cd":      { "farm": 35, "defend": 30, "dodge": 25, "poke": 10 },
+        "energy_low":        { "farm": 40, "defend": 30, "dodge": 25, "poke": 5 },
+        "default":           { "farm": 35, "poke": 30, "defend": 20, "trade": 15 }
+      },
+      "sub_preferences": {
+        "all_in": ["dodge_ready", null],
+        "trade":  ["dodge_ready", "bait"],
+        "poke":   ["bait", null],
+        "farm":   ["poke_ready", "dodge_ready"],
+        "dodge":  ["poke_ready", null],
+        "defend": ["poke_ready", null]
+      },
+      "readable_tells": [
+        "플레이어가 공격하면 방어/회피 위주",
+        "플레이어가 수동적이면 견제 늘림",
+        "먼저 올인하는 경우가 거의 없음"
+      ]
+    }
+  }
+}

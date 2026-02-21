@@ -1,15 +1,14 @@
-// V3 Intent Parser — LLM 경량 호출
+// V3 Intent Parser — LLM이 main + sub + skills 파싱
 import Anthropic from '@anthropic-ai/sdk';
 
 const client = new Anthropic();
 
 /**
- * parseIntent(input, gameState) → intent JSON
- * 경량 LLM: max_tokens 100
+ * parseIntent(input, gameState) → { main, sub, skills }
  */
 export async function parseIntent(input, gameState) {
   const p = gameState.player;
-  
+
   // 사용 가능 스킬 목록
   const available = [];
   for (const k of ['Q', 'W', 'E', 'R']) {
@@ -18,14 +17,30 @@ export async function parseIntent(input, gameState) {
       if (p.energy >= cost) available.push(`${k}(Lv${p.skillLevels[k]})`);
     }
   }
-  const spells = p.spells.filter((s, i) => (p.spellCooldowns?.[i] || 0) === 0);
 
-  const systemPrompt = `리신 1v1 라인전. 플레이어 입력→intent JSON 변환.
-사용가능: ${available.join(', ') || '없음'} | 소환사: ${spells.join(', ') || '없음'} | 위치: ${p.position} | 기력: ${p.energy}
-스킬표기: Q1(음파)/Q2(공명타)/W1(방호)/W2(철갑)/E1(폭풍)/E2(쇠약)/R(용의분노). AA=기본공격
-JSON만 출력. 형식:
-{"type":"skill|combo|farm|move|spell|passive|recall","skill":"Q1","skills":["Q1","AA","Q2"],"position":"위치태그","spell":"flash","count":1,"desc":"설명"}
-type=combo면 skills 배열 필수. type=skill이면 skill 하나.`;
+  const systemPrompt = `리신 1v1 라인전. 플레이어 자연어 입력→의도(intent) JSON 변환.
+
+## 주행동 (main) — 이번 턴의 핵심 행동
+- all_in: 올인 콤보 (최대 피해, 최대 리스크)
+- trade: 짧은 교환 (적당한 피해/리스크)
+- poke: 안전거리 견제 (낮은 피해/리스크)
+- dodge: 회피/후퇴에 집중
+- farm: CS 먹기에 집중
+- defend: 쉴드/방어에 집중
+
+## 부행동 (sub) — 동시에 하는 보조 행동 (optional, null 가능)
+- poke_ready: CS/대기 중이지만 기회 있으면 견제
+- dodge_ready: 공격하면서도 회피 준비
+- farm_side: 공격/방어하면서 CS도 챙기기
+- bait: 일부러 빈틈 보여서 상대 유인
+- zone: 위치 압박으로 상대 행동 제한
+
+## skills — 사용할 스킬 배열
+스킬표기: Q1(음파)/Q2(공명타)/W1(방호)/W2(철갑)/E1(폭풍)/E2(쇠약)/R(용의분노)/AA(기본공격)
+사용가능: ${available.join(', ') || '없음'} | 위치: ${p.position} | 기력: ${p.energy}
+
+JSON만 출력:
+{"main":"trade","sub":"dodge_ready","skills":["Q1","AA","Q2"]}`;
 
   try {
     const response = await client.messages.create({
@@ -37,7 +52,7 @@ type=combo면 skills 배열 필수. type=skill이면 skill 하나.`;
 
     const text = response.content[0].text.trim();
     const parsed = extractJSON(text);
-    if (parsed && parsed.type) return parsed;
+    if (parsed && parsed.main) return normalizeIntent(parsed, p);
   } catch (err) {
     console.error('Intent parse error:', err.message);
   }
@@ -46,35 +61,59 @@ type=combo면 skills 배열 필수. type=skill이면 skill 하나.`;
   return fallbackParse(input, p);
 }
 
+function normalizeIntent(parsed, player) {
+  const validMains = ['all_in', 'trade', 'poke', 'dodge', 'farm', 'defend'];
+  const validSubs = ['dodge_ready', 'poke_ready', 'bait', 'farm_side', 'zone', null];
+
+  const main = validMains.includes(parsed.main) ? parsed.main : 'farm';
+  const sub = validSubs.includes(parsed.sub) ? parsed.sub : null;
+  const skills = Array.isArray(parsed.skills) ? parsed.skills : ['AA'];
+
+  return { main, sub, skills };
+}
+
 function fallbackParse(input, player) {
   const lower = input.toLowerCase();
-  
-  if (/q.*q|음파.*공명|콤보/.test(lower) && player.skillLevels.Q > 0) {
-    return { type: 'combo', skills: ['Q1', 'AA', 'Q2'], intent: 'trade' };
+
+  // main 판별
+  let main = 'farm';
+  let sub = null;
+  let skills = ['AA'];
+
+  if (/올인|풀콤|죽여|킬/.test(lower)) {
+    main = 'all_in';
+    skills = [];
+    if (player.skillLevels.Q > 0 && player.cooldowns.Q === 0) skills.push('Q1', 'Q2');
+    if (player.skillLevels.E > 0 && player.cooldowns.E === 0) skills.push('E1');
+    if (player.skillLevels.R > 0 && player.cooldowns.R === 0) skills.push('R');
+    skills.push('AA');
+  } else if (/교환|트레이드|q.*q|음파.*공명/.test(lower)) {
+    main = 'trade';
+    skills = [];
+    if (player.skillLevels.Q > 0 && player.cooldowns.Q === 0) skills.push('Q1', 'AA', 'Q2');
+    else skills.push('AA');
+  } else if (/견제|찔|q1|음파|포크/.test(lower)) {
+    main = 'poke';
+    skills = player.skillLevels.Q > 0 && player.cooldowns.Q === 0 ? ['Q1'] : ['AA'];
+  } else if (/회피|피하|dodge|후퇴|뒤로|도망/.test(lower)) {
+    main = 'dodge';
+    skills = player.skillLevels.W > 0 && player.cooldowns.W === 0 ? ['W1'] : [];
+  } else if (/cs|파밍|막타|미니언/.test(lower)) {
+    main = 'farm';
+    skills = ['AA'];
+  } else if (/방어|쉴드|w1|방호|defend/.test(lower)) {
+    main = 'defend';
+    skills = player.skillLevels.W > 0 && player.cooldowns.W === 0 ? ['W1'] : [];
   }
-  if (/올인|풀콤/.test(lower)) {
-    const skills = [];
-    if (player.skillLevels.Q > 0) skills.push('Q1', 'Q2');
-    if (player.skillLevels.E > 0) skills.push('E1');
-    if (player.skillLevels.R > 0) skills.push('R');
-    return { type: 'combo', skills: skills.length ? skills : ['AA'], intent: 'all_in' };
-  }
-  if (/q1|음파/.test(lower)) return { type: 'skill', skill: 'Q1' };
-  if (/q2|공명/.test(lower)) return { type: 'skill', skill: 'Q2' };
-  if (/w1|방호|쉴드/.test(lower)) return { type: 'skill', skill: 'W1' };
-  if (/w2|철갑|피흡/.test(lower)) return { type: 'skill', skill: 'W2' };
-  if (/e1|폭풍/.test(lower)) return { type: 'skill', skill: 'E1' };
-  if (/e2|쇠약|둔화/.test(lower)) return { type: 'skill', skill: 'E2' };
-  if (/r|궁|용의/.test(lower)) return { type: 'skill', skill: 'R' };
-  if (/cs|파밍|막타/.test(lower)) return { type: 'farm', method: 'AA', count: 2 };
-  if (/수풀|부쉬/.test(lower)) return { type: 'move', position: '수풀' };
-  if (/후퇴|뒤로|도망/.test(lower)) return { type: 'move', position: '타워사거리' };
-  if (/접근|앞으로/.test(lower)) return { type: 'move', position: '근접' };
-  if (/리콜|귀환/.test(lower)) return { type: 'recall' };
-  if (/점멸|플래시|flash/.test(lower)) return { type: 'spell', spell: 'flash', purpose: 'engage' };
-  if (/점화|이그/.test(lower)) return { type: 'spell', spell: 'ignite' };
-  
-  return { type: 'passive', desc: input };
+
+  // sub 판별
+  if (/회피.*준비|피할.*준비|dodge.*ready|조심/.test(lower)) sub = 'dodge_ready';
+  else if (/기회.*견제|poke.*ready|노리/.test(lower)) sub = 'poke_ready';
+  else if (/유인|미끼|bait/.test(lower)) sub = 'bait';
+  else if (/cs.*챙|farm.*side|틈새/.test(lower)) sub = 'farm_side';
+  else if (/압박|zone|밀어/.test(lower)) sub = 'zone';
+
+  return { main, sub, skills };
 }
 
 function extractJSON(text) {

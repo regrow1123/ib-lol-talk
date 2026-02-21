@@ -11,18 +11,22 @@ export async function narrate(events, gameState) {
   const p = gameState.player, e = gameState.enemy;
 
   const eventLog = events.map(ev => {
+    if (ev.type === 'intent_resolution') {
+      const parts = [];
+      parts.push(`플레이어:${ev.playerMain}${ev.playerSub ? '+' + ev.playerSub : ''} vs 상대:${ev.enemyMain}${ev.enemySub ? '+' + ev.enemySub : ''}`);
+      parts.push(`결과:${ev.resultCode}`);
+      if (ev.playerDamageDealt > 0) parts.push(`플레이어→상대 ${ev.playerDamageDealt}% 피해`);
+      if (ev.enemyDamageDealt > 0) parts.push(`상대→플레이어 ${ev.enemyDamageDealt}% 피해`);
+      const pSkillStr = (ev.playerSkills || []).filter(s => s.valid).map(s => s.skill).join(',');
+      const eSkillStr = (ev.enemySkills || []).filter(s => s.valid).map(s => s.skill).join(',');
+      if (pSkillStr) parts.push(`플레이어 스킬: ${pSkillStr}`);
+      if (eSkillStr) parts.push(`상대 스킬: ${eSkillStr}`);
+      return parts.join('. ');
+    }
     const who = ev.actor === 'player' ? '플레이어' : '상대';
     if (ev.result === 'hit') return `${who} ${ev.action} 적중 (${ev.damage}% 피해)`;
-    if (ev.result === 'miss') return `${who} ${ev.action} 빗나감 (${ev.reason || ''})`;
-    if (ev.result === 'shield') return `${who} ${ev.action} 쉴드 ${ev.shieldAmount}%`;
-    if (ev.result === 'slow') return `${who} ${ev.action} 둔화 ${ev.slowAmount}%`;
-    if (ev.result === 'cooldown') return `${who} ${ev.action} 쿨타임`;
-    if (ev.result === 'no_energy') return `${who} ${ev.action} 기력부족`;
-    if (ev.result === 'unavailable') return `${who} ${ev.action} 미습득`;
+    if (ev.result === 'miss') return `${who} ${ev.action} 빗나감`;
     if (ev.action === 'farm') return `${who} CS ${ev.csGain}개 획득`;
-    if (ev.action === 'move') return `${who} ${ev.position}으로 이동`;
-    if (ev.action === 'passive') return `${who} 대기`;
-    if (ev.action === 'recall') return `${who} 리콜`;
     return `${who} ${ev.action} ${ev.result}`;
   }).join('. ');
 
