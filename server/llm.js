@@ -3,6 +3,7 @@ import Anthropic from '@anthropic-ai/sdk';
 import { buildSystemPrompt } from './prompt.js';
 
 const client = new Anthropic();
+const MAX_RETRIES = 2;
 
 export async function callLLM(gameState, playerInput, history = []) {
   const systemPrompt = buildSystemPrompt(gameState);
@@ -13,61 +14,98 @@ export async function callLLM(gameState, playerInput, history = []) {
     messages.push({ role: h.role, content: h.content });
   }
   messages.push({ role: 'user', content: playerInput });
+  // Prefill: force JSON output by starting assistant response with {
+  messages.push({ role: 'assistant', content: '{' });
 
-  const response = await client.messages.create({
-    model: process.env.LLM_MODEL || 'claude-sonnet-4-6',
-    max_tokens: 1024,
-    system: systemPrompt,
-    messages,
-  });
+  for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+    try {
+      const response = await client.messages.create({
+        model: process.env.LLM_MODEL || 'claude-sonnet-4-6',
+        max_tokens: 1024,
+        system: systemPrompt,
+        messages,
+      });
 
-  const text = response.content[0].text.trim();
+      const text = '{' + response.content[0].text.trim();
+      const parsed = extractJSON(text);
+      if (parsed) return parsed;
 
-  // Extract JSON
-  let jsonStr = text;
-  const jsonMatch = text.match(/```(?:json)?\s*([\s\S]*?)```/);
-  if (jsonMatch) {
-    jsonStr = jsonMatch[1].trim();
+      console.error(`LLM JSON parse fail (attempt ${attempt + 1}):`, text.substring(0, 300));
+      if (attempt < MAX_RETRIES) continue;
+    } catch (err) {
+      console.error(`LLM API error (attempt ${attempt + 1}):`, err.message);
+      if (attempt < MAX_RETRIES) continue;
+    }
   }
 
-  try {
-    return JSON.parse(jsonStr);
-  } catch (e) {
-    console.error('LLM JSON parse error:', e.message);
-    console.error('Raw:', text.substring(0, 500));
-    // Fallback
-    return {
-      narrative: '잠시 소강 상태... 양쪽 모두 조심스럽게 움직인다.',
-      aiChat: '음... 뭔가 이상했음. 다시 해보자!',
-      stateUpdate: {
-        playerHp: gameState.player.hp,
-        enemyHp: gameState.enemy.hp,
-        playerEnergy: Math.min(200, gameState.player.energy + 30),
-        enemyEnergy: Math.min(200, gameState.enemy.energy + 30),
-        playerCooldowns: decrementCooldowns(gameState.player.cooldowns),
-        enemyCooldowns: decrementCooldowns(gameState.enemy.cooldowns),
-        playerPosition: gameState.player.position,
-        enemyPosition: gameState.enemy.position,
-        playerCs: gameState.player.cs,
-        enemyCs: gameState.enemy.cs,
-        playerLevel: gameState.player.level,
-        enemyLevel: gameState.enemy.level,
-        playerGold: gameState.player.gold,
-        enemyGold: gameState.enemy.gold,
-        playerShield: 0,
-        enemyShield: 0,
-        playerBuffs: [],
-        enemyBuffs: [],
-        playerDebuffs: [],
-        enemyDebuffs: [],
-        towerHp: { ...gameState.tower },
-        minions: JSON.parse(JSON.stringify(gameState.minions)),
-      },
-      levelUp: null,
-      suggestions: ['CS 챙기기', 'Q로 견제', '안전하게 대기'],
-      gameOver: null,
-    };
+  // All retries failed — fallback
+  console.error('All LLM retries exhausted, using fallback');
+  return {
+    narrative: '양쪽 모두 조심스럽게 거리를 재고 있다.',
+    aiChat: '잠깐 정신이 팔렸음. 다시 집중!',
+    stateUpdate: {
+      playerHp: gameState.player.hp,
+      enemyHp: gameState.enemy.hp,
+      playerEnergy: Math.min(200, gameState.player.energy + 30),
+      enemyEnergy: Math.min(200, gameState.enemy.energy + 30),
+      playerCooldowns: decrementCooldowns(gameState.player.cooldowns),
+      enemyCooldowns: decrementCooldowns(gameState.enemy.cooldowns),
+      playerSpellCooldowns: gameState.player.spellCooldowns || [0, 0],
+      enemySpellCooldowns: gameState.enemy.spellCooldowns || [0, 0],
+      playerPosition: gameState.player.position,
+      enemyPosition: gameState.enemy.position,
+      playerCs: gameState.player.cs,
+      enemyCs: gameState.enemy.cs,
+      playerLevel: gameState.player.level,
+      enemyLevel: gameState.enemy.level,
+      playerGold: gameState.player.gold,
+      enemyGold: gameState.enemy.gold,
+      playerShield: 0,
+      enemyShield: 0,
+      playerBuffs: [],
+      enemyBuffs: [],
+      playerDebuffs: [],
+      enemyDebuffs: [],
+      towerHp: { ...gameState.tower },
+      minions: JSON.parse(JSON.stringify(gameState.minions)),
+    },
+    levelUp: null,
+    suggestions: ['CS 챙기기', '안전하게 대기', '상대 움직임 관찰'],
+    gameOver: null,
+  };
+}
+
+function extractJSON(text) {
+  // Try direct parse first
+  try { return JSON.parse(text); } catch {}
+
+  // Try extracting from code block
+  const codeBlock = text.match(/```(?:json)?\s*([\s\S]*?)```/);
+  if (codeBlock) {
+    try { return JSON.parse(codeBlock[1].trim()); } catch {}
   }
+
+  // Try finding outermost { ... } with brace matching
+  const start = text.indexOf('{');
+  if (start === -1) return null;
+  let depth = 0;
+  let inStr = false;
+  let escape = false;
+  for (let i = start; i < text.length; i++) {
+    const c = text[i];
+    if (escape) { escape = false; continue; }
+    if (c === '\\' && inStr) { escape = true; continue; }
+    if (c === '"') { inStr = !inStr; continue; }
+    if (inStr) continue;
+    if (c === '{') depth++;
+    else if (c === '}') {
+      depth--;
+      if (depth === 0) {
+        try { return JSON.parse(text.substring(start, i + 1)); } catch { return null; }
+      }
+    }
+  }
+  return null;
 }
 
 function decrementCooldowns(cds) {
