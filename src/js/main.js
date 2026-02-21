@@ -181,7 +181,14 @@ async function doSkillUp(key) {
     showSkillUpChoices();
   } else {
     state.phase = 'play';
-    renderSuggestions([]); // Clear skillup buttons, next turn will have LLM suggestions
+    // Show context-aware starting suggestions
+    const learned = Object.entries(state.player.skillLevels).filter(([,v]) => v > 0).map(([k]) => k);
+    const startSuggestions = [];
+    if (learned.includes('Q')) startSuggestions.push('미니언 뒤에서 CS 먹으면서 Q 견제 노리기');
+    if (learned.includes('W')) startSuggestions.push('안전하게 CS 챙기면서 상대 패턴 파악');
+    if (learned.includes('E')) startSuggestions.push('가까이 붙어서 E로 짧은 교환 시도');
+    if (!startSuggestions.length) startSuggestions.push('CS 먹으며 상대 움직임 관찰');
+    renderSuggestions(startSuggestions);
     setInput(true);
     $('player-input').focus();
   }
