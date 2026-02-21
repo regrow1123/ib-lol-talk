@@ -520,6 +520,7 @@ body {
 .spell-card.selected { border-color: var(--accent); background: #e0ecff; }
 .spell-card.locked { opacity: 0.7; cursor: default; border-color: #c89b3c; background: #fff8e0; }
 .spell-icon { font-size: 1.5em; }
+.spell-icon-img { width: 40px; height: 40px; border-radius: 6px; }
 .spell-name { font-size: 0.65em; font-weight: 600; margin-top: 2px; }
 
 .rune-grid {
@@ -541,6 +542,7 @@ body {
 .rune-card:hover { border-color: var(--accent); background: #f0f5ff; }
 .rune-card.selected { border-color: var(--accent); background: #e0ecff; }
 .rune-icon { font-size: 1.4em; flex-shrink: 0; }
+.rune-icon-img { width: 40px; height: 40px; flex-shrink: 0; }
 .rune-name { font-weight: 700; font-size: 0.85em; }
 .rune-desc { font-size: 0.68em; color: #888; }
 .rune-info { display: flex; flex-direction: column; }
