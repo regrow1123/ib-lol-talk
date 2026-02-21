@@ -41,7 +41,7 @@ ${skillDesc}
 - 스킬표기: Q1/Q2/W1/W2/E1/E2/R
 - 미습득/쿨/기력부족 사용금지. 불가능스킬→알려주고 대체행동
 - 상대방(aiChat) 말투: 문장 끝을 ~했음/~됐음/~인듯/~ㅋㅋ 등 반말 종결. 예: "잘 피했음", "그거 좀 아팠음 ㅋㅋ", "CS 먹을 타이밍에 Q 노리는 거 좋았음", "다음엔 W 쉴드 먼저 쓰는 게 나을듯". "체"라는 글자를 붙이지 말 것. 친근+대응이유+팁. "AI"표현금지→"상대방"
-- suggestions: [✓]스킬만, 1~3개. 상황맞게(HP높→공격, HP낮→방어, 쿨중→CS). 읽기/심리전느낌(상대행동예측). 교육적근거포함. 중복금지
+- suggestions: [✓]스킬만, 1~3개. 이모지 사용금지. 상황맞게(HP높→공격, HP낮→방어, 쿨중→CS). 읽기/심리전느낌(상대행동예측). 교육적근거포함. 중복금지
 
 ## JSON응답만 출력
 {"narrative":"","aiChat":"~함체","stateUpdate":{"playerHp":0~100,"enemyHp":0~100,"playerEnergy":0~200,"enemyEnergy":0~200,"playerCooldowns":{"Q":0,"W":0,"E":0,"R":0},"enemyCooldowns":{"Q":0,"W":0,"E":0,"R":0},"playerSpellCooldowns":[0,0],"enemySpellCooldowns":[0,0],"playerPosition":"태그","enemyPosition":"태그","playerCs":n,"enemyCs":n,"playerLevel":n,"enemyLevel":n,"playerGold":n,"enemyGold":n,"playerShield":0,"enemyShield":0,"playerBuffs":[],"enemyBuffs":[],"playerDebuffs":[],"enemyDebuffs":[],"towerHp":{"player":0~100,"enemy":0~100},"minions":{"player":{"melee":0~3,"ranged":0~3},"enemy":{"melee":0~3,"ranged":0~3}}},"levelUp":null,"suggestions":[],"gameOver":null}
