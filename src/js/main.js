@@ -372,7 +372,7 @@ function renderStatus() {
   $('p-cs').textContent = p.cs;
   $('p-gold').textContent = p.gold;
   $('p-level').textContent = `Lv.${p.level}`;
-  $('p-position').textContent = positionLabel(p.position);
+  renderCooldowns('p-cooldowns', p);
 
   $('e-hp-fill').style.width = `${e.hp}%`;
   $('e-hp-text').textContent = `${Math.round(e.hp)}%`;
@@ -381,7 +381,7 @@ function renderStatus() {
   $('e-cs').textContent = e.cs;
   $('e-gold').textContent = e.gold;
   $('e-level').textContent = `Lv.${e.level}`;
-  $('e-position').textContent = positionLabel(e.position);
+  renderCooldowns('e-cooldowns', e);
 
   $('turn-text').textContent = `${state.turn}턴`;
 
@@ -397,16 +397,48 @@ function setHpColor(id, hp) {
   else el.style.background = 'linear-gradient(90deg, #27ae60, #2ecc71)';
 }
 
-function positionLabel(pos) {
-  const labels = {
-    MELEE_RANGE: '근접',
-    MID_RANGE: '중거리',
-    BEHIND_MINIONS: '미니언뒤',
-    BUSH: '부쉬',
-    TOWER_RANGE: '타워밑',
-    FAR: '먼거리',
-  };
-  return labels[pos] || pos;
+function renderCooldowns(containerId, fighter) {
+  const box = $(containerId);
+  box.innerHTML = '';
+
+  // Skills: Q W E R
+  const skills = ['Q', 'W', 'E', 'R'];
+  for (const s of skills) {
+    const lv = fighter.skillLevels?.[s] || 0;
+    const cd = fighter.cooldowns?.[s] || 0;
+    const el = document.createElement('div');
+    el.className = 'cd-icon';
+    if (lv === 0) {
+      el.classList.add('cd-locked');
+      el.textContent = s;
+    } else if (cd > 0) {
+      el.classList.add('cd-active');
+      el.innerHTML = `<span class="cd-label">${s}</span><span class="cd-num">${cd}</span>`;
+    } else {
+      el.classList.add('cd-ready');
+      el.textContent = s;
+    }
+    box.appendChild(el);
+  }
+
+  // Spells
+  const spellNames = { flash: 'F', ignite: 'I', exhaust: 'X', barrier: 'B', teleport: 'T' };
+  const spells = fighter.spells || [];
+  const spellCds = fighter.spellCooldowns || [];
+  for (let i = 0; i < spells.length; i++) {
+    const cd = spellCds[i] || 0;
+    const el = document.createElement('div');
+    el.className = 'cd-icon cd-spell';
+    const label = spellNames[spells[i]] || spells[i]?.[0]?.toUpperCase() || '?';
+    if (cd > 0) {
+      el.classList.add('cd-active');
+      el.innerHTML = `<span class="cd-label">${label}</span><span class="cd-num">${cd}</span>`;
+    } else {
+      el.classList.add('cd-ready');
+      el.textContent = label;
+    }
+    box.appendChild(el);
+  }
 }
 
 // ── Suggestions ──
