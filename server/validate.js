@@ -1,5 +1,5 @@
 // V2 Guardrail validation — validates LLM stateUpdate
-const VALID_POSITIONS = ['MELEE_RANGE', 'MID_RANGE', 'BEHIND_MINIONS', 'BUSH', 'TOWER_RANGE', 'FAR'];
+const VALID_POSITIONS = ['근접', '중거리', '미니언뒤', '수풀', '타워사거리', '원거리'];
 
 export function validateStateUpdate(stateUpdate, prevState) {
   if (!stateUpdate || typeof stateUpdate !== 'object') {

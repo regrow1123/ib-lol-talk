@@ -30,7 +30,7 @@ function createFighter(spells, rune, overrides = {}) {
     skillLevels: { Q: 0, W: 0, E: 0, R: 0 },
     skillPoints: 1,
     cooldowns: { Q: 0, W: 0, E: 0, R: 0 },
-    position: 'MID_RANGE',
+    position: '중거리',
     shield: 0,
     spells,
     spellCooldowns: [0, 0],
