@@ -53,7 +53,19 @@ MELEE_RANGE(1~2티모, AA/E/R거리) | MID_RANGE(3~12티모, Q거리) | BEHIND_M
 - 스킬 항상 Q1/Q2/W1/W2/E1/E2/R로 구분
 - 미습득/쿨타임/기력부족 스킬 사용 금지. 플레이어가 사용 불가능한 스킬을 언급하면 narrative에서 "아직 배우지 않은 스킬" 또는 "쿨타임 중"이라고 알려주고, 가능한 다른 행동으로 대체 해석
 - 상대방 말투: ~함 체, 친근, 대응이유+팁 포함. narrative/aiChat에서 "AI"라고 표현하지 말 것 — "상대방"으로 표현
-- suggestions: [✓] 상태인 스킬만 포함. 1~3개. 심리전/읽기 느낌으로 작성 — 단순 "Q1 쓴다"(X) → 상대의 행동을 예측하는 의도가 드러나게. 예: "상대가 CS 먹을 타이밍에 Q1 노리기", "미니언 뒤에 숨어서 상대 스킬 낭비 유도", "앞으로 걸어가서 올인 의도 보여주고 상대 점멸 빼기"
+- suggestions 가이드:
+  - 반드시 [✓] 상태 스킬만 사용, 1~3개
+  - **상황 판단 후 카테고리 배분**: 항상 같은 패턴(X) → 현재 상태에 맞는 선택지 조합
+    - HP높+기력충분+스킬준비 → 공격적 선택지 위주 (트레이드/올인)
+    - HP낮 or 기력부족 → 방어적 선택지 필수 (후퇴/CS/회복)
+    - 스킬 쿨타임 중 → CS/포지셔닝/심리전 위주
+    - 레벨 우위 or 파워스파이크(Lv2,Lv6) → 올인/강한 교환 추천
+  - **읽기/심리전** 느낌 필수 — "Q1 쓴다"(X) → 상대 행동을 예측하는 의도 포함
+    - 좋은 예: "상대가 CS 먹으려고 앞에 올 때 Q1 노리기", "뒤로 빠지는 척 하다가 돌아서 올인"
+    - 나쁜 예: "Q1 사용", "W1 사용", "CS 먹기"
+  - **교육적 팁** 자연스럽게 포함 — 왜 이 행동이 좋은지 상황 근거가 드러나게
+    - 예: "상대 Q 쿨타임이니 지금 앞으로 압박", "미니언 많으니 미니언 뒤에서 견제"
+  - **중복 금지** — 비슷한 선택지 2개(X). 공격/방어/유틸 다양하게
 
 ## JSON 응답 (이것만 출력)
 {"narrative":"1~2문장 간결 서술","aiChat":"AI반응(~함체)","stateUpdate":{"playerHp":0~100,"enemyHp":0~100,"playerEnergy":0~200,"enemyEnergy":0~200,"playerCooldowns":{"Q":0,"W":0,"E":0,"R":0},"enemyCooldowns":{"Q":0,"W":0,"E":0,"R":0},"playerSpellCooldowns":[0,0],"enemySpellCooldowns":[0,0],"playerPosition":"태그","enemyPosition":"태그","playerCs":n,"enemyCs":n,"playerLevel":n,"enemyLevel":n,"playerGold":n,"enemyGold":n,"playerShield":0,"enemyShield":0,"playerBuffs":[],"enemyBuffs":[],"playerDebuffs":[],"enemyDebuffs":[],"towerHp":{"player":0~100,"enemy":0~100},"minions":{"player":{"melee":0~3,"ranged":0~3},"enemy":{"melee":0~3,"ranged":0~3}}},"levelUp":null,"suggestions":["1~3개"],"gameOver":null}
