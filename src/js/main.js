@@ -155,19 +155,20 @@ async function doSkillUp(key) {
   // Disable all skillup buttons immediately
   $('suggestions').querySelectorAll('.skillup-btn').forEach(b => { b.disabled = true; });
 
+  let skillupData = null;
   try {
     const res = await fetch(`${API_BASE}/api/skillup`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ gameState: state, skill: key }),
+      body: JSON.stringify({ gameState: state, skill: key, history: turnHistory }),
     });
-    const data = await res.json();
-    if (data.error) {
-      addSystemMsg(`⚠️ ${data.error}`);
-      showSkillUpChoices(); // Re-show choices
+    skillupData = await res.json();
+    if (skillupData.error) {
+      addSystemMsg(`⚠️ ${skillupData.error}`);
+      showSkillUpChoices();
       return;
     }
-    if (data.state) state = data.state;
+    if (skillupData.state) state = skillupData.state;
   } catch {
     // Fallback: client-side
     state.player.skillLevels[key]++;
@@ -182,20 +183,8 @@ async function doSkillUp(key) {
     showSkillUpChoices();
   } else {
     state.phase = 'play';
-    // LLM에 새 suggestions 요청
-    renderSuggestions([]); // clear
-    setInput(false); // 로딩 중 입력 비활성
-    try {
-      const res = await fetch(`${API_BASE}/api/suggest`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ gameState: state, history: turnHistory }),
-      });
-      const data = await res.json();
-      lastSuggestions = data.suggestions || [];
-    } catch {
-      lastSuggestions = ['CS 챙기기', '안전하게 대기', '상대 움직임 관찰'];
-    }
+    // 마지막 스킬포인트 소진 시 skillup 응답에 suggestions 포함
+    if (skillupData?.suggestions) lastSuggestions = skillupData.suggestions;
     renderSuggestions(lastSuggestions);
     setInput(true);
     $('player-input').focus();
