@@ -1,26 +1,32 @@
 // V2 LLM integration — Anthropic Claude API
 import Anthropic from '@anthropic-ai/sdk';
-import { buildSystemPrompt } from './prompt.js';
+import { buildPromptParts } from './prompt.js';
 
 const client = new Anthropic();
 const MAX_RETRIES = 2;
 
 export async function callLLM(gameState, playerInput, history = []) {
-  const systemPrompt = buildSystemPrompt(gameState);
+  const { staticPrompt, dynamicPrompt } = buildPromptParts(gameState);
 
   const messages = [];
-  const recentHistory = history.slice(-10);
+  const recentHistory = history.slice(-6); // 10→6: reduce input tokens
   for (const h of recentHistory) {
     messages.push({ role: h.role, content: h.content });
   }
   messages.push({ role: 'user', content: playerInput });
 
+  // System prompt with cache_control: static part cached, dynamic part fresh
+  const system = [
+    { type: 'text', text: staticPrompt, cache_control: { type: 'ephemeral' } },
+    { type: 'text', text: dynamicPrompt },
+  ];
+
   for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
     try {
       const response = await client.messages.create({
         model: process.env.LLM_MODEL || 'claude-sonnet-4-6',
-        max_tokens: 1024,
-        system: systemPrompt,
+        max_tokens: 800, // 1024→800: responses are concise
+        system,
         messages,
       });
 
