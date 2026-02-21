@@ -177,6 +177,62 @@ LLM은 `distance`와 스킬 사거리를 비교하여 적중/회피 판정.
 - 자원 관련 수치와 규칙은 `data/champions/{id}.json`에 정의
 - 서버 데미지 엔진이 스킬 사용 시 자원 소모/회복 처리
 
+### 3.7 미니언 시스템
+- 일정 턴 간격으로 새 웨이브 도착 (근접 3 + 원거리 3)
+- 미니언끼리 자동 교전 → 자연 소멸
+- 플레이어/AI가 막타를 쳐야 CS로 인정
+- 미니언 유무가 `blocked` 상태에 영향 (미니언 있으면 투사체 차단)
+- 미니언 수는 LLM이 actions의 CS와 함께 관리, 서버가 상태에 반영
+
+### 3.8 게임 상태 스키마
+
+```json
+{
+  "turn": 1,
+  "phase": "play",
+  "distance": 800,
+  "blocked": true,
+  "player": {
+    "champion": "lee-sin",
+    "hp": 645,
+    "maxHp": 645,
+    "resource": 200,
+    "maxResource": 200,
+    "resourceType": "energy",
+    "level": 1,
+    "cs": 0,
+    "gold": 0,
+    "ad": 69,
+    "armor": 36,
+    "mr": 32,
+    "skillLevels": { "Q": 0, "W": 0, "E": 0, "R": 0 },
+    "skillPoints": 1,
+    "cooldowns": { "Q": 0, "W": 0, "E": 0, "R": 0 },
+    "shield": 0,
+    "spells": ["flash", "ignite"],
+    "spellCooldowns": [0, 0],
+    "rune": "conqueror",
+    "buffs": [],
+    "debuffs": []
+  },
+  "enemy": {
+    "...same structure..."
+  },
+  "minions": {
+    "player": { "melee": 3, "ranged": 3 },
+    "enemy": { "melee": 3, "ranged": 3 }
+  },
+  "winner": null
+}
+```
+
+**주요 변경 (이전 대비)**:
+- `hp`: 퍼센트(0~100) → 실제 수치 (645, 753, ...)
+- `resource` / `resourceType`: 기력 하드코딩 → 챔피언별 자원
+- `ad`, `armor`, `mr`: 서버 데미지 엔진이 참조하는 전투 스탯
+- `distance`, `blocked`: 상태 최상위 레벨 (양측 공유)
+- `tower` 필드 제거
+
 ---
 
 ## 4. 상대방(AI) 시스템
