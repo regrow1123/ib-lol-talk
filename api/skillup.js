@@ -1,5 +1,4 @@
-// Vercel serverless: POST /api/skillup — V2
-// Client sends skill choice, server validates and returns updated state
+// POST /api/skillup — Skill level up (validation only, no LLM)
 
 export default function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');

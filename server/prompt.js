@@ -1,95 +1,109 @@
-// V2.1 Prompt builder — LLM handles all judgment + state updates
-// AI personality integration + diff response optimization
+// Prompt builder — static/dynamic split for cache-friendly usage
 import { loadChampion } from './champions.js';
-import { readFileSync } from 'fs';
-import { dirname, join } from 'path';
-import { fileURLToPath } from 'url';
 
-const __dirname = dirname(fileURLToPath(import.meta.url));
-let personalitiesData = null;
-function loadPersonalities() {
-  if (!personalitiesData) {
-    try {
-      personalitiesData = JSON.parse(readFileSync(join(__dirname, '..', 'data', 'rules', 'ai-personalities.json'), 'utf8'));
-    } catch { personalitiesData = { personalities: {} }; }
-  }
-  return personalitiesData;
-}
-
-function buildPersonalityPrompt(personality) {
-  const data = loadPersonalities();
-  const p = data.personalities[personality];
-  if (!p) return '상대방 성격: 균형잡힌 플레이. 상황에 따라 유동적으로 대응.';
-  const tells = p.readable_tells.join('. ');
-  return `상대방(AI) 성격: "${p.name}" — ${p.description}. ${tells}.`;
-}
-
-// Returns { staticPrompt, dynamicPrompt } for cache-friendly usage
 export function buildPromptParts(gameState) {
   const champ = loadChampion(gameState.player.champion);
   const p = gameState.player, e = gameState.enemy;
 
-  const skillDesc = Object.entries(champ.skills).map(([k, s]) =>
-    s.description.map((d, i) => `${k}${s.name.length > 1 ? (i+1) : ''}: ${d}`).join(' / ')
-  ).join('\n');
+  // === STATIC PROMPT (cacheable) ===
+  const skillDesc = buildSkillDescription(champ);
+  const rangeTable = buildRangeTable(champ);
 
-  const spellName = s => ({flash:'점멸',ignite:'점화',exhaust:'탈진',barrier:'방어막',tp:'텔포'}[s] || s);
-  const spellStr = (f) => f.spells.map((s,i) => `${spellName(s)}${f.spellCooldowns[i]>0?`(쿨${f.spellCooldowns[i]})`:'✓'}`).join(' ');
-  const runeName = r => ({conqueror:'정복자(장기전→AD+회복)',electrocute:'감전(3히트→폭딜)',grasp:'착취(AA→추가피해+회복+영구체력)'}[r] || r);
-
-  const pSkills = skillStatus(champ, p);
-  const eSkills = skillStatus(champ, e);
-
-  // Static: champion data + rules (cacheable, ~80% of tokens)
-  const staticPrompt = `LoL 1v1 라인전 텍스트 게임. 양쪽 ${champ.name}. 너는 심판+AI 상대.
+  const staticPrompt = `LoL 1v1 라인전 텍스트 전략 게임. 양쪽 ${champ.name}. 너는 심판+AI 상대.
 
 ## ${champ.name} 스킬
 패시브: ${champ.passive.description}
 ${skillDesc}
-콤보: ${champ.tips.combos.join(' | ')}
 
-## 위치태그 (티모 🍄)
-근접(1~2,AA/E/R) | 중거리(3~12,Q) | 미니언뒤(Q1차단) | 수풀(시야X) | 타워사거리(타워피해) | 원거리(12+,사거리밖)
+## 스킬 사거리
+${rangeTable}
+AA(기본공격): ${champ.baseStats.attackRange}
+
+## recast 규칙
+Q/W/E는 2단계 재사용 스킬. Q1→Q2는 Q라는 하나의 스킬의 2단 사용이지 별개 스킬이 아님.
+1단계 사용 후 조건 충족 시 2단계 재사용 가능. 쿨다운은 최종 사용 후 시작.
+R은 단일 스킬.
+
+## 콤보
+${champ.tips.combos.join('\n')}
+
+## 거리 & 장애물
+distance: 두 챔프 간 거리(유닛 숫자). 스킬 사거리와 비교하여 사용 가능 여부 판단.
+blocked: true면 직선 경로에 미니언 존재 → 투사체(Q1) 차단. 범위기(E1)/대상지정(AA,R)은 무관.
 
 ## 규칙
-- AI=동등한 상대. 봐주지않음. 회피/반격/맞교환 응수. 플레이어 공격 항상 성공X. AI 선공 가능. 편파판정 금지
-- 스킬효과: ${champ.tips.skillEffects}
-- 룬활용: ${Object.entries(champ.tips.runeStrategies || {}).map(([r,d]) => `${runeName(r).split('(')[0]}→${d}`).join(', ')}
-- 콤보 1턴처리, 스킬별 설명(교육). 미습득 스킬은 빼고 사용
-- narrative 1~2문장. 핵심만. 장황X
-- 저강도+저강도=요약, 고강도=세밀
-- 끼어들기: 플레이어저강도+AI고강도→중단+대응기회
-- 승리: 킬(HP0%)/CS50/타워파괴. 동시사망없음—먼저 맞힌쪽이 킬
-- 스킬표기: Q1/Q2/W1/W2/E1/E2/R
-- 미습득/쿨/기력부족 사용금지. 불가능스킬→알려주고 대체행동
-- 상대방(aiChat) 말투: 문장 끝을 ~했음/~됐음/~인듯/~ㅋㅋ 등 반말 종결. 예: "잘 피했음", "그거 좀 아팠음 ㅋㅋ", "CS 먹을 타이밍에 Q 노리는 거 좋았음", "다음엔 W 쉴드 먼저 쓰는 게 나을듯". "체"라는 글자를 붙이지 말 것. 친근+대응이유+팁. "AI"표현금지→"상대방"
-- suggestions: 스킬별+일반 5~7개 생성. 이모지금지. 형식: [{"skill":"Q","text":"..."},{"skill":null,"text":"CS 챙기기"}]. skill=해당스킬키(Q/W/E/R/spell) 또는 null(일반). 미습득스킬 포함OK(클라이언트가 필터). 읽기/심리전느낌(상대행동예측). 교육적근거포함. 중복금지
+- AI=동등한 상대. 봐주지않음. 회피/반격/맞교환 적극 응수
+- 플레이어 공격이 항상 성공하는 것 아님. AI 선공 가능. 편파 판정 금지
+- 다양한 스킬 조합/전략 적극 사용. 같은 패턴 반복 X → 플레이어가 여러 상황 경험
+- narrative 1~2문장 간결. 스킬 효과 교육적으로 설명
+- 저강도+저강도=요약 처리(CS 여러개 한번에), 고강도=세밀 처리
+- 끼어들기: 플레이어 저강도 + AI 고강도 → 중단 + 대응 기회
+- 승리: 킬(HP0) 또는 CS50. 동시사망 없음
+- 미습득/쿨/자원부족 스킬 사용 금지
+- aiChat 말투: ~했음/~됐음/~인듯/~ㅋㅋ (반말). 친근 + 대응 이유 + 팁
+- suggestions: 스킬태그 포함 5~7개, 이모지 금지. 미습득 스킬 포함 OK.
+  형식: [{"skill":"Q","text":"..."},{"skill":null,"text":"CS 챙기기"}]
+  읽기/심리전 느낌 + 교육적 근거
 
-## AI 성격
-${buildPersonalityPrompt(gameState.enemy?.personality)}
-이 성격에 맞게 AI의 행동을 결정할 것. 성격은 확률적 경향이지 절대 규칙이 아님.
+## JSON 응답 (반드시 이 형식)
+{"narrative":"","aiChat":"","actions":[{"who":"player/enemy","skill":"Q1/Q2/W1/AA/등","target":"enemy/player/minion","hit":true/false}],"distance":숫자,"blocked":true/false,"cs":{"player":0,"enemy":0},"enemySkillUp":null,"suggestions":[{"skill":"Q","text":"..."}],"gameOver":null}
+gameOver 예: {"winner":"player","reason":"kill","summary":"요약"}
+enemySkillUp: 적 레벨업 시 스킬 키 ("Q"/"W"/"E"/"R"), 없으면 null`;
 
-## JSON응답 (diff 형식)
-stateUpdate에는 **변경된 필드만** 포함. 변경 없는 필드는 생략. 서버가 이전 상태에 머지함.
-예: HP만 변했으면 {"stateUpdate":{"playerHp":85,"enemyHp":90}} — 나머지 생략
-{"narrative":"","aiChat":"~했음/~됐음/~인듯","stateUpdate":{변경필드만},"suggestions":[{"skill":"Q","text":"..."},{"skill":null,"text":"..."}],"gameOver":null}
-gameOver예: {"winner":"player","reason":"kill","summary":"요약"}`;
+  // === DYNAMIC PROMPT (changes every turn) ===
+  const spellStr = (f) => f.spells.map((s, i) =>
+    `${spellName(s)}${f.spellCooldowns[i] > 0 ? `(쿨${f.spellCooldowns[i]})` : '✓'}`
+  ).join(' ');
 
-  // Dynamic: current turn state (changes every turn)
-  const dynamicPrompt = `## ${gameState.turn}턴
-P: HP${p.hp}% 기${p.energy} Lv${p.level} CS${p.cs} G${p.gold} ${p.position} 쉴${p.shield} | ${pSkills} | ${spellStr(p)} | ${runeName(p.rune)}${p.buffs?.length ? ' 버프:'+p.buffs.join(',') : ''}${p.debuffs?.length ? ' 디:'+p.debuffs.join(',') : ''}
-E: HP${e.hp}% 기${e.energy} Lv${e.level} CS${e.cs} G${e.gold} ${e.position} 쉴${e.shield} | ${eSkills} | ${spellStr(e)} | ${runeName(e.rune)}${e.buffs?.length ? ' 버프:'+e.buffs.join(',') : ''}${e.debuffs?.length ? ' 디:'+e.debuffs.join(',') : ''}
-미니언: 아(근${gameState.minions.player.melee}/원${gameState.minions.player.ranged}) 적(근${gameState.minions.enemy.melee}/원${gameState.minions.enemy.ranged}) | 타워: 아${gameState.tower.player}% 적${gameState.tower.enemy}%`;
+  const pSkills = skillStatus(champ, p);
+  const eSkills = skillStatus(champ, e);
+
+  const dynamicPrompt = `## ${gameState.turn}턴 | 거리:${gameState.distance} | 장애물:${gameState.blocked ? '있음' : '없음'}
+P: HP${p.hp}/${p.maxHp} ${p.resourceType}${p.resource}/${p.maxResource} Lv${p.level} CS${p.cs} AD${p.ad} 방${p.armor} 마저${p.mr} 쉴${p.shield} | ${pSkills} | ${spellStr(p)} | ${runeName(p.rune)}${p.buffs?.length ? ' 버프:' + p.buffs.join(',') : ''}${p.debuffs?.length ? ' 디:' + p.debuffs.join(',') : ''}
+E: HP${e.hp}/${e.maxHp} ${e.resourceType}${e.resource}/${e.maxResource} Lv${e.level} CS${e.cs} AD${e.ad} 방${e.armor} 마저${e.mr} 쉴${e.shield} | ${eSkills} | ${spellStr(e)} | ${runeName(e.rune)}${e.buffs?.length ? ' 버프:' + e.buffs.join(',') : ''}${e.debuffs?.length ? ' 디:' + e.debuffs.join(',') : ''}
+미니언: 아(근${gameState.minions.player.melee}/원${gameState.minions.player.ranged}) 적(근${gameState.minions.enemy.melee}/원${gameState.minions.enemy.ranged})`;
 
   return { staticPrompt, dynamicPrompt };
 }
 
-// Legacy wrapper (kept for compatibility)
+function buildSkillDescription(champ) {
+  return Object.entries(champ.skills).map(([key, skill]) => {
+    const descs = skill.description.map((d, i) => {
+      const phase = skill.recast ? `${key}${i + 1}` : key;
+      return `${phase}: ${d}`;
+    }).join('\n');
+    return descs;
+  }).join('\n');
+}
+
+function buildRangeTable(champ) {
+  return Object.entries(champ.skills).map(([key, skill]) => {
+    if (skill.recast) {
+      return skill.range.map((r, i) =>
+        r > 0 ? `${key}${i + 1}: ${r}` : null
+      ).filter(Boolean).join(' | ');
+    }
+    return `${key}: ${skill.range[0]}`;
+  }).join('\n');
+}
 
 function skillStatus(champ, fighter) {
   return Object.entries(champ.skills).map(([k, s]) => {
     const lv = fighter.skillLevels[k], cd = fighter.cooldowns[k];
-    const st = lv===0 ? '✗' : cd>0 ? `쿨${cd}` : s.cost[0]>fighter.energy ? '기력부족' : '✓';
-    return `${k}(${s.name[0]})Lv${lv} [${st}]`;
-  }).join(' | ');
+    const cost = s.cost[0] || 0;
+    const st = lv === 0 ? '✗' : cd > 0 ? `쿨${cd}` : cost > fighter.resource ? '자원부족' : '✓';
+    return `${k}Lv${lv}[${st}]`;
+  }).join(' ');
+}
+
+function spellName(s) {
+  return { flash: '점멸', ignite: '점화', exhaust: '탈진', barrier: '방어막', tp: '텔포' }[s] || s;
+}
+
+function runeName(r) {
+  return {
+    conqueror: '정복자',
+    electrocute: '감전',
+    grasp: '착취'
+  }[r] || r;
 }

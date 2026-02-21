@@ -1,91 +1,85 @@
-// V2 Game state — simplified. LLM handles all judgment.
-import { randomUUID } from 'crypto';
+// Game state creation and management
+import { loadChampion } from './champions.js';
 
-export function createGame(spells = ['flash', 'ignite'], rune = 'conqueror') {
-  return {
-    id: randomUUID(),
-    turn: 1,
-    phase: 'skillup',
-    player: createFighter(spells, rune),
-    enemy: createFighter(['flash', 'ignite'], 'conqueror', { skillPoints: 0, skillLevels: { Q: 1, W: 0, E: 0, R: 0 } }),
-    minions: {
-      player: { melee: 3, ranged: 3 },
-      enemy: { melee: 3, ranged: 3 },
-    },
-    tower: { player: 100, enemy: 100 },
-    winner: null,
-  };
-}
+export function createGameState(championId, spells, rune) {
+  const champ = loadChampion(championId);
+  const stats = champ.baseStats;
 
-function createFighter(spells, rune, overrides = {}) {
-  return {
-    champion: 'lee-sin',
-    hp: 100,
-    maxHp: 100,
-    energy: 200,
-    maxEnergy: 200,
+  const fighter = (spells, rune) => ({
+    champion: championId,
+    hp: stats.hp,
+    maxHp: stats.hp,
+    resource: champ.resourceMax,
+    maxResource: champ.resourceMax,
+    resourceType: champ.resource,
     level: 1,
     cs: 0,
     gold: 0,
+    ad: stats.ad + (champ.startItems.default.ad || 0),
+    baseAd: stats.ad,
+    armor: stats.armor,
+    mr: stats.mr,
     skillLevels: { Q: 0, W: 0, E: 0, R: 0 },
     skillPoints: 1,
     cooldowns: { Q: 0, W: 0, E: 0, R: 0 },
-    position: '중거리',
     shield: 0,
     spells,
     spellCooldowns: [0, 0],
     rune,
     buffs: [],
     debuffs: [],
-    ...overrides,
-  };
-}
+  });
 
-export function fullState(game) {
+  // Random enemy rune
+  const runes = ['conqueror', 'electrocute', 'grasp'];
+  const enemyRune = runes[Math.floor(Math.random() * runes.length)];
+  // Random enemy spells (2 of 5, different from each other)
+  const allSpells = ['flash', 'ignite', 'exhaust', 'barrier', 'tp'];
+  const shuffled = allSpells.sort(() => Math.random() - 0.5);
+  const enemySpells = shuffled.slice(0, 2);
+
   return {
-    turn: game.turn,
-    phase: game.phase,
-    player: { ...game.player },
-    enemy: { ...game.enemy },
-    minions: JSON.parse(JSON.stringify(game.minions)),
-    tower: { ...game.tower },
-    winner: game.winner,
+    turn: 1,
+    phase: 'skillup',
+    distance: 800,
+    blocked: true,
+    player: fighter(spells, rune),
+    enemy: fighter(enemySpells, enemyRune),
+    minions: {
+      player: { melee: 3, ranged: 3 },
+      enemy: { melee: 3, ranged: 3 },
+    },
+    winner: null,
   };
 }
 
-// Apply validated stateUpdate to game state (diff merge — validated already has defaults from validate.js)
-export function applyStateUpdate(gameState, validated) {
-  const next = JSON.parse(JSON.stringify(gameState));
-  next.turn += 1;
+// Level up stats recalculation
+export function recalcStats(fighter, championId) {
+  const champ = loadChampion(championId);
+  const s = champ.baseStats;
+  const lv = fighter.level;
+  fighter.maxHp = Math.round(s.hp + s.hpPerLevel * (lv - 1));
+  fighter.ad = Math.round((s.ad + s.adPerLevel * (lv - 1)) + (champ.startItems.default.ad || 0));
+  fighter.baseAd = Math.round(s.ad + s.adPerLevel * (lv - 1));
+  fighter.armor = Math.round(s.armor + s.armorPerLevel * (lv - 1));
+  fighter.mr = Math.round(s.mr + s.mrPerLevel * (lv - 1));
+}
 
-  // Player fields
-  next.player.hp = validated.playerHp;
-  next.player.energy = validated.playerEnergy;
-  next.player.cooldowns = { ...validated.playerCooldowns };
-  next.player.position = validated.playerPosition;
-  next.player.cs = validated.playerCs;
-  next.player.level = validated.playerLevel;
-  next.player.gold = validated.playerGold;
-  next.player.shield = validated.playerShield;
-  next.player.buffs = validated.playerBuffs;
-  next.player.debuffs = validated.playerDebuffs;
-  if (validated.playerSpellCooldowns) next.player.spellCooldowns = [...validated.playerSpellCooldowns];
+// CS → Level table
+const CS_LEVEL_TABLE = [
+  { cs: 0, level: 1 },
+  { cs: 4, level: 2 },
+  { cs: 10, level: 3 },
+  { cs: 18, level: 4 },
+  { cs: 27, level: 5 },
+  { cs: 37, level: 6 },
+  { cs: 48, level: 7 },
+];
 
-  // Enemy fields
-  next.enemy.hp = validated.enemyHp;
-  next.enemy.energy = validated.enemyEnergy;
-  next.enemy.cooldowns = { ...validated.enemyCooldowns };
-  next.enemy.position = validated.enemyPosition;
-  next.enemy.cs = validated.enemyCs;
-  next.enemy.level = validated.enemyLevel;
-  next.enemy.gold = validated.enemyGold;
-  next.enemy.shield = validated.enemyShield;
-  next.enemy.buffs = validated.enemyBuffs;
-  next.enemy.debuffs = validated.enemyDebuffs;
-  if (validated.enemySpellCooldowns) next.enemy.spellCooldowns = [...validated.enemySpellCooldowns];
-
-  next.tower = { ...validated.towerHp };
-  next.minions = JSON.parse(JSON.stringify(validated.minions));
-
-  return next;
+export function csToLevel(cs) {
+  let level = 1;
+  for (const entry of CS_LEVEL_TABLE) {
+    if (cs >= entry.cs) level = entry.level;
+  }
+  return level;
 }
