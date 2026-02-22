@@ -53,9 +53,11 @@ export function applyActions(state, llmResult) {
   decrementCooldowns(state.player, elapsedSec);
   decrementCooldowns(state.enemy, elapsedSec);
 
-  // Natural resource recovery based on elapsed time
+  // Natural recovery based on elapsed time
   recoverResource(state.player, champ, elapsedSec);
   recoverResource(state.enemy, champ, elapsedSec);
+  recoverHp(state.player, champ, elapsedSec);
+  recoverHp(state.enemy, champ, elapsedSec);
 
   // Update distance and blocked
   if (llmResult.distance != null) state.distance = Math.max(0, llmResult.distance);
@@ -231,6 +233,13 @@ function decrementCooldowns(fighter, elapsedSec) {
   for (let i = 0; i < fighter.spellCooldowns.length; i++) {
     fighter.spellCooldowns[i] = Math.max(0, fighter.spellCooldowns[i] - elapsedSec);
   }
+}
+
+function recoverHp(fighter, champ, elapsedSec) {
+  const baseRegen = champ.baseStats.hpRegen || 0;
+  const regenPerLevel = champ.baseStats.hpRegenPerLevel || 0;
+  const regen = baseRegen + regenPerLevel * (fighter.level - 1);
+  fighter.hp = Math.min(fighter.maxHp, Math.round(fighter.hp + regen * elapsedSec));
 }
 
 function recoverResource(fighter, champ, elapsedSec) {
