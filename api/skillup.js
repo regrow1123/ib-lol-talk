@@ -1,36 +1,51 @@
-// POST /api/skillup — Skill level up (validation only, no LLM)
+import { loadChampion } from '../server/champions.js';
 
 export default function handler(req, res) {
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
-  if (req.method === 'OPTIONS') return res.status(200).end();
-  if (req.method !== 'POST') return res.status(405).json({ error: 'POST only' });
-
-  const { gameState, skill } = req.body || {};
-  if (!gameState || !skill) return res.status(400).json({ error: 'gameState와 skill이 필요합니다' });
-
-  const valid = ['Q', 'W', 'E', 'R'];
-  if (!valid.includes(skill)) return res.status(400).json({ error: '잘못된 스킬입니다' });
-
-  const state = JSON.parse(JSON.stringify(gameState));
-  const p = state.player;
-
-  if (p.skillPoints <= 0) return res.status(400).json({ error: '스킬포인트가 없습니다' });
-
-  const maxRank = skill === 'R' ? 3 : 5;
-  if (p.skillLevels[skill] >= maxRank) return res.status(400).json({ error: '이미 최대 레벨입니다' });
-
-  if (skill === 'R' && ![6, 11, 16].includes(p.level)) {
-    return res.status(400).json({ error: 'R은 레벨 6/11/16에서만 배울 수 있습니다' });
+  if (req.method !== 'POST') {
+    return res.status(405).json({ error: 'Method not allowed' });
   }
 
-  p.skillLevels[skill]++;
-  p.skillPoints--;
+  const { gameState, skill } = req.body || {};
+  if (!gameState || !skill) {
+    return res.status(400).json({ error: 'Missing gameState or skill' });
+  }
 
-  if (p.skillPoints <= 0) {
+  const state = JSON.parse(JSON.stringify(gameState));
+  const player = state.player;
+
+  // Validate
+  if (player.skillPoints <= 0) {
+    return res.status(400).json({ error: 'No skill points available' });
+  }
+
+  const champId = player.champion;
+  const champ = loadChampion(champId);
+  const skillData = champ.skills[skill];
+
+  if (!skillData) {
+    return res.status(400).json({ error: 'Invalid skill key' });
+  }
+
+  const maxRank = skillData.maxRank || 5;
+  if (player.skillLevels[skill] >= maxRank) {
+    return res.status(400).json({ error: 'Skill already at max rank' });
+  }
+
+  // R unlock level check
+  if (skill === 'R' && skillData.unlockLevel) {
+    if (!skillData.unlockLevel.includes(player.level)) {
+      return res.status(400).json({ error: `R can only be learned at level ${skillData.unlockLevel.join('/')}` });
+    }
+  }
+
+  // Apply
+  player.skillLevels[skill]++;
+  player.skillPoints--;
+
+  // If no more skill points, switch to play phase
+  if (player.skillPoints <= 0) {
     state.phase = 'play';
   }
 
-  res.json({ ok: true, state });
+  return res.status(200).json({ ok: true, state });
 }

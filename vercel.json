@@ -1,7 +1,14 @@
 {
-  "buildCommand": "",
-  "outputDirectory": "src",
-  "rewrites": [
-    { "source": "/api/:path*", "destination": "/api/:path*" }
+  "version": 2,
+  "builds": [
+    { "src": "api/**/*.js", "use": "@vercel/node" },
+    { "src": "src/**/*", "use": "@vercel/static" },
+    { "src": "data/**/*", "use": "@vercel/static" }
+  ],
+  "routes": [
+    { "src": "/api/(.*)", "dest": "/api/$1" },
+    { "src": "/data/(.*)", "dest": "/data/$1" },
+    { "src": "/src/(.*)", "dest": "/src/$1" },
+    { "src": "/(.*)", "dest": "/src/index.html" }
   ]
 }

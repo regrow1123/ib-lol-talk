@@ -1,70 +1,5 @@
-// Game state creation and management
 import { loadChampion } from './champions.js';
 
-export function createGameState(championId, spells, rune) {
-  const champ = loadChampion(championId);
-  const stats = champ.baseStats;
-
-  const fighter = (spells, rune) => ({
-    champion: championId,
-    hp: stats.hp,
-    maxHp: stats.hp,
-    resource: champ.resourceMax,
-    maxResource: champ.resourceMax,
-    resourceType: champ.resource,
-    level: 1,
-    cs: 0,
-    ad: stats.ad,
-    baseAd: stats.ad,
-    armor: stats.armor,
-    mr: stats.mr,
-    skillLevels: { Q: 0, W: 0, E: 0, R: 0 },
-    skillPoints: 1,
-    cooldowns: { Q: 0, W: 0, E: 0, R: 0 },
-    shields: [],
-    spells,
-    spellCooldowns: [0, 0],
-    rune,
-  });
-
-  // Random enemy rune
-  const runes = ['conqueror', 'electrocute', 'grasp'];
-  const enemyRune = runes[Math.floor(Math.random() * runes.length)];
-  // Random enemy spells (2 of 5, different from each other)
-  const allSpells = ['flash', 'ignite', 'exhaust', 'barrier', 'tp'];
-  const shuffled = allSpells.sort(() => Math.random() - 0.5);
-  const enemySpells = shuffled.slice(0, 2);
-
-  const enemyFighter = fighter(enemySpells, enemyRune);
-  // Enemy keeps skillPoints=1, LLM chooses skill on first turn via enemySkillUp
-
-  return {
-    phase: 'skillup',
-    distance: 800,
-    blocked: true,
-    player: fighter(spells, rune),
-    enemy: enemyFighter,
-    minions: {
-      player: { melee: 3, ranged: 3 },
-      enemy: { melee: 3, ranged: 3 },
-    },
-    winner: null,
-  };
-}
-
-// Level up stats recalculation
-export function recalcStats(fighter, championId) {
-  const champ = loadChampion(championId);
-  const s = champ.baseStats;
-  const lv = fighter.level;
-  fighter.maxHp = Math.round(s.hp + s.hpPerLevel * (lv - 1));
-  fighter.ad = Math.round(s.ad + s.adPerLevel * (lv - 1));
-  fighter.baseAd = Math.round(s.ad + s.adPerLevel * (lv - 1));
-  fighter.armor = Math.round(s.armor + s.armorPerLevel * (lv - 1));
-  fighter.mr = Math.round(s.mr + s.mrPerLevel * (lv - 1));
-}
-
-// CS → Level table
 const CS_LEVEL_TABLE = [
   { cs: 0, level: 1 },
   { cs: 4, level: 2 },
@@ -79,6 +14,78 @@ export function csToLevel(cs) {
   let level = 1;
   for (const entry of CS_LEVEL_TABLE) {
     if (cs >= entry.cs) level = entry.level;
+    else break;
   }
   return level;
+}
+
+export function recalcStats(fighter, championId) {
+  const champ = loadChampion(championId);
+  const s = champ.baseStats;
+  const lv = fighter.level;
+
+  const oldMaxHp = fighter.maxHp;
+  fighter.maxHp = Math.round(s.hp + s.hpPerLevel * (lv - 1));
+  fighter.ad = Math.round((s.ad + s.adPerLevel * (lv - 1)) * 10) / 10;
+  fighter.baseAd = fighter.ad;
+  fighter.armor = Math.round((s.armor + s.armorPerLevel * (lv - 1)) * 10) / 10;
+  fighter.mr = Math.round((s.mr + s.mrPerLevel * (lv - 1)) * 10) / 10;
+
+  // Preserve HP ratio on level-up
+  if (oldMaxHp > 0 && oldMaxHp !== fighter.maxHp) {
+    const ratio = fighter.hp / oldMaxHp;
+    fighter.hp = Math.round(ratio * fighter.maxHp);
+  }
+}
+
+function createFighter(championId, spells, rune) {
+  const champ = loadChampion(championId);
+  const s = champ.baseStats;
+  return {
+    champion: championId,
+    hp: s.hp,
+    maxHp: s.hp,
+    resource: champ.resourceMax,
+    maxResource: champ.resourceMax,
+    resourceType: champ.resource,
+    level: 1,
+    cs: 0,
+    ad: s.ad,
+    baseAd: s.ad,
+    armor: s.armor,
+    mr: s.mr,
+    skillLevels: { Q: 0, W: 0, E: 0, R: 0 },
+    skillPoints: 1,
+    cooldowns: { Q: 0, W: 0, E: 0, R: 0 },
+    shields: [],
+    spells,
+    spellCooldowns: [0, 0],
+    rune,
+  };
+}
+
+const RUNES = ['conqueror', 'electrocute', 'grasp'];
+const SPELLS = ['flash', 'ignite', 'exhaust', 'barrier', 'teleport'];
+
+function pickRandom(arr, count) {
+  const shuffled = [...arr].sort(() => Math.random() - 0.5);
+  return shuffled.slice(0, count);
+}
+
+export function createGameState(championId, spells, rune) {
+  const enemyRune = pickRandom(RUNES, 1)[0];
+  const enemySpells = pickRandom(SPELLS, 2);
+
+  return {
+    phase: 'skillup',
+    distance: 800,
+    blocked: true,
+    player: createFighter(championId, spells, rune),
+    enemy: createFighter(championId, enemySpells, enemyRune),
+    minions: {
+      player: { melee: 3, ranged: 3 },
+      enemy: { melee: 3, ranged: 3 },
+    },
+    winner: null,
+  };
 }

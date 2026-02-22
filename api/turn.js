@@ -1,143 +1,128 @@
-// POST /api/turn — Turn processing: LLM → damage engine → state update
 import { callLLM } from '../server/llm.js';
 import { applyActions } from '../server/damage.js';
 import { validateState } from '../server/validate.js';
 import { csToLevel, recalcStats } from '../server/game.js';
+import { loadChampion } from '../server/champions.js';
 
 export default async function handler(req, res) {
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
-  if (req.method === 'OPTIONS') return res.status(200).end();
-  if (req.method !== 'POST') return res.status(405).json({ error: 'POST only' });
+  if (req.method !== 'POST') {
+    return res.status(405).json({ error: 'Method not allowed' });
+  }
 
   const { gameState, input, history } = req.body || {};
   if (!gameState || !input) {
-    return res.status(400).json({ error: 'gameState와 input이 필요합니다' });
-  }
-
-  if (gameState.phase === 'gameover') {
-    return res.json({ state: gameState, narrative: '게임이 이미 종료되었습니다.', suggestions: [] });
+    return res.status(400).json({ error: 'Missing gameState or input' });
   }
 
   try {
-    // 1. LLM call
+    // 1. Call LLM
     const llmResult = await callLLM(gameState, input, history || []);
 
-    // 2. Deep copy state for mutation
+    // 2. Deep copy state
     const state = JSON.parse(JSON.stringify(gameState));
 
-    // 3. Damage engine: apply actions
+    // 3. Apply actions (damage, cooldowns, resources, HP regen, shields)
     applyActions(state, llmResult);
 
-    // 4. Guardrail validation
+    // 4. Guardrails
     validateState(state);
 
-    // 5. Level up check (player)
+    // 5. Level-up check
     let levelUp = null;
-    const expectedPlayerLevel = csToLevel(state.player.cs);
-    if (expectedPlayerLevel > gameState.player.level) {
-      const gained = expectedPlayerLevel - gameState.player.level;
-      state.player.level = expectedPlayerLevel;
-      state.player.skillPoints = (state.player.skillPoints || 0) + gained;
-      recalcStats(state.player, state.player.champion);
-      // Heal proportionally to max HP increase
-      const hpRatio = gameState.player.hp / gameState.player.maxHp;
-      state.player.hp = Math.round(hpRatio * state.player.maxHp);
+    const champId = state.player.champion;
+
+    // Player level-up
+    const playerNewLevel = csToLevel(state.player.cs);
+    if (playerNewLevel > state.player.level) {
+      const pointsGained = playerNewLevel - state.player.level;
+      state.player.level = playerNewLevel;
+      state.player.skillPoints += pointsGained;
+      recalcStats(state.player, champId);
       state.phase = 'skillup';
-      levelUp = { newLevel: expectedPlayerLevel, who: 'player' };
+      levelUp = { newLevel: playerNewLevel, who: 'player' };
     }
 
-    // 6. Level up check (enemy) — LLM chooses skill
-    const expectedEnemyLevel = csToLevel(state.enemy.cs);
-    if (expectedEnemyLevel > gameState.enemy.level) {
-      state.enemy.level = expectedEnemyLevel;
-      recalcStats(state.enemy, state.enemy.champion);
-      const hpRatio = gameState.enemy.hp / gameState.enemy.maxHp;
-      state.enemy.hp = Math.round(hpRatio * state.enemy.maxHp);
+    // Enemy level-up
+    const enemyNewLevel = csToLevel(state.enemy.cs);
+    if (enemyNewLevel > state.enemy.level) {
+      const pointsGained = enemyNewLevel - state.enemy.level;
+      state.enemy.level = enemyNewLevel;
+      state.enemy.skillPoints += pointsGained;
+      recalcStats(state.enemy, champId);
 
-      // LLM-chosen skill up
-      if (llmResult.enemySkillUp) {
-        const key = llmResult.enemySkillUp;
-        if (isValidSkillUp(state.enemy, key)) {
-          state.enemy.skillLevels[key]++;
-        }
-      } else {
-        // Fallback: auto skill up
-        autoSkillUp(state.enemy);
-      }
+      // Apply enemy skillup from LLM (or auto-choose)
+      applyEnemySkillUp(state.enemy, llmResult.enemySkillUp, champId);
     }
 
-    // 6.5. Enemy pending skillPoints (e.g. initial skill at game start)
-    while (state.enemy.skillPoints > 0) {
-      if (llmResult.enemySkillUp) {
-        const key = llmResult.enemySkillUp;
-        if (isValidSkillUp(state.enemy, key)) {
-          state.enemy.skillLevels[key]++;
-          state.enemy.skillPoints--;
-          continue;
-        }
-      }
-      // Fallback
-      autoSkillUp(state.enemy);
-      state.enemy.skillPoints--;
+    // Also handle enemy skillup if they had pending points (not from level-up this turn)
+    if (state.enemy.skillPoints > 0 && llmResult.enemySkillUp) {
+      applyEnemySkillUp(state.enemy, llmResult.enemySkillUp, champId);
     }
 
-    // 7. Game over check
-    let gameOver = llmResult.gameOver || null;
-    if (!gameOver) {
-      if (state.player.hp <= 0 && state.enemy.hp <= 0) {
-        state.player.hp = 1;
-        state.enemy.hp = 0;
-        gameOver = { winner: 'player', reason: 'kill', summary: '아슬아슬하게 먼저 처치!' };
-      } else if (state.player.hp <= 0) {
-        gameOver = { winner: 'enemy', reason: 'kill', summary: '적에게 처치당했습니다.' };
-      } else if (state.enemy.hp <= 0) {
-        gameOver = { winner: 'player', reason: 'kill', summary: '적을 처치했습니다!' };
-      } else if (state.player.cs >= 50) {
-        gameOver = { winner: 'player', reason: 'cs', summary: 'CS 50 달성!' };
-      } else if (state.enemy.cs >= 50) {
-        gameOver = { winner: 'enemy', reason: 'cs', summary: '적이 먼저 CS 50에 도달.' };
-      }
+    // 6. Game over check
+    let gameOver = null;
+    if (state.player.hp <= 0) {
+      state.winner = 'enemy';
+      gameOver = { winner: 'enemy', reason: 'kill', summary: '상대에게 처치당했습니다.' };
+    } else if (state.enemy.hp <= 0) {
+      state.winner = 'player';
+      gameOver = { winner: 'player', reason: 'kill', summary: '상대를 처치했습니다!' };
+    } else if (state.player.cs >= 50) {
+      state.winner = 'player';
+      gameOver = { winner: 'player', reason: 'cs', summary: 'CS 50 달성!' };
+    } else if (state.enemy.cs >= 50) {
+      state.winner = 'enemy';
+      gameOver = { winner: 'enemy', reason: 'cs', summary: '상대가 CS 50을 먼저 달성했습니다.' };
     }
 
-    if (gameOver) {
-      state.phase = 'gameover';
-      state.winner = gameOver.winner;
-    } else if (!levelUp) {
-      state.phase = 'play';
-    }
-
-    console.log(`Turn ${gameState.turn}: "${input}" → HP ${state.player.hp}/${state.enemy.hp} Res ${state.player.resource}/${state.enemy.resource} CD ${JSON.stringify(state.player.cooldowns)} Actions: ${JSON.stringify(llmResult.actions?.map(a => `${a.who}:${a.skill}:${a.hit}`))}`);
-
-
-    res.json({
+    return res.status(200).json({
       state,
       narrative: llmResult.narrative || '',
-      aiChat: llmResult.aiChat || null,
+      aiChat: llmResult.aiChat || '',
       suggestions: llmResult.suggestions || [],
       levelUp,
       gameOver,
     });
   } catch (err) {
-    console.error('Turn error:', err.message, err.stack);
-    res.status(500).json({ error: '턴 처리 중 오류: ' + err.message });
+    console.error('[turn]', err);
+    return res.status(500).json({ error: 'Internal server error' });
   }
 }
 
-function isValidSkillUp(enemy, key) {
-  if (!['Q', 'W', 'E', 'R'].includes(key)) return false;
-  const maxRank = key === 'R' ? 3 : 5;
-  if (enemy.skillLevels[key] >= maxRank) return false;
-  if (key === 'R' && ![6, 11, 16].includes(enemy.level)) return false;
-  return true;
+function applyEnemySkillUp(enemy, skillKey, champId) {
+  if (!skillKey || enemy.skillPoints <= 0) return;
+
+  const champ = loadChampion(champId);
+  const skill = champ.skills[skillKey];
+  if (!skill) return;
+
+  const maxRank = skill.maxRank || 5;
+
+  // R unlock level check
+  if (skillKey === 'R' && skill.unlockLevel) {
+    if (!skill.unlockLevel.includes(enemy.level)) return;
+  }
+
+  if (enemy.skillLevels[skillKey] >= maxRank) {
+    // Already maxed, auto-choose another skill
+    autoSkillUp(enemy, champId);
+    return;
+  }
+
+  enemy.skillLevels[skillKey]++;
+  enemy.skillPoints--;
 }
 
-function autoSkillUp(enemy) {
-  if (enemy.level >= 6 && enemy.skillLevels.R < 1) { enemy.skillLevels.R++; return; }
-  if (enemy.level >= 11 && enemy.skillLevels.R < 2) { enemy.skillLevels.R++; return; }
-  if (enemy.level >= 16 && enemy.skillLevels.R < 3) { enemy.skillLevels.R++; return; }
-  for (const sk of ['Q', 'E', 'W']) {
-    if (enemy.skillLevels[sk] < 5) { enemy.skillLevels[sk]++; return; }
+function autoSkillUp(enemy, champId) {
+  const champ = loadChampion(champId);
+  // Priority: Q > W > E
+  for (const key of ['Q', 'W', 'E']) {
+    const skill = champ.skills[key];
+    const maxRank = skill.maxRank || 5;
+    if (enemy.skillLevels[key] < maxRank) {
+      enemy.skillLevels[key]++;
+      enemy.skillPoints--;
+      return;
+    }
   }
 }

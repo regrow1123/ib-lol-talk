@@ -1,483 +1,456 @@
-// ib-lol talk — Clean rewrite
-const $ = id => document.getElementById(id);
-const API_BASE = window.location.hostname === 'localhost' ? 'http://localhost:3001' : '';
 const DDRAGON = 'https://ddragon.leagueoflegends.com/cdn/14.20.1';
+const CHAMPION_ID = 'lee-sin';
 
-let state = null;
-let sending = false;
-let turnHistory = [];
-let allSuggestions = [];
-let skillRanges = {}; // {Q: 1200, W: 700, E: 450, R: 375, AA: 125}
-let setupChoices = { spells: [], rune: null };
+// ===== STATE =====
+let gameState = null;
+let championData = null;
+let history = [];
+let currentSuggestions = [];
+let selectedSpells = [];
+let selectedRune = null;
+let isLoading = false;
 
-// ═══════════════════════════════════════
-// Setup Screen
-// ═══════════════════════════════════════
-function initSetup() {
-  document.querySelectorAll('#spell-grid .spell-card').forEach(el => {
-    el.onclick = () => {
-      const spell = el.dataset.spell;
-      if (el.classList.contains('selected')) {
-        el.classList.remove('selected');
-        setupChoices.spells = setupChoices.spells.filter(s => s !== spell);
-      } else {
-        if (setupChoices.spells.length >= 2) {
-          const first = setupChoices.spells.shift();
-          document.querySelector(`#spell-grid [data-spell="${first}"]`).classList.remove('selected');
-        }
-        setupChoices.spells.push(spell);
-        el.classList.add('selected');
-      }
-      updateStartBtn();
-    };
+// ===== SPELL / RUNE DATA =====
+const SPELLS = [
+  { id: 'flash', name: '점멸', icon: 'SummonerFlash' },
+  { id: 'ignite', name: '점화', icon: 'SummonerDot' },
+  { id: 'exhaust', name: '탈진', icon: 'SummonerExhaust' },
+  { id: 'barrier', name: '방벽', icon: 'SummonerBarrier' },
+  { id: 'teleport', name: '텔레포트', icon: 'SummonerTeleport' },
+];
+
+const RUNES = [
+  { id: 'conqueror', name: '정복자', icon: '8010' },
+  { id: 'electrocute', name: '감전', icon: '8112' },
+  { id: 'grasp', name: '착취', icon: '8437' },
+];
+
+const SKILL_ICONS = {
+  Q: 'LeeSinQ',
+  W: 'LeeSinW',
+  E: 'LeeSinE',
+  R: 'LeeSinR',
+};
+
+// ===== DOM =====
+const $setup = document.getElementById('setup-screen');
+const $game = document.getElementById('game-screen');
+const $spellSelect = document.getElementById('spell-select');
+const $runeSelect = document.getElementById('rune-select');
+const $startBtn = document.getElementById('start-btn');
+const $playerStatus = document.getElementById('player-status');
+const $enemyStatus = document.getElementById('enemy-status');
+const $chatArea = document.getElementById('chat-area');
+const $suggestions = document.getElementById('suggestions');
+const $input = document.getElementById('player-input');
+const $sendBtn = document.getElementById('send-btn');
+const $overlay = document.getElementById('gameover-overlay');
+const $gameoverTitle = document.getElementById('gameover-title');
+const $gameoverSummary = document.getElementById('gameover-summary');
+const $restartBtn = document.getElementById('restart-btn');
+
+// ===== INIT =====
+async function init() {
+  const res = await fetch(`/data/champions/${CHAMPION_ID}.json`);
+  championData = await res.json();
+  renderSetup();
+}
+
+function renderSetup() {
+  // Spells
+  $spellSelect.innerHTML = SPELLS.map(s =>
+    `<button class="icon-btn" data-spell="${s.id}" title="${s.name}">
+      <img src="${DDRAGON}/img/spell/${s.icon}.png" alt="${s.name}">
+    </button>`
+  ).join('');
+
+  $spellSelect.addEventListener('click', e => {
+    const btn = e.target.closest('[data-spell]');
+    if (!btn) return;
+    const id = btn.dataset.spell;
+    if (selectedSpells.includes(id)) {
+      selectedSpells = selectedSpells.filter(s => s !== id);
+      btn.classList.remove('selected');
+    } else if (selectedSpells.length < 2) {
+      selectedSpells.push(id);
+      btn.classList.add('selected');
+    }
+    updateStartBtn();
   });
 
-  document.querySelectorAll('#rune-grid .rune-card').forEach(el => {
-    el.onclick = () => {
-      document.querySelectorAll('#rune-grid .rune-card').forEach(c => c.classList.remove('selected'));
-      el.classList.add('selected');
-      setupChoices.rune = el.dataset.rune;
-      updateStartBtn();
-    };
+  // Runes
+  $runeSelect.innerHTML = RUNES.map(r =>
+    `<button class="icon-btn" data-rune="${r.id}" title="${r.name}">
+      <img src="https://ddragon.leagueoflegends.com/cdn/img/perk-images/Styles/Precision/${r.id === 'conqueror' ? 'Conqueror/Conqueror' : r.id === 'electrocute' ? 'Domination/Electrocute/Electrocute' : 'Resolve/GraspOfTheUndying/GraspOfTheUndying'}.png" alt="${r.name}">
+    </button>`
+  ).join('');
+
+  $runeSelect.addEventListener('click', e => {
+    const btn = e.target.closest('[data-rune]');
+    if (!btn) return;
+    $runeSelect.querySelectorAll('.icon-btn').forEach(b => b.classList.remove('selected'));
+    btn.classList.add('selected');
+    selectedRune = btn.dataset.rune;
+    updateStartBtn();
   });
 
-  $('setup-start-btn').onclick = async () => {
-    $('setup-start-btn').disabled = true;
-    $('setup-start-btn').textContent = '로딩...';
-    await startGame();
-    $('setup-overlay').classList.add('hidden');
-  };
+  $startBtn.addEventListener('click', startGame);
+  $restartBtn.addEventListener('click', () => { location.reload(); });
 }
 
 function updateStartBtn() {
-  $('setup-start-btn').disabled = !(setupChoices.spells.length === 2 && setupChoices.rune);
+  $startBtn.disabled = !(selectedSpells.length === 2 && selectedRune);
 }
 
-// ═══════════════════════════════════════
-// Game Start
-// ═══════════════════════════════════════
-async function startGame() {
-  try {
-    const res = await fetch(`${API_BASE}/api/start`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ spells: setupChoices.spells, rune: setupChoices.rune }),
-    });
-    const data = await res.json();
-    state = data.state;
-    skillRanges = data.skillRanges || {};
-    allSuggestions = data.suggestions || [];
-
-    const spellNames = { flash: '점멸', ignite: '점화', exhaust: '탈진', barrier: '방어막', tp: '텔레포트' };
-    const runeNames = { conqueror: '정복자', electrocute: '감전', grasp: '착취의 손아귀' };
-    addSystemMsg(`📜 ${runeNames[setupChoices.rune]} | 🔮 ${setupChoices.spells.map(s => spellNames[s]).join(' + ')}`);
-    addSystemMsg(data.narrative || '⚔️ 라인전 시작!');
-  } catch {
-    addSystemMsg('⚠️ 서버 연결 실패');
-  }
-
-  renderStatus();
-  handlePhase();
-}
-
-// ═══════════════════════════════════════
-// Phase Handler
-// ═══════════════════════════════════════
-function handlePhase() {
-  if (!state) return;
-
-  if (state.phase === 'skillup' && state.player.skillPoints > 0) {
-    setInput(false);
-    showSkillUpChoices();
-  } else if (state.phase === 'gameover') {
-    setInput(false);
-  } else {
-    state.phase = 'play';
-    renderSuggestions(allSuggestions);
-    setInput(true);
-  }
-}
-
-// ═══════════════════════════════════════
-// Skill Level-Up
-// ═══════════════════════════════════════
-const SKILL_NAMES = { Q: '음파', W: '방호', E: '폭풍', R: '용의 분노' };
-
-function showSkillUpChoices() {
-  addSystemMsg('⬆️ 스킬을 선택하세요');
-  const box = $('suggestions');
-  box.innerHTML = '';
-
-  const opts = ['Q', 'W', 'E'];
-  if (state.player.level >= 6 && state.player.skillLevels.R < 1) opts.push('R');
-
-  const available = opts.filter(k => {
-    const maxLv = k === 'R' ? 3 : 5;
-    return state.player.skillLevels[k] < maxLv;
+// ===== GAME START =====
+function startGame() {
+  // Client-side state initialization
+  const s = championData.baseStats;
+  const createFighter = (spells, rune) => ({
+    champion: CHAMPION_ID,
+    hp: s.hp, maxHp: s.hp,
+    resource: championData.resourceMax, maxResource: championData.resourceMax,
+    resourceType: championData.resource,
+    level: 1, cs: 0,
+    ad: s.ad, baseAd: s.ad, armor: s.armor, mr: s.mr,
+    skillLevels: { Q: 0, W: 0, E: 0, R: 0 },
+    skillPoints: 1,
+    cooldowns: { Q: 0, W: 0, E: 0, R: 0 },
+    shields: [],
+    spells, spellCooldowns: [0, 0],
+    rune,
   });
 
-  for (const key of available) {
-    const btn = document.createElement('button');
-    btn.className = 'suggestion-btn skillup-btn';
-    const lv = state.player.skillLevels[key];
-    btn.textContent = `${key} ${SKILL_NAMES[key]} (Lv${lv}→${lv + 1})`;
-    btn.onclick = () => doSkillUp(key);
-    box.appendChild(btn);
-  }
-}
+  // Enemy gets random rune + spells
+  const runes = ['conqueror', 'electrocute', 'grasp'];
+  const spells = ['flash', 'ignite', 'exhaust', 'barrier', 'teleport'];
+  const enemyRune = runes[Math.floor(Math.random() * runes.length)];
+  const shuffled = [...spells].sort(() => Math.random() - 0.5);
+  const enemySpells = shuffled.slice(0, 2);
 
-async function doSkillUp(key) {
-  $('suggestions').querySelectorAll('.skillup-btn').forEach(b => { b.disabled = true; });
+  gameState = {
+    phase: 'skillup',
+    distance: 800,
+    blocked: true,
+    player: createFighter(selectedSpells, selectedRune),
+    enemy: createFighter(enemySpells, enemyRune),
+    minions: {
+      player: { melee: 3, ranged: 3 },
+      enemy: { melee: 3, ranged: 3 },
+    },
+    winner: null,
+  };
 
-  let skillupData = null;
-  try {
-    const res = await fetch(`${API_BASE}/api/skillup`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ gameState: state, skill: key }),
-    });
-    skillupData = await res.json();
-    if (skillupData.error) {
-      addSystemMsg(`⚠️ ${skillupData.error}`);
-      showSkillUpChoices();
-      return;
-    }
-    if (skillupData.state) state = skillupData.state;
-  } catch {
-    state.player.skillLevels[key]++;
-    state.player.skillPoints--;
-  }
+  $setup.classList.remove('active');
+  $game.classList.add('active');
 
   renderStatus();
-  addSystemMsg(`${key} (${SKILL_NAMES[key]}) 스킬을 배웠습니다!`);
-
-  if (state.player.skillPoints > 0) {
-    showSkillUpChoices();
-  } else {
-    state.phase = 'play';
-    renderSuggestions(allSuggestions);
-    setInput(true);
-    $('player-input').focus();
-  }
+  addSystemMessage('라인전이 시작됩니다. 첫 스킬을 선택하세요.');
+  showSkillUpUI();
 }
 
-// ═══════════════════════════════════════
-// Submit Turn
-// ═══════════════════════════════════════
-async function submit() {
-  if (sending || !state || state.phase !== 'play') return;
-  const input = $('player-input').value.trim();
-  if (!input) return;
+// ===== STATUS RENDERING =====
+function renderStatus() {
+  renderFighterStatus($playerStatus, gameState.player, '나');
+  renderFighterStatus($enemyStatus, gameState.enemy, '상대');
+}
 
-  sending = true;
-  $('player-input').value = '';
-  renderSuggestions([]);
-  setInput(false);
-  addMyMsg(input);
+function renderFighterStatus(el, fighter, label) {
+  const hpPct = Math.max(0, (fighter.hp / fighter.maxHp) * 100);
+  const hpColor = hpPct > 50 ? 'var(--hp-green)' : 'var(--hp-red)';
+  const portrait = `${DDRAGON}/img/champion/LeeSin.png`;
 
-  const typing = addTypingIndicator();
+  let cdHtml = '';
+  for (const key of ['Q', 'W', 'E', 'R']) {
+    const lv = fighter.skillLevels[key];
+    const cd = fighter.cooldowns[key];
+    const onCd = cd > 0;
+    const iconName = SKILL_ICONS[key];
+    if (lv > 0) {
+      cdHtml += `<div class="cd-icon ${onCd ? 'on-cd' : ''}">
+        <img src="${DDRAGON}/img/spell/${iconName}.png" alt="${key}">
+        ${onCd ? `<div class="cd-text">${Math.ceil(cd)}</div>` : ''}
+      </div>`;
+    }
+  }
 
+  // Spell cooldown icons
+  let spellCdHtml = '';
+  for (let i = 0; i < fighter.spells.length; i++) {
+    const spell = SPELLS.find(s => s.id === fighter.spells[i]);
+    const cd = fighter.spellCooldowns[i];
+    if (spell) {
+      spellCdHtml += `<div class="cd-icon ${cd > 0 ? 'on-cd' : ''}">
+        <img src="${DDRAGON}/img/spell/${spell.icon}.png" alt="${spell.name}">
+        ${cd > 0 ? `<div class="cd-text">${Math.ceil(cd)}</div>` : ''}
+      </div>`;
+    }
+  }
+
+  el.innerHTML = `
+    <div class="name-line">
+      <img src="${portrait}" alt="${label}">
+      <span>${label}</span>
+      <span style="font-size:11px;color:#b2bec3">Lv${fighter.level}</span>
+    </div>
+    <div class="hp-bar"><div class="hp-fill" style="width:${hpPct}%;background:${hpColor}"></div></div>
+    <div class="stat-line">
+      <span class="hp-text">${Math.round(fighter.hp)}/${fighter.maxHp}</span>
+      <span style="color:var(--energy-yellow)">${fighter.resource}/${fighter.maxResource}</span>
+      <span>CS ${fighter.cs}</span>
+    </div>
+    <div class="cd-icons">${cdHtml}${spellCdHtml}</div>
+  `;
+}
+
+// ===== CHAT =====
+function addSystemMessage(text) {
+  const div = document.createElement('div');
+  div.className = 'msg system';
+  div.innerHTML = `<div class="bubble">${text}</div>`;
+  $chatArea.appendChild(div);
+  $chatArea.scrollTop = $chatArea.scrollHeight;
+}
+
+function addMyMessage(text) {
+  const div = document.createElement('div');
+  div.className = 'msg mine';
+  div.innerHTML = `<div class="bubble">${text}</div>`;
+  $chatArea.appendChild(div);
+  $chatArea.scrollTop = $chatArea.scrollHeight;
+}
+
+function addEnemyMessage(text) {
+  const div = document.createElement('div');
+  div.className = 'msg enemy';
+  div.innerHTML = `<div class="sender">${championData.name}</div><div class="bubble">${text}</div>`;
+  $chatArea.appendChild(div);
+  $chatArea.scrollTop = $chatArea.scrollHeight;
+}
+
+// ===== SKILLUP =====
+function showSkillUpUI() {
+  $input.disabled = true;
+  $sendBtn.disabled = true;
+
+  const buttons = [];
+  for (const key of ['Q', 'W', 'E']) {
+    const skill = championData.skills[key];
+    const lv = gameState.player.skillLevels[key];
+    const maxRank = skill.maxRank || 5;
+    if (lv < maxRank) {
+      const name = Array.isArray(skill.name) ? skill.name[0] : skill.name;
+      buttons.push(`<button class="skillup-btn" data-skill="${key}">${key} - ${name}</button>`);
+    }
+  }
+
+  // R check
+  const rSkill = championData.skills.R;
+  if (rSkill && rSkill.unlockLevel && rSkill.unlockLevel.includes(gameState.player.level)) {
+    const lv = gameState.player.skillLevels.R;
+    if (lv < (rSkill.maxRank || 3)) {
+      const name = Array.isArray(rSkill.name) ? rSkill.name[0] : rSkill.name;
+      buttons.push(`<button class="skillup-btn" data-skill="R">R - ${name}</button>`);
+    }
+  }
+
+  $suggestions.innerHTML = buttons.join('');
+  $suggestions.querySelectorAll('.skillup-btn').forEach(btn => {
+    btn.addEventListener('click', () => doSkillUp(btn.dataset.skill));
+  });
+}
+
+async function doSkillUp(skill) {
   try {
-    const res = await fetch(`${API_BASE}/api/turn`, {
+    const res = await fetch('/api/skillup', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ gameState: state, input, history: turnHistory }),
+      body: JSON.stringify({ gameState, skill }),
     });
     const data = await res.json();
-    typing.remove();
-
-    if (data.error) {
-      addSystemMsg(`⚠️ ${data.error}`);
-    } else {
-      turnHistory.push({ role: 'user', content: input });
-      turnHistory.push({ role: 'assistant', content: `${data.narrative || ''} | ${data.aiChat || ''}` });
-      if (turnHistory.length > 12) turnHistory = turnHistory.slice(-12);
-
-      if (data.narrative) addSystemMsg(data.narrative);
-      if (data.aiChat) addEnemyMsg(data.aiChat);
-
-      if (data.state) state = data.state;
-      renderStatus();
-
-      if (data.gameOver) {
-        state.phase = 'gameover';
-        state.winner = data.gameOver.winner;
-        showGameOver(data.gameOver);
-      } else if (data.levelUp && data.levelUp.who !== 'enemy') {
-        allSuggestions = data.suggestions || [];
-        handlePhase();
-      } else {
-        state.phase = 'play';
-        allSuggestions = data.suggestions || [];
-        renderSuggestions(allSuggestions);
-        setInput(true);
-      }
+    if (!data.ok) {
+      addSystemMessage(`스킬 선택 실패: ${data.error}`);
+      return;
     }
-  } catch {
-    typing.remove();
-    addSystemMsg('⚠️ 서버 오류가 발생했습니다');
-  }
 
-  sending = false;
-  if (state?.phase === 'play') {
-    setInput(true);
-    $('player-input').focus();
-  }
-}
+    gameState = data.state;
+    renderStatus();
 
-// ═══════════════════════════════════════
-// Messages
-// ═══════════════════════════════════════
-function addMyMsg(text) {
-  const feed = $('chat-feed');
-  const div = document.createElement('div');
-  div.className = 'msg me';
-  div.innerHTML = `<div class="msg-time">${timeStr()}</div><div class="msg-body"><div class="bubble">${esc(text)}</div></div>`;
-  feed.appendChild(div);
-  scrollBottom();
-}
+    const skillName = Array.isArray(championData.skills[skill].name)
+      ? championData.skills[skill].name[0] : championData.skills[skill].name;
+    addSystemMessage(`${skill} - ${skillName} 스킬을 배웠습니다.`);
 
-function addEnemyMsg(text) {
-  const feed = $('chat-feed');
-  const div = document.createElement('div');
-  div.className = 'msg them';
-  div.innerHTML = `
-    <div class="msg-avatar enemy-avatar"><img src="${DDRAGON}/img/champion/LeeSin.png" alt="리신"></div>
-    <div class="msg-body">
-      <div class="msg-name">상대방</div>
-      <div class="bubble">${esc(text)}</div>
-    </div>
-    <div class="msg-time">${timeStr()}</div>`;
-  feed.appendChild(div);
-  scrollBottom();
-}
-
-function addSystemMsg(text) {
-  const feed = $('chat-feed');
-  const div = document.createElement('div');
-  div.className = 'msg center';
-  div.innerHTML = `<div class="bubble">${esc(text)}</div>`;
-  feed.appendChild(div);
-  scrollBottom();
-}
-
-function addTypingIndicator() {
-  const feed = $('chat-feed');
-  const div = document.createElement('div');
-  div.className = 'msg them';
-  div.innerHTML = `
-    <div class="msg-avatar enemy-avatar"><img src="${DDRAGON}/img/champion/LeeSin.png" alt="리신"></div>
-    <div class="msg-body">
-      <div class="bubble"><div class="typing-indicator"><span></span><span></span><span></span></div></div>
-    </div>`;
-  feed.appendChild(div);
-  scrollBottom();
-  return div;
-}
-
-function scrollBottom() {
-  const feed = $('chat-feed');
-  requestAnimationFrame(() => feed.scrollTop = feed.scrollHeight);
-}
-
-function timeStr() {
-  const now = new Date();
-  const h = now.getHours();
-  const m = String(now.getMinutes()).padStart(2, '0');
-  return `${h >= 12 ? '오후' : '오전'} ${h % 12 || 12}:${m}`;
-}
-
-function esc(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
-
-function setInput(on) {
-  $('player-input').disabled = !on;
-  $('send-btn').disabled = !on;
-}
-
-// ═══════════════════════════════════════
-// Game Over
-// ═══════════════════════════════════════
-function showGameOver(gameOver) {
-  $('gameover-overlay').classList.remove('hidden');
-  $('gameover-title').textContent = gameOver.winner === 'player' ? '🏆 승리!' : '💀 패배...';
-  $('gameover-summary').textContent = gameOver.summary || '';
-  $('review-btn').onclick = () => {
-    $('gameover-overlay').classList.add('hidden');
-    setInput(false);
-    const box = $('suggestions');
-    box.innerHTML = '';
-    const btn = document.createElement('button');
-    btn.className = 'suggestion-btn';
-    btn.textContent = '🔄 새 게임 시작';
-    btn.onclick = () => location.reload();
-    box.appendChild(btn);
-  };
-  $('restart-btn').onclick = () => location.reload();
-}
-
-// ═══════════════════════════════════════
-// Status Rendering
-// ═══════════════════════════════════════
-function renderStatus() {
-  if (!state) return;
-  const p = state.player, e = state.enemy;
-
-  // HP bars (percentage for width, actual values for text)
-  const pHpPct = (p.hp / p.maxHp) * 100;
-  const eHpPct = (e.hp / e.maxHp) * 100;
-  $('p-hp-fill').style.width = `${pHpPct}%`;
-  $('p-hp-text').textContent = `${p.hp} / ${p.maxHp}`;
-  $('e-hp-fill').style.width = `${eHpPct}%`;
-  $('e-hp-text').textContent = `${e.hp} / ${e.maxHp}`;
-
-  // Resource bars
-  const pResPct = (p.resource / p.maxResource) * 100;
-  const eResPct = (e.resource / e.maxResource) * 100;
-  $('p-energy-fill').style.width = `${pResPct}%`;
-  $('p-energy-text').textContent = `${Math.round(p.resource)}`;
-  $('e-energy-fill').style.width = `${eResPct}%`;
-  $('e-energy-text').textContent = `${Math.round(e.resource)}`;
-
-  // Stats
-  $('p-cs').textContent = p.cs;
-  $('p-gold').textContent = p.gold;
-  $('p-level').textContent = `Lv.${p.level}`;
-  $('e-cs').textContent = e.cs;
-  $('e-gold').textContent = e.gold;
-  $('e-level').textContent = `Lv.${e.level}`;
-
-  renderCooldowns('p-cooldowns', p);
-  renderCooldowns('e-cooldowns', e);
-  renderRune('p-rune', p.rune);
-  renderRune('e-rune', e.rune);
-
-  setHpColor('p-hp-fill', pHpPct);
-  setHpColor('e-hp-fill', eHpPct);
-}
-
-const RUNE_INFO = {
-  conqueror: { name: '정복자', img: 'https://ddragon.leagueoflegends.com/cdn/img/perk-images/Styles/Precision/Conqueror/Conqueror.png' },
-  electrocute: { name: '감전', img: 'https://ddragon.leagueoflegends.com/cdn/img/perk-images/Styles/Domination/Electrocute/Electrocute.png' },
-  grasp: { name: '착취', img: 'https://ddragon.leagueoflegends.com/cdn/img/perk-images/Styles/Resolve/GraspOfTheUndying/GraspOfTheUndying.png' },
-};
-
-function renderRune(elId, rune) {
-  const el = $(elId);
-  if (!el || !rune) return;
-  const info = RUNE_INFO[rune];
-  if (!info) { el.innerHTML = ''; return; }
-  el.innerHTML = `<img src="${info.img}" class="rune-status-icon" alt="${info.name}"><span class="rune-status-name">${info.name}</span>`;
-}
-
-function setHpColor(id, hp) {
-  const el = $(id);
-  if (hp <= 25) el.style.background = 'linear-gradient(90deg, #c0392b, #e74c3c)';
-  else if (hp <= 50) el.style.background = 'linear-gradient(90deg, #e67e22, #f39c12)';
-  else el.style.background = 'linear-gradient(90deg, #27ae60, #2ecc71)';
-}
-
-// ═══════════════════════════════════════
-// Cooldowns
-// ═══════════════════════════════════════
-const SKILL_ICONS = {
-  Q: `${DDRAGON}/img/spell/LeeSinQOne.png`,
-  W: `${DDRAGON}/img/spell/LeeSinWOne.png`,
-  E: `${DDRAGON}/img/spell/LeeSinEOne.png`,
-  R: `${DDRAGON}/img/spell/LeeSinR.png`,
-};
-const SPELL_ICONS = {
-  flash: `${DDRAGON}/img/spell/SummonerFlash.png`,
-  ignite: `${DDRAGON}/img/spell/SummonerDot.png`,
-  exhaust: `${DDRAGON}/img/spell/SummonerExhaust.png`,
-  barrier: `${DDRAGON}/img/spell/SummonerBarrier.png`,
-  tp: `${DDRAGON}/img/spell/SummonerTeleport.png`,
-};
-
-function renderCooldowns(containerId, fighter) {
-  const box = $(containerId);
-  box.innerHTML = '';
-
-  for (const s of ['Q', 'W', 'E', 'R']) {
-    const lv = fighter.skillLevels?.[s] || 0;
-    const cd = fighter.cooldowns?.[s] || 0;
-    const el = document.createElement('div');
-    el.className = 'cd-icon';
-    el.innerHTML = `<img src="${SKILL_ICONS[s]}" alt="${s}">`;
-    if (lv === 0) el.classList.add('cd-locked');
-    else if (cd > 0) { el.classList.add('cd-active'); el.innerHTML += `<div class="cd-overlay">${cd}</div>`; }
-    else el.classList.add('cd-ready');
-    box.appendChild(el);
-  }
-
-  const spells = fighter.spells || [];
-  const spellCds = fighter.spellCooldowns || [];
-  for (let i = 0; i < spells.length; i++) {
-    const cd = spellCds[i] || 0;
-    const el = document.createElement('div');
-    el.className = 'cd-icon cd-spell';
-    el.innerHTML = `<img src="${SPELL_ICONS[spells[i]] || ''}" alt="${spells[i]}">`;
-    if (cd > 0) { el.classList.add('cd-active'); el.innerHTML += `<div class="cd-overlay">${cd}</div>`; }
-    else el.classList.add('cd-ready');
-    box.appendChild(el);
+    if (gameState.phase === 'skillup') {
+      // More skill points available
+      showSkillUpUI();
+    } else {
+      // Play phase — show initial suggestions
+      showInitialSuggestions(skill);
+      enableInput();
+    }
+  } catch (err) {
+    addSystemMessage('서버 오류가 발생했습니다.');
+    console.error(err);
   }
 }
 
-// ═══════════════════════════════════════
-// Suggestions
-// ═══════════════════════════════════════
-function filterSuggestions(suggestions) {
-  if (!state) return suggestions;
-  const p = state.player;
-  const dist = state.distance || 0;
+function showInitialSuggestions(firstSkill) {
+  const initial = championData.initialSuggestions?.[firstSkill] || [];
+  currentSuggestions = initial;
+  renderSuggestions(filterSuggestions(initial));
+}
 
+// ===== SUGGESTIONS =====
+function filterSuggestions(suggestions, levelUpSkill = null) {
   return suggestions
     .filter(s => {
-      if (!s.skill) return true;
-      const key = s.skill.toUpperCase();
-      if (['Q', 'W', 'E', 'R'].includes(key)) {
-        return p.skillLevels[key] > 0 && p.cooldowns[key] <= 0;
+      if (levelUpSkill) {
+        if (s.ifLevelUp !== null && s.ifLevelUp !== levelUpSkill) return false;
+      } else {
+        if (s.ifLevelUp !== null) return false;
+      }
+      if (s.requires) {
+        const key = s.requires;
+        if (!gameState.player.skillLevels[key] || gameState.player.skillLevels[key] <= 0) return false;
+        if (gameState.player.cooldowns[key] > 0) return false;
       }
       return true;
     })
-    .map(s => {
-      if (!s.skill) return s;
-      const key = s.skill.toUpperCase();
-      const range = skillRanges[key];
-      if (range && dist > range) {
-        return { ...s, text: `${s.text} (사거리 밖)`, outOfRange: true };
-      }
-      return s;
-    });
+    .slice(0, 3);
 }
 
-function renderSuggestions(suggestions) {
-  const box = $('suggestions');
-  box.innerHTML = '';
-  const filtered = filterSuggestions(suggestions);
-  for (const s of filtered.slice(0, 3)) {
-    const text = typeof s === 'string' ? s : s.text;
-    const btn = document.createElement('button');
-    btn.className = 'suggestion-btn';
-    if (s.outOfRange) btn.classList.add('out-of-range');
-    btn.textContent = text;
-    btn.onclick = () => {
-      $('player-input').value = text;
-      submit();
-    };
-    box.appendChild(btn);
+function renderSuggestions(filtered) {
+  if (!filtered || filtered.length === 0) {
+    $suggestions.innerHTML = '<span class="suggestion-chip" data-text="CS 챙기기">CS 챙기기</span>';
+  } else {
+    $suggestions.innerHTML = filtered.map(s =>
+      `<span class="suggestion-chip" data-text="${escapeHtml(s.text)}">${escapeHtml(s.text)}</span>`
+    ).join('');
   }
-}
 
-// ═══════════════════════════════════════
-// Init
-// ═══════════════════════════════════════
-function init() {
-  setInput(false);
-  initSetup();
-  $('send-btn').onclick = submit;
-  $('player-input').addEventListener('keydown', e => {
-    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); submit(); }
+  $suggestions.querySelectorAll('.suggestion-chip').forEach(chip => {
+    chip.addEventListener('click', () => {
+      $input.value = chip.dataset.text;
+      sendInput();
+    });
   });
 }
 
-document.addEventListener('DOMContentLoaded', init);
+function escapeHtml(text) {
+  const div = document.createElement('div');
+  div.textContent = text;
+  return div.innerHTML;
+}
+
+// ===== INPUT =====
+function enableInput() {
+  $input.disabled = false;
+  $sendBtn.disabled = false;
+  $input.focus();
+}
+
+function disableInput() {
+  $input.disabled = true;
+  $sendBtn.disabled = true;
+}
+
+$sendBtn.addEventListener('click', sendInput);
+$input.addEventListener('keydown', e => {
+  if (e.key === 'Enter' && !e.isComposing) sendInput();
+});
+
+async function sendInput() {
+  const text = $input.value.trim();
+  if (!text || isLoading) return;
+
+  isLoading = true;
+  disableInput();
+  $input.value = '';
+
+  addMyMessage(text);
+
+  // Show loading
+  const loadingMsg = document.createElement('div');
+  loadingMsg.className = 'msg system';
+  loadingMsg.innerHTML = '<div class="bubble loading-dots">상대가 생각 중</div>';
+  $chatArea.appendChild(loadingMsg);
+  $chatArea.scrollTop = $chatArea.scrollHeight;
+
+  try {
+    const res = await fetch('/api/turn', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ gameState, input: text, history }),
+    });
+    const data = await res.json();
+
+    // Remove loading
+    loadingMsg.remove();
+
+    if (data.error) {
+      addSystemMessage(`오류: ${data.error}`);
+      enableInput();
+      isLoading = false;
+      return;
+    }
+
+    // Update state
+    gameState = data.state;
+
+    // Update history
+    history.push({ role: 'user', content: text });
+    history.push({
+      role: 'assistant',
+      content: JSON.stringify({
+        narrative: data.narrative,
+        aiChat: data.aiChat,
+        actions: data.state._lastActions || [],
+      }),
+    });
+
+    // Render
+    if (data.narrative) addSystemMessage(data.narrative);
+    if (data.aiChat) addEnemyMessage(data.aiChat);
+    renderStatus();
+
+    // Store suggestions
+    currentSuggestions = data.suggestions || [];
+
+    // Game over?
+    if (data.gameOver) {
+      showGameOver(data.gameOver);
+      isLoading = false;
+      return;
+    }
+
+    // Level up?
+    if (data.levelUp && data.levelUp.who === 'player') {
+      addSystemMessage(`레벨 ${data.levelUp.newLevel}! 스킬을 선택하세요.`);
+      showSkillUpUI();
+      isLoading = false;
+      return;
+    }
+
+    // Normal: show suggestions + enable input
+    renderSuggestions(filterSuggestions(currentSuggestions));
+    enableInput();
+  } catch (err) {
+    loadingMsg.remove();
+    addSystemMessage('서버 연결 오류. 다시 시도해주세요.');
+    enableInput();
+    console.error(err);
+  }
+
+  isLoading = false;
+}
+
+// ===== GAME OVER =====
+function showGameOver(gameOver) {
+  const isWin = gameOver.winner === 'player';
+  $gameoverTitle.textContent = isWin ? '🎉 승리!' : '💀 패배';
+  $gameoverSummary.textContent = gameOver.summary || '';
+  $overlay.classList.remove('hidden');
+}
+
+// ===== START =====
+init();

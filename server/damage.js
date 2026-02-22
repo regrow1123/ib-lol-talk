@@ -1,268 +1,238 @@
-// Damage engine — LoL formula-based calculations
 import { loadChampion } from './champions.js';
 
+export const ELAPSED_MAP = {
+  instant: 1,
+  short: 3,
+  medium: 6,
+  long: 10,
+  very_long: 15,
+};
+
 /**
- * Process LLM actions and compute state changes.
- * @param {object} state - current game state
- * @param {object} llmResult - LLM response (actions, distance, blocked, cs, enemySkillUp)
- * @returns {object} updated state (mutated)
+ * Main entry point: apply all actions from LLM result to game state.
+ * Mutates state in place.
  */
 export function applyActions(state, llmResult) {
   const actions = llmResult.actions || [];
-  const champ = loadChampion(state.player.champion);
+  const elapsedKey = ELAPSED_MAP[llmResult.elapsed] ? llmResult.elapsed : 'medium';
+  const elapsedSec = ELAPSED_MAP[elapsedKey];
 
-  // Process each action in order
+  // 1. Process each action sequentially
   for (const action of actions) {
-    const attacker = action.who === 'player' ? state.player : state.enemy;
-    const defender = action.who === 'player' ? state.enemy : state.player;
-
-    // Skip invalid actions
-    if (!validateAction(action, attacker, champ)) continue;
-
-    if (!action.hit) {
-      // Miss — no damage, but still consume resource and apply cooldown
-      consumeResource(action, attacker, champ);
-      applyCooldown(action, attacker, champ);
-      continue;
-    }
-
-    // Calculate and apply damage/effects
-    const result = calculateSkillEffect(action, attacker, defender, champ);
-
-    // Apply damage (through shield first)
-    if (result.damage > 0) {
-      applyDamage(defender, result.damage);
-    }
-
-    // Apply shield
-    if (result.shield > 0) {
-      attacker.shields.push({
-        amount: result.shield,
-        remaining: result.shieldDuration || 2,
-        source: action.skill,
-      });
-    }
-
-    // Consume resource for skill usage
-    consumeResource(action, attacker, champ);
-
-    // Apply cooldown on skill use
-    applyCooldown(action, attacker, champ);
+    processAction(state, action);
   }
 
-  // Elapsed time processing
-  const elapsedSec = ELAPSED_MAP[llmResult.elapsed] || ELAPSED_MAP.medium;
+  // 2. Decrement cooldowns by elapsed
+  decrementCooldowns(state, elapsedSec);
 
-  // Decrement cooldowns by elapsed time
-  decrementCooldowns(state.player, elapsedSec);
-  decrementCooldowns(state.enemy, elapsedSec);
+  // 3. Resource recovery
+  recoverResource(state, elapsedSec);
 
-  // Natural recovery based on elapsed time
-  recoverResource(state.player, champ, elapsedSec);
-  recoverResource(state.enemy, champ, elapsedSec);
-  recoverHp(state.player, champ, elapsedSec);
-  recoverHp(state.enemy, champ, elapsedSec);
+  // 4. HP regen
+  recoverHp(state, elapsedSec);
 
-  // Update distance and blocked
-  if (llmResult.distance != null) state.distance = Math.max(0, llmResult.distance);
-  if (llmResult.blocked != null) state.blocked = llmResult.blocked;
+  // 5. State updates from LLM
+  if (typeof llmResult.distance === 'number') state.distance = llmResult.distance;
+  if (typeof llmResult.blocked === 'boolean') state.blocked = llmResult.blocked;
 
-  // Apply CS
+  // CS accumulation (additive, not absolute)
   if (llmResult.cs) {
-    state.player.cs += (llmResult.cs.player || 0);
-    state.enemy.cs += (llmResult.cs.enemy || 0);
+    if (typeof llmResult.cs.player === 'number') state.player.cs += llmResult.cs.player;
+    if (typeof llmResult.cs.enemy === 'number') state.enemy.cs += llmResult.cs.enemy;
   }
 
-  // Update minions
+  // Minions
   if (llmResult.minions) {
     state.minions = llmResult.minions;
   }
 
-  // Shield decay — reduce remaining time by elapsed, remove expired
-  decayShields(state.player, elapsedSec);
-  decayShields(state.enemy, elapsedSec);
-
-  return state;
+  // 6. Shield decay
+  decayShields(state, elapsedSec);
 }
 
-function validateAction(action, attacker, champ) {
-  const skill = action.skill;
-  if (!skill) return false;
+function processAction(state, action) {
+  const { who, skill, target, hit } = action;
+  if (!who || !skill) return;
 
-  // AA is always valid
-  if (skill === 'AA') return true;
+  const attacker = state[who];
+  const defender = target === 'enemy' ? state.enemy : target === 'player' ? state.player : null;
+  if (!attacker) return;
 
-  // Parse skill key (Q1→Q, W2→W, R→R)
-  const key = skill.replace(/[12]/, '');
-  if (!['Q', 'W', 'E', 'R'].includes(key)) return true; // spells etc, pass through
-
-  // Check if learned
-  if (attacker.skillLevels[key] <= 0) return false;
-
-  // Check cooldown (already 0 means ready — cooldowns are decremented after actions)
-  // Note: cooldown check is loose since LLM already judged
-  return true;
-}
-
-function calculateSkillEffect(action, attacker, defender, champ) {
-  const skill = action.skill;
-  let damage = 0;
-  let shield = 0;
-
+  // Parse skill key and phase: "Q1" -> key="Q", phase=0; "Q2" -> key="Q", phase=1
+  // "AA" -> auto attack; "R" -> key="R", phase=0
   if (skill === 'AA') {
-    // Basic attack: AD vs armor
-    damage = applyArmor(attacker.ad, defender.armor);
-    return { damage, shield };
+    if (hit && defender) {
+      const rawDmg = attacker.ad;
+      applyDamage(defender, rawDmg, 'physical');
+    }
+    return;
   }
 
-  const key = skill.replace(/[12]/, '');
-  const phase = skill.endsWith('2') ? 1 : 0; // index: 0 = first cast, 1 = recast
-  const skillData = champ.skills[key];
-  if (!skillData) return { damage, shield };
+  const { key, phase } = parseSkill(skill);
+  if (!key) return;
+
+  // Validate: skill must be learned
+  if (!attacker.skillLevels[key] || attacker.skillLevels[key] <= 0) return;
+
+  const champData = loadChampion(attacker.champion);
+  const skillData = champData.skills[key];
+  if (!skillData) return;
 
   const rank = attacker.skillLevels[key];
-  if (rank <= 0) return { damage, shield };
 
-  // Base damage
-  const baseDmg = skillData.baseDamage?.[phase]?.[rank - 1] || 0;
+  // Consume resource (on both hit and miss)
+  const costPhase = skillData.recast ? phase : 0;
+  const cost = skillData.cost[costPhase] || 0;
+  attacker.resource -= cost;
 
-  // Scaling
-  const scalingData = skillData.scaling?.[phase];
-  let scalingDmg = 0;
-  if (scalingData) {
-    const statValue = getStatValue(attacker, scalingData.stat);
-    scalingDmg = statValue * scalingData.ratio;
+  // Set cooldown on first cast only
+  if (phase === 0) {
+    attacker.cooldowns[key] = skillData.cooldown[rank - 1] || 0;
   }
 
-  let rawDamage = baseDmg + scalingDmg;
+  if (!hit) return; // Miss: resource consumed, cooldown set, but no effect
 
-  // Q2 special: missing HP ratio (0~100% bonus based on target missing HP%)
-  if (skill === 'Q2' && key === 'Q') {
+  if (!defender) return;
+
+  // Calculate effect
+  const effect = calculateSkillEffect(attacker, defender, skillData, key, phase, rank);
+
+  if (effect.shield > 0) {
+    // Shield goes on the attacker (self-shield like W1)
+    attacker.shields.push({
+      amount: effect.shield,
+      remaining: skillData.shieldDuration || 2,
+      source: skill,
+    });
+  }
+
+  if (effect.damage > 0) {
+    applyDamage(defender, effect.damage, effect.damageType);
+  }
+}
+
+function parseSkill(skill) {
+  // "Q1" -> {key:"Q", phase:0}, "Q2" -> {key:"Q", phase:1}, "R" -> {key:"R", phase:0}
+  const match = skill.match(/^([QWER])(\d)?$/);
+  if (!match) return { key: null, phase: 0 };
+  const key = match[1];
+  const num = match[2] ? parseInt(match[2]) : 1;
+  return { key, phase: num - 1 };
+}
+
+function calculateSkillEffect(attacker, defender, skillData, key, phase, rank) {
+  const result = { damage: 0, damageType: 'physical', shield: 0 };
+
+  // Shield (e.g., W1)
+  if (skillData.shield && phase === 0) {
+    result.shield = skillData.shield[rank - 1] || 0;
+  }
+
+  // Damage
+  const baseDmgArr = skillData.baseDamage[phase];
+  if (!baseDmgArr) return result;
+
+  const baseDmg = baseDmgArr[rank - 1] || 0;
+  if (baseDmg === 0 && !skillData.scaling[phase]) return result;
+
+  let totalDmg = baseDmg;
+
+  // Scaling
+  const scaling = skillData.scaling[phase];
+  if (scaling) {
+    const statValue = getStatValue(attacker, scaling.stat);
+    totalDmg += statValue * scaling.ratio;
+  }
+
+  // Q2 special: missing HP bonus
+  if (key === 'Q' && phase === 1) {
     const missingHpRatio = 1 - (defender.hp / defender.maxHp);
-    rawDamage *= (1 + missingHpRatio); // 1x ~ 2x
+    totalDmg *= (1 + missingHpRatio);
   }
 
   // Apply resistance
-  const dmgType = skillData.damageType?.[phase];
-  if (dmgType === 'physical') {
-    damage = applyArmor(rawDamage, defender.armor);
-  } else if (dmgType === 'magic') {
-    damage = applyMR(rawDamage, defender.mr);
-  } else {
-    damage = rawDamage; // true damage
-  }
+  const dmgType = skillData.damageType[phase] || 'physical';
+  result.damageType = dmgType;
+  result.damage = applyResistance(totalDmg, defender, dmgType);
 
-  // W1 shield
-  let shieldDuration = 2; // default 2 sec
-  if (skill === 'W1' && skillData.shield) {
-    shield = skillData.shield[rank - 1] || 0;
-    shieldDuration = skillData.shieldDuration || 2;
-  }
-
-  return { damage: Math.round(damage), shield: Math.round(shield), shieldDuration };
+  return result;
 }
 
 function getStatValue(fighter, stat) {
   switch (stat) {
-    case 'bonusAD': return fighter.ad - fighter.baseAd;
+    case 'bonusAD': return fighter.ad - fighter.baseAd; // No items, so always 0 at base
     case 'totalAD': return fighter.ad;
-    case 'AP': return 0; // Lee Sin has no AP
+    case 'AP': return 0; // No AP in current design
     default: return 0;
   }
 }
 
-function applyArmor(damage, armor) {
-  return damage * (100 / (100 + armor));
+function applyResistance(rawDamage, defender, damageType) {
+  if (damageType === 'true') return Math.round(rawDamage);
+  const resist = damageType === 'magic' ? defender.mr : defender.armor;
+  return Math.round(rawDamage * 100 / (100 + resist));
 }
 
-function applyMR(damage, mr) {
-  return damage * (100 / (100 + mr));
-}
+function applyDamage(defender, amount, damageType) {
+  let remaining = amount;
 
-function applyDamage(defender, damage) {
-  // Shields absorb first (oldest shield consumed first)
-  while (damage > 0 && defender.shields.length > 0) {
-    const shield = defender.shields[0];
-    if (shield.amount >= damage) {
-      shield.amount -= damage;
-      damage = 0;
+  // Absorb with shields (oldest first, FIFO)
+  for (let i = 0; i < defender.shields.length && remaining > 0; i++) {
+    const shield = defender.shields[i];
+    if (shield.amount <= remaining) {
+      remaining -= shield.amount;
+      shield.amount = 0;
     } else {
-      damage -= shield.amount;
-      defender.shields.shift();
+      shield.amount -= remaining;
+      remaining = 0;
     }
   }
-  if (damage > 0) {
-    defender.hp = Math.max(0, Math.round(defender.hp - damage));
+
+  // Remove depleted shields
+  defender.shields = defender.shields.filter(s => s.amount > 0);
+
+  // Apply remaining damage to HP
+  defender.hp -= remaining;
+}
+
+function decrementCooldowns(state, elapsedSec) {
+  for (const side of ['player', 'enemy']) {
+    const f = state[side];
+    for (const key of Object.keys(f.cooldowns)) {
+      f.cooldowns[key] = Math.max(0, f.cooldowns[key] - elapsedSec);
+    }
+    for (let i = 0; i < f.spellCooldowns.length; i++) {
+      f.spellCooldowns[i] = Math.max(0, f.spellCooldowns[i] - elapsedSec);
+    }
   }
 }
 
-function decayShields(fighter, elapsedSec) {
-  for (const shield of fighter.shields) {
-    shield.remaining -= elapsedSec;
-  }
-  fighter.shields = fighter.shields.filter(s => s.remaining > 0 && s.amount > 0);
-}
-
-// Elapsed time mapping
-const ELAPSED_MAP = {
-  instant: 1,    // single skill exchange
-  short: 3,      // short combo/trade
-  medium: 6,     // CS + minor actions
-  long: 10,      // farming phase
-  very_long: 15, // long standoff, recall wait
-};
-
-function consumeResource(action, attacker, champ) {
-  const skill = action.skill;
-  if (skill === 'AA') return;
-
-  const key = skill.replace(/[12]/, '');
-  const phase = skill.endsWith('2') ? 1 : 0;
-  const skillData = champ.skills[key];
-  if (!skillData) return;
-
-  const cost = skillData.cost?.[phase] || 0;
-  attacker.resource = Math.max(0, attacker.resource - cost);
-}
-
-function applyCooldown(action, attacker, champ) {
-  const skill = action.skill;
-  if (skill === 'AA') return;
-
-  const key = skill.replace(/[12]/, '');
-  const skillData = champ.skills[key];
-  if (!skillData) return;
-
-  // Recast: cooldown starts on first cast (regardless of phase 2)
-  const rank = attacker.skillLevels[key];
-  const cd = skillData.cooldown?.[rank - 1] || 0;
-
-  // Only set if not already on cooldown (avoid resetting on Q2 after Q1)
-  if (attacker.cooldowns[key] <= 0) {
-    attacker.cooldowns[key] = cd;
+function recoverResource(state, elapsedSec) {
+  for (const side of ['player', 'enemy']) {
+    const f = state[side];
+    if (f.resourceType === 'energy') {
+      f.resource = Math.min(f.maxResource, f.resource + 50 * elapsedSec);
+    }
+    // mana recovery can be added here later
   }
 }
 
-function decrementCooldowns(fighter, elapsedSec) {
-  for (const key of Object.keys(fighter.cooldowns)) {
-    fighter.cooldowns[key] = Math.max(0, fighter.cooldowns[key] - elapsedSec);
-  }
-  for (let i = 0; i < fighter.spellCooldowns.length; i++) {
-    fighter.spellCooldowns[i] = Math.max(0, fighter.spellCooldowns[i] - elapsedSec);
+function recoverHp(state, elapsedSec) {
+  for (const side of ['player', 'enemy']) {
+    const f = state[side];
+    const champ = loadChampion(f.champion);
+    const s = champ.baseStats;
+    const regen = s.hpRegen + s.hpRegenPerLevel * (f.level - 1);
+    f.hp = Math.min(f.maxHp, f.hp + regen * elapsedSec);
   }
 }
 
-function recoverHp(fighter, champ, elapsedSec) {
-  const baseRegen = champ.baseStats.hpRegen || 0;
-  const regenPerLevel = champ.baseStats.hpRegenPerLevel || 0;
-  const regen = baseRegen + regenPerLevel * (fighter.level - 1);
-  fighter.hp = Math.min(fighter.maxHp, Math.round(fighter.hp + regen * elapsedSec));
-}
-
-function recoverResource(fighter, champ, elapsedSec) {
-  if (champ.resource === 'energy') {
-    // Energy recovers 50/sec
-    fighter.resource = Math.min(fighter.maxResource, fighter.resource + 50 * elapsedSec);
+function decayShields(state, elapsedSec) {
+  for (const side of ['player', 'enemy']) {
+    const f = state[side];
+    for (const shield of f.shields) {
+      shield.remaining -= elapsedSec;
+    }
+    f.shields = f.shields.filter(s => s.remaining > 0);
   }
-  // Mana recovery can be added here for other champions
 }
