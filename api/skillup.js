@@ -38,14 +38,19 @@ export default function handler(req, res) {
     }
   }
 
-  // Apply
-  player.skillLevels[skill]++;
-  player.skillPoints--;
+  try {
+    // Apply
+    player.skillLevels[skill]++;
+    player.skillPoints--;
 
-  // If no more skill points, switch to play phase
-  if (player.skillPoints <= 0) {
-    state.phase = 'play';
+    // If no more skill points, switch to play phase
+    if (player.skillPoints <= 0) {
+      state.phase = 'play';
+    }
+
+    return res.status(200).json({ ok: true, state });
+  } catch (err) {
+    console.error('[skillup] error:', err);
+    return res.status(500).json({ error: err.message });
   }
-
-  return res.status(200).json({ ok: true, state });
 }
