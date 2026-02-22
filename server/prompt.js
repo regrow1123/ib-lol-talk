@@ -48,7 +48,7 @@ blocked: true면 직선 경로에 미니언 존재 → 투사체(Q1) 차단. 범
 ## JSON 응답 (반드시 이 형식)
 {"narrative":"","aiChat":"","actions":[{"who":"player/enemy","skill":"Q1/Q2/W1/AA/등","target":"enemy/player/minion","hit":true/false}],"distance":숫자,"blocked":true/false,"cs":{"player":0,"enemy":0},"enemySkillUp":null,"suggestions":[{"skill":"Q","text":"..."}],"gameOver":null}
 gameOver 예: {"winner":"player","reason":"kill","summary":"요약"}
-enemySkillUp: 적 레벨업 시 스킬 키 ("Q"/"W"/"E"/"R"), 없으면 null`;
+enemySkillUp: 적이 스킬포인트가 있으면 반드시 스킬 키("Q"/"W"/"E"/"R") 출력. 상황 판단하여 선택. 없으면 null`;
 
   // === DYNAMIC PROMPT (changes every turn) ===
   const spellStr = (f) => f.spells.map((s, i) =>
@@ -60,7 +60,7 @@ enemySkillUp: 적 레벨업 시 스킬 키 ("Q"/"W"/"E"/"R"), 없으면 null`;
 
   const dynamicPrompt = `## ${gameState.turn}턴 | 거리:${gameState.distance} | 장애물:${gameState.blocked ? '있음' : '없음'}
 P: HP${p.hp}/${p.maxHp} ${p.resourceType}${p.resource}/${p.maxResource} Lv${p.level} CS${p.cs} AD${p.ad} 방${p.armor} 마저${p.mr} 쉴${p.shield} | ${pSkills} | ${spellStr(p)} | ${runeName(p.rune)}${p.buffs?.length ? ' 버프:' + p.buffs.join(',') : ''}${p.debuffs?.length ? ' 디:' + p.debuffs.join(',') : ''}
-E: HP${e.hp}/${e.maxHp} ${e.resourceType}${e.resource}/${e.maxResource} Lv${e.level} CS${e.cs} AD${e.ad} 방${e.armor} 마저${e.mr} 쉴${e.shield} | ${eSkills} | ${spellStr(e)} | ${runeName(e.rune)}${e.buffs?.length ? ' 버프:' + e.buffs.join(',') : ''}${e.debuffs?.length ? ' 디:' + e.debuffs.join(',') : ''}
+E: HP${e.hp}/${e.maxHp} ${e.resourceType}${e.resource}/${e.maxResource} Lv${e.level} CS${e.cs} AD${e.ad} 방${e.armor} 마저${e.mr} 쉴${e.shield}${e.skillPoints > 0 ? ' 스킬포인트:' + e.skillPoints : ''} | ${eSkills} | ${spellStr(e)} | ${runeName(e.rune)}${e.buffs?.length ? ' 버프:' + e.buffs.join(',') : ''}${e.debuffs?.length ? ' 디:' + e.debuffs.join(',') : ''}
 미니언: 아(근${gameState.minions.player.melee}/원${gameState.minions.player.ranged}) 적(근${gameState.minions.enemy.melee}/원${gameState.minions.enemy.ranged})`;
 
   return { staticPrompt, dynamicPrompt };
