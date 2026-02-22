@@ -93,6 +93,12 @@ html, body {
 .fighter-status .hp-bar .hp-fill {
   height: 100%; border-radius: 3px; transition: width 0.3s;
 }
+.fighter-status .resource-bar {
+  height: 4px; background: #636e72; border-radius: 2px; overflow: hidden; margin-bottom: 2px;
+}
+.fighter-status .resource-bar .resource-fill {
+  height: 100%; border-radius: 2px; background: var(--energy-yellow); transition: width 0.3s;
+}
 .fighter-status .stat-line {
   display: flex; gap: 4px; flex-wrap: wrap; font-size: 10px; color: #b2bec3;
 }
