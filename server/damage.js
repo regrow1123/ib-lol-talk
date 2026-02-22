@@ -17,19 +17,15 @@ export function applyActions(state, llmResult) {
   const elapsedKey = ELAPSED_MAP[llmResult.elapsed] ? llmResult.elapsed : 'medium';
   const elapsedSec = ELAPSED_MAP[elapsedKey];
 
-  // 1. Process each action sequentially
+  // 1. Time passes first (cooldowns, recovery, regen)
+  decrementCooldowns(state, elapsedSec);
+  recoverResource(state, elapsedSec);
+  recoverHp(state, elapsedSec);
+
+  // 2. Actions happen at end of turn
   for (const action of actions) {
     processAction(state, action);
   }
-
-  // 2. Decrement cooldowns by elapsed
-  decrementCooldowns(state, elapsedSec);
-
-  // 3. Resource recovery (half elapsed — actions happen mid-turn)
-  recoverResource(state, elapsedSec * 0.5);
-
-  // 4. HP regen
-  recoverHp(state, elapsedSec);
 
   // 5. State updates from LLM
   if (typeof llmResult.distance === 'number') state.distance = llmResult.distance;
