@@ -20,9 +20,9 @@ const SPELLS = [
 ];
 
 const RUNES = [
-  { id: 'conqueror', name: '정복자', icon: '8010' },
-  { id: 'electrocute', name: '감전', icon: '8112' },
-  { id: 'grasp', name: '착취', icon: '8437' },
+  { id: 'conqueror', name: '정복자', icon: 'Precision/Conqueror/Conqueror' },
+  { id: 'electrocute', name: '감전', icon: 'Domination/Electrocute/Electrocute' },
+  { id: 'grasp', name: '착취', icon: 'Resolve/GraspOfTheUndying/GraspOfTheUndying' },
 ];
 
 const SKILL_ICONS = {
@@ -93,7 +93,7 @@ function renderSetup() {
   // Runes
   $runeSelect.innerHTML = RUNES.map(r =>
     `<button class="icon-btn" data-rune="${r.id}" title="${r.name}">
-      <img src="https://ddragon.leagueoflegends.com/cdn/img/perk-images/Styles/Precision/${r.id === 'conqueror' ? 'Conqueror/Conqueror' : r.id === 'electrocute' ? 'Domination/Electrocute/Electrocute' : 'Resolve/GraspOfTheUndying/GraspOfTheUndying'}.png" alt="${r.name}">
+      <img src="https://ddragon.leagueoflegends.com/cdn/img/perk-images/Styles/${r.icon}.png" alt="${r.name}">
     </button>`
   ).join('');
 
