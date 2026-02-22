@@ -116,6 +116,23 @@
       ]
     }
   },
+  "initialSuggestions": {
+    "Q": [
+      {"requires": "Q", "ifLevelUp": null, "text": "미니언 사이 빈틈으로 Q1 음파 견제"},
+      {"requires": "Q", "ifLevelUp": null, "text": "상대가 CS 먹으러 올 때 Q1으로 노리기"},
+      {"requires": null, "ifLevelUp": null, "text": "미니언 뒤에서 안전하게 CS 챙기기"}
+    ],
+    "W": [
+      {"requires": "W", "ifLevelUp": null, "text": "W1 쉴드 걸고 안전하게 CS 접근"},
+      {"requires": "W", "ifLevelUp": null, "text": "W1으로 미니언에게 대쉬해서 위치 잡기"},
+      {"requires": null, "ifLevelUp": null, "text": "미니언 뒤에서 안전하게 CS 챙기기"}
+    ],
+    "E": [
+      {"requires": "E", "ifLevelUp": null, "text": "E1으로 주변 미니언 한번에 정리"},
+      {"requires": "E", "ifLevelUp": null, "text": "상대가 접근하면 E1으로 견제"},
+      {"requires": null, "ifLevelUp": null, "text": "미니언 뒤에서 안전하게 CS 챙기기"}
+    ]
+  },
   "tips": {
     "combos": [
       "Q1 → AA → AA(패시브) → Q2 (기본 교환)",

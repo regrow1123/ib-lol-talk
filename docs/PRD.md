@@ -71,6 +71,7 @@ Time interval between turns is **not fixed**.
 | Level-up stats | ❌ | ✅ LoL formulas |
 | Enemy skill-up | ✅ Chooses | Validity check |
 | HP changes | ❌ | ✅ Damage engine result |
+| HP regen | ❌ | ✅ elapsed-based natural regen |
 | Shield | ❌ | ✅ Calc + damage absorption |
 | Narration / comments | ✅ | ❌ |
 | Suggestions | ✅ Generates | ❌ (client filters) |
@@ -163,10 +164,16 @@ Each skill's range defined in `data/champions/{id}.json`. Dynamically injected i
 - Minion presence affects `blocked`
 - LLM returns minion counts, server stores in state
 
-### 3.7 Win Conditions
+### 3.7 Items
+- **No item system** — no shop, no item purchases, no starting items
+- All stats are pure base stats from champion data
+- Simplifies game to focus on skill usage and laning fundamentals
+
+### 3.8 Win Conditions
 - **Kill**: opponent HP reaches 0
 - **CS 50**: first to reach CS 50
 - No simultaneous kills — whoever lands the hit first gets the kill
+- **Server determines game over** (not LLM) — `gameOver` in LLM response is ignored; server checks HP/CS after damage engine
 
 ---
 
@@ -288,8 +295,7 @@ Each suggestion has two tags:
     {"requires": "Q", "ifLevelUp": null, "text": "상대 Q 쿨타임이니까 Q1으로 견제"},
     {"requires": null, "ifLevelUp": null, "text": "미니언 뒤에서 안전하게 CS 챙기기"},
     {"requires": null, "ifLevelUp": "W", "text": "새로 배운 W1 쉴드로 안전하게 진입"}
-  ],
-  "gameOver": null
+  ]
 }
 ```
 
@@ -348,8 +354,11 @@ Each suggestion has two tags:
   → Skill selection UI (suggestions area)
   → POST /api/skillup
   → Server: validate + update state
+  → Load initial suggestions from champion JSON (per chosen skill)
   → Filter suggestions → enable input
 ```
+- Initial suggestions are pre-defined in `data/champions/{id}.json` per first skill choice (Q/W/E)
+- No LLM call needed for first suggestions
 
 ### Normal Turn
 ```
@@ -458,6 +467,7 @@ ib-lol-talk/
 ### POST /api/turn
 - Input: `{gameState, input, history}`
 - Output: `{state, narrative, aiChat, suggestions, levelUp, gameOver}`
+- `history`: array of past turns. Last 2 as full objects `{input, narrative, aiChat, actions}`, older turns as 1-line summary strings. Used for LLM context.
 - Flow: LLM → actions + elapsed → damage engine + time processing → guardrails → response
 
 ### POST /api/skillup
