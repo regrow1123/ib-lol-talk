@@ -186,9 +186,11 @@ function applyDamage(defender, damage) {
 
 // Elapsed time mapping
 const ELAPSED_MAP = {
-  short: 2,   // combat, skill exchange
-  medium: 5,  // CS + minor actions
-  long: 10,   // farming phase, waiting
+  instant: 1,    // single skill exchange
+  short: 3,      // short combo/trade
+  medium: 6,     // CS + minor actions
+  long: 10,      // farming phase
+  very_long: 15, // long standoff, recall wait
 };
 
 function consumeResource(action, attacker, champ) {
