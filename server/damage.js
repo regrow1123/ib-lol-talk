@@ -62,9 +62,6 @@ export function applyActions(state, llmResult) {
   if (llmResult.cs) {
     state.player.cs += (llmResult.cs.player || 0);
     state.enemy.cs += (llmResult.cs.enemy || 0);
-    // Gold from CS (avg ~20g per CS)
-    state.player.gold += (llmResult.cs.player || 0) * 20;
-    state.enemy.gold += (llmResult.cs.enemy || 0) * 20;
   }
 
   // Update minions

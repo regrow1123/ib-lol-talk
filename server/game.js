@@ -14,7 +14,6 @@ export function createGameState(championId, spells, rune) {
     resourceType: champ.resource,
     level: 1,
     cs: 0,
-    gold: 0,
     ad: stats.ad + (champ.startItems.default.ad || 0),
     baseAd: stats.ad,
     armor: stats.armor,
