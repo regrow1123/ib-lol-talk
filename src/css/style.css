@@ -164,17 +164,17 @@ html, body {
 }
 
 #suggestions {
-  display: flex; gap: 6px; padding: 6px 8px;
-  overflow-x: auto; -webkit-overflow-scrolling: touch;
-  min-height: 36px; align-items: center;
+  display: flex; flex-direction: column; gap: 6px; padding: 6px 8px;
+  overflow-y: auto; -webkit-overflow-scrolling: touch;
+  align-items: stretch;
   scrollbar-width: none;
 }
 #suggestions::-webkit-scrollbar { display: none; }
 
 .suggestion-chip {
-  flex-shrink: 0; padding: 6px 12px; border-radius: 16px;
+  padding: 6px 12px; border-radius: 16px;
   border: 1px solid #b2bec3; background: #fff; color: #2d3436;
-  font-size: 12px; cursor: pointer; white-space: nowrap;
+  font-size: 12px; cursor: pointer; white-space: normal; text-align: left;
   -webkit-tap-highlight-color: transparent;
   transition: background 0.15s;
 }
