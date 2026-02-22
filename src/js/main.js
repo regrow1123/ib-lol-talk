@@ -1,5 +1,4 @@
 const IMG = '/src/img';
-const DDRAGON = 'https://ddragon.leagueoflegends.com/cdn/14.20.1/img';
 let CHAMPION_ID = 'lee-sin';
 
 // ===== STATE =====
@@ -76,7 +75,7 @@ function renderSetup() {
   const $champSelect = document.getElementById('champion-select');
   $champSelect.innerHTML = championList.map(c =>
     `<button class="champion-card${championList.length === 1 ? ' selected' : ''}" data-champ="${c.id}">
-      <img src="${DDRAGON}/champion/${c.icon}.png" alt="${c.name}">
+      <img src="${IMG}/champion/${c.icon}.png" alt="${c.name}">
       <span class="champ-name">${c.name}</span>
     </button>`
   ).join('');
