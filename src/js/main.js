@@ -236,7 +236,7 @@ function addMyMessage(text) {
 function addEnemyMessage(text) {
   const div = document.createElement('div');
   div.className = 'msg enemy';
-  div.innerHTML = `<div class="sender">${championData.name}</div><div class="bubble">${text}</div>`;
+  div.innerHTML = `<div class="enemy-header"><img class="chat-portrait" src="${IMG}/champion/LeeSin.png" alt=""><span class="sender">${championData.name}</span></div><div class="bubble">${text}</div>`;
   $chatArea.appendChild(div);
   $chatArea.scrollTop = $chatArea.scrollHeight;
 }

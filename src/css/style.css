@@ -135,7 +135,13 @@ html, body {
   background: var(--enemy-bubble); color: var(--enemy-text);
   border-top-left-radius: 2px;
 }
-.msg.enemy .sender { font-size: 10px; color: #636e72; margin-bottom: 2px; }
+.msg.enemy .enemy-header {
+  display: flex; align-items: center; gap: 4px; margin-bottom: 2px;
+}
+.chat-portrait {
+  width: 20px; height: 20px; border-radius: 50%; flex-shrink: 0;
+}
+.msg.enemy .sender { font-size: 10px; color: #636e72; }
 
 .msg.system { align-self: center; max-width: 90%; }
 .msg.system .bubble {
