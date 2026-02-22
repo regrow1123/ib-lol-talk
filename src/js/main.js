@@ -297,13 +297,49 @@ async function doSkillUp(skill) {
       // More skill points available
       showSkillUpUI();
     } else {
-      // Play phase — show initial suggestions
-      showInitialSuggestions(skill);
-      enableInput();
+      // Play phase — get suggestions
+      if (isFirstSkillUp()) {
+        showInitialSuggestions(skill);
+        enableInput();
+      } else {
+        // Mid-game levelup: fetch fresh suggestions from LLM
+        await fetchPostSkillUpSuggestions(skill);
+        enableInput();
+      }
     }
   } catch (err) {
     addSystemMessage('서버 오류가 발생했습니다.');
     console.error(err);
+  }
+}
+
+function isFirstSkillUp() {
+  // First skillup = player level 1, total skill levels = 1 (just learned the first skill)
+  const total = Object.values(gameState.player.skillLevels).reduce((a, b) => a + b, 0);
+  return total <= 1;
+}
+
+async function fetchPostSkillUpSuggestions(learnedSkill) {
+  // Show loading in suggestions area
+  $suggestions.innerHTML = '<span class="suggestion-chip">추천 행동 생성 중...</span>';
+
+  try {
+    const res = await fetch('/api/suggestions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ gameState, learnedSkill, history }),
+    });
+    const data = await res.json();
+    currentSuggestions = data.suggestions || [];
+    renderSuggestions(filterSuggestions(currentSuggestions));
+  } catch (err) {
+    console.error('[suggestions]', err);
+    // Fallback
+    currentSuggestions = [
+      { requires: learnedSkill, ifLevelUp: null, text: `새로 배운 ${learnedSkill} 스킬 활용하기` },
+      { requires: null, ifLevelUp: null, text: '안전하게 CS 챙기기' },
+    ];
+    renderSuggestions(filterSuggestions(currentSuggestions));
   }
 }
 
