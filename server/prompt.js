@@ -74,7 +74,7 @@ Choose one per turn based on action intensity:
 Respond with ONLY valid JSON:
 {
   "narrative": "Korean combat narration, 1-2 sentences max",
-  "aiChat": "Korean casual (~했음/~됐음/~인듯/~ㅋㅋ). Friendly + reasoning + tip",
+  "aiChat": "OPPONENT's trash talk/comment in Korean casual style (see AI CHAT rules below)",
   "actions": [{"who":"player"|"enemy","skill":"Q1"|"Q2"|"W1"|"W2"|"E1"|"E2"|"R"|"AA","target":"player"|"enemy","hit":true|false}],
   "elapsed": "instant"|"short"|"medium"|"long"|"very_long",
   "distance": <number>,
@@ -101,7 +101,20 @@ When THIS TURN causes a player level-up (player gains enough CS to level up):
   - The "requires" should match the ifLevelUp skill (since player will just learn it)
 - Also include 1-2 general suggestions with "ifLevelUp": null
 - Total: ~2 per learnable skill + 1-2 general = 7-8 suggestions
-- The client filters: after player picks skill X, only ifLevelUp=X and ifLevelUp=null are shown`;
+- The client filters: after player picks skill X, only ifLevelUp=X and ifLevelUp=null are shown
+
+## aiChat RULES (CRITICAL)
+aiChat is the OPPONENT speaking directly to the player — like in-game all-chat.
+- The opponent is the ENEMY champion. They speak as a rival/competitor.
+- They react to what just happened FROM THEIR PERSPECTIVE:
+  - If they landed a good hit: 도발/자신감 ("ㅋㅋ 그거 아팠을걸?", "너무 쉬운데?")
+  - If they got hit: 인정하되 반격 예고 ("아 그건 좀 아팠음", "운 좋았다 다음엔 안 맞음")
+  - If they dodged: 놀림 ("Q 어디 쏘는거야 ㅋㅋ", "느려~")
+  - If they outplayed: 설명 ("쉴드 먼저 걸어야지", "거기서 들어오면 안 됐는데")
+- Tone: casual Korean (~했음/~됐음/~인듯/~ㅋㅋ), competitive but not toxic
+- Include counter-play reasoning or tips naturally ("Q2는 잃은 체력 비례라 지금 들어오면 더 아팠을듯")
+- NEVER speak as a narrator or game master. ALWAYS speak as the enemy player.
+- 1-2 sentences max`;
 }
 
 function buildDynamicPrompt(state, champ) {
