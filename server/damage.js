@@ -25,8 +25,8 @@ export function applyActions(state, llmResult) {
   // 2. Decrement cooldowns by elapsed
   decrementCooldowns(state, elapsedSec);
 
-  // 3. Resource recovery
-  recoverResource(state, elapsedSec);
+  // 3. Resource recovery (half elapsed — actions happen mid-turn)
+  recoverResource(state, elapsedSec * 0.5);
 
   // 4. HP regen
   recoverHp(state, elapsedSec);
