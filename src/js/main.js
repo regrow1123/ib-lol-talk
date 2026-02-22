@@ -268,7 +268,7 @@ function showSkillUpUI() {
     }
   }
 
-  $suggestions.innerHTML = buttons.join('');
+  $suggestions.innerHTML = `<div class="skillup-row">${buttons.join('')}</div>`;
   $suggestions.querySelectorAll('.skillup-btn').forEach(btn => {
     btn.addEventListener('click', () => doSkillUp(btn.dataset.skill));
   });

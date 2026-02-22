@@ -181,8 +181,11 @@ html, body {
 .suggestion-chip:active { background: #dfe6e9; }
 
 /* Skill-up buttons */
+.skillup-row {
+  display: flex; gap: 6px; width: 100%;
+}
 .skillup-btn {
-  flex-shrink: 0; padding: 8px 16px; border-radius: 8px;
+  flex: 1; padding: 8px 0; border-radius: 8px; text-align: center;
   border: 2px solid var(--accent); background: #fff; color: var(--accent);
   font-size: 14px; font-weight: 600; cursor: pointer;
   -webkit-tap-highlight-color: transparent;
