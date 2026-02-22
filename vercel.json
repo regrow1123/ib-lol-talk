@@ -1,20 +1,13 @@
 {
   "version": 2,
-  "builds": [
-    {
-      "src": "api/**/*.js",
-      "use": "@vercel/node",
-      "config": {
-        "includeFiles": ["data/**", "server/**"]
-      }
-    },
-    { "src": "src/**/*", "use": "@vercel/static" },
-    { "src": "data/**/*", "use": "@vercel/static" }
-  ],
-  "routes": [
-    { "src": "/api/(.*)", "dest": "/api/$1" },
-    { "src": "/data/(.*)", "dest": "/data/$1" },
-    { "src": "/src/(.*)", "dest": "/src/$1" },
-    { "src": "/(.*)", "dest": "/src/index.html" }
+  "functions": {
+    "api/**/*.js": {
+      "includeFiles": "data/**"
+    }
+  },
+  "rewrites": [
+    { "source": "/data/(.*)", "destination": "/data/$1" },
+    { "source": "/src/(.*)", "destination": "/src/$1" },
+    { "source": "/((?!api|data|src).*)", "destination": "/src/index.html" }
   ]
 }
