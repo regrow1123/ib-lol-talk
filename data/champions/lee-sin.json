@@ -38,7 +38,7 @@
       "cost": [50, 25],
       "cooldown": [10, 9, 8, 7, 6],
       "baseDamage": [[55, 80, 105, 130, 155], [55, 80, 105, 130, 155]],
-      "scaling": [{"stat": "bonusAD", "ratio": 1.15}, {"stat": "bonusAD", "ratio": 1.15}],
+      "scaling": [{"stat": "totalAD", "ratio": 1.0}, {"stat": "totalAD", "ratio": 1.0}],
       "special": {
         "Q1": "직선 투사체. 미니언에 막힘(blocked=true시 차단). 적중 시 표식 3초.",
         "Q2": "표식 대상에게 돌진. 대상 잃은 체력 비례 0~100% 추가 피해(최대 2배). 표식 있으면 무조건 적중."
@@ -106,7 +106,7 @@
       "cost": [0],
       "cooldown": [110, 85, 60],
       "baseDamage": [[175, 400, 625]],
-      "scaling": [{"stat": "bonusAD", "ratio": 2.0}],
+      "scaling": [{"stat": "totalAD", "ratio": 2.0}],
       "special": {
         "R": "대상 넉백 800유닛 + 물리 피해."
       },
