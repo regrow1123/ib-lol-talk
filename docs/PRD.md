@@ -1,149 +1,149 @@
 # ib-lol talk — PRD
 
-## 1. 제품 개요
+## 1. Product Overview
 
-LoL 1v1 라인전을 시뮬레이션하는 **LLM 기반 텍스트 전략 게임**.
+An **LLM-based text strategy game** simulating LoL 1v1 laning phase.
 
-**한줄 요약**: LLM과 채팅하면서 LoL 라인전을 배우는 게임.
+**One-liner**: Learn LoL laning by chatting with an LLM.
 
-### 타겟 유저
-- LoL에 관심 있지만 진입장벽이 높다고 느끼는 사람
-- 챔피언 스킬과 라인전 기본기를 텍스트로 먼저 익히고 싶은 사람
-- 의도 싸움/심리전을 즐기는 LoL 경험자
+### Target Users
+- People interested in LoL but intimidated by the learning curve
+- Players who want to learn champion skills and laning basics through text first
+- LoL veterans who enjoy mind games and strategic decision-making
 
-### 핵심 경험
-1. **자연어로 의도 입력** → AI가 상황에 맞게 대응 → 전략적 선택이 결과를 결정
-2. **교전 서술에서 스킬 메커니즘을 자연스럽게 설명** → 플레이하면서 배움
-3. **상대방이 대응 이유를 설명** → 실전 지식 축적
+### Core Experience
+1. **Natural language input** → AI responds based on the situation → strategic choices determine outcomes
+2. **Skill mechanics naturally explained through combat narration** → learn by playing
+3. **Opponent explains reasoning for their counter-play** → accumulate practical knowledge
 
 ---
 
-## 2. 아키텍처
+## 2. Architecture
 
-### 2.1 하이브리드 구조
+### 2.1 Hybrid Structure
 
 ```
-클라이언트(상태 보유) → 서버(LLM 호출 + 데미지 계산 + 가드레일) → 클라이언트
+Client (holds state) → Server (LLM call + damage calc + guardrails) → Client
 ```
 
-| 역할 | 담당 | 설명 |
-|------|------|------|
-| **LLM** | 판정 | 의도 해석, AI 행동 결정, 적중/회피, elapsed 판정, 거리/blocked, 서술, suggestions |
-| **서버 (데미지 엔진)** | 수치 계산 | actions 기반 데미지/쉴드 계산 (LoL 공식), 룬/주문 효과 |
-| **서버 (가드레일)** | 범위 검증 | HP/자원/쿨다운 클램프, CS 감소 방지 |
-| **클라이언트** | 상태 보유 + UI | 전체 상태 보유, 매 턴 서버에 전송, UI 렌더링, suggestions 필터링 |
+| Role | Responsibility | Details |
+|------|---------------|---------|
+| **LLM** | Judgment | Intent interpretation, AI behavior, hit/miss, elapsed, distance/blocked, narration, suggestions |
+| **Server (Damage Engine)** | Numeric calculation | Damage/shield calc from actions (LoL formulas), rune/spell effects, cooldown/resource management |
+| **Server (Guardrails)** | Range validation | HP/resource/cooldown clamping, CS decrease prevention |
+| **Client** | State + UI | Holds full state, sends to server each turn, UI rendering, suggestion filtering |
 
-### 2.2 핵심 원칙
+### 2.2 Core Principle
 
-**LLM = 무엇이 일어났는지, 서버 = 얼마나 아픈지**
+**LLM = what happened, Server = how much it hurts**
 
-- LLM: "Q1 맞았고 Q2로 따라감, 상대는 W1 쉴드로 방어"
-- 서버: Q1 데미지 + Q2 데미지 - W1 쉴드량 = 실제 HP 변화
-- LLM은 수치를 모름 → 서술에 구체적 숫자 불필요
+- LLM: "Q1 hit, followed up with Q2, opponent shielded with W1"
+- Server: Q1 damage + Q2 damage - W1 shield = actual HP change
+- LLM doesn't know numbers → no specific numbers needed in narration
 
-### 2.3 비고정 시간 모델 (elapsed 방식)
+### 2.3 Non-Fixed Time Model (elapsed)
 
-턴 간 시간 간격은 **고정이 아님**.
+Time interval between turns is **not fixed**.
 
-- 하나의 턴에 여러 액션 포함 가능 (콤보, 양쪽 교환 등)
-- LLM이 매 턴 `elapsed`를 반환: 이번 턴의 시간 규모
-  - `"instant"` = 1초 (단일 스킬 교환)
-  - `"short"` = 3초 (짧은 콤보/교전)
-  - `"medium"` = 6초 (CS 몇 개 + 소규모 행동)
-  - `"long"` = 10초 (파밍 구간)
-  - `"very_long"` = 15초 (긴 대치, 리콜 대기)
-- 서버가 `elapsed`를 초로 변환하여 **쿨다운 차감, 자원 회복** 등 시간 경과 계산
-- 데미지 엔진은 **즉시 효과** 계산 (스킬 데미지, 쉴드량, 자원 소모)
+- A single turn can contain multiple actions (combos, exchanges)
+- LLM returns `elapsed` each turn: the time scale of this turn
+  - `"instant"` = 1 sec (single skill exchange)
+  - `"short"` = 3 sec (short combo/trade)
+  - `"medium"` = 6 sec (a few CS + minor actions)
+  - `"long"` = 10 sec (farming phase)
+  - `"very_long"` = 15 sec (long standoff, recall wait)
+- Server converts `elapsed` to seconds for **cooldown reduction, resource recovery, HP regen**
+- Damage engine calculates **instant effects** (skill damage, shield amount, resource consumption)
 
-**왜 이 방식인가**: 플레이어의 한 선택이 "Q1으로 견제"일 수도, "미니언 정리하면서 CS 3개 먹기"일 수도 있다. LLM이 정확한 초를 추정하는 건 어렵지만, 5단계 중 하나를 고르는 판단은 확실히 할 수 있다. 서버가 고정 매핑으로 환산하므로 수치 일관성도 보장된다.
+**Why this approach**: A player's choice could be "poke with Q1" (1 sec) or "farm 3 CS while clearing minions" (10 sec). LLM can't estimate exact seconds reliably, but choosing from 5 tiers is straightforward. Server uses fixed mapping for numeric consistency.
 
-### 2.4 역할 경계 (무엇을 누가 하는가)
+### 2.4 Role Boundaries
 
-| | LLM | 서버 |
+| | LLM | Server |
 |---|---|---|
-| 스킬 적중/회피 | ✅ 판정 | ❌ |
-| 데미지 수치 | ❌ | ✅ LoL 공식 계산 |
-| 경과 시간 (elapsed) | ✅ short/medium/long 판정 | 초 변환 → 쿨다운 차감, 자원 회복 |
-| 쿨다운 | ❌ | ✅ 스킬 사용 시 설정 + elapsed 차감 |
-| 자원 (에너지 등) | ❌ | ✅ 스킬 소모 + elapsed 기반 자연회복 |
-| 거리 / blocked | ✅ 값 반환 | 클램프(≥0)만 |
-| CS 획득 | ✅ 판정 | 누적 + 레벨업 판정 |
-| 레벨업 스탯 | ❌ | ✅ LoL 공식 |
-| 적 스킬업 | ✅ 선택 | 유효성 검증 |
-| HP 변화 | ❌ | ✅ 데미지 엔진 결과 |
-| 쉴드 | ❌ | ✅ 계산 + 데미지 흡수 처리 |
-| 서술 / 코멘트 | ✅ | ❌ |
-| suggestions | ✅ 생성 | ❌ (클라이언트가 필터) |
+| Skill hit/miss | ✅ Judges | ❌ |
+| Damage values | ❌ | ✅ LoL formula calc |
+| Elapsed time | ✅ instant/short/medium/long/very_long | Converts to seconds → cooldown/resource/HP |
+| Cooldowns | ❌ | ✅ Set on skill use + elapsed reduction |
+| Resource (energy etc.) | ❌ | ✅ Skill consumption + elapsed natural recovery |
+| Distance / blocked | ✅ Returns values | Clamp (≥0) only |
+| CS acquisition | ✅ Judges | Accumulate + level-up check |
+| Level-up stats | ❌ | ✅ LoL formulas |
+| Enemy skill-up | ✅ Chooses | Validity check |
+| HP changes | ❌ | ✅ Damage engine result |
+| Shield | ❌ | ✅ Calc + damage absorption |
+| Narration / comments | ✅ | ❌ |
+| Suggestions | ✅ Generates | ❌ (client filters) |
 
-### 2.5 Stateless 서버
+### 2.5 Stateless Server
 - Vercel Serverless Functions
-- 상태 저장 안 함 — 매 턴 클라이언트가 전체 상태 전송
+- No state storage — client sends full state each turn
 
-### 2.6 비용 최적화
-- **Prompt caching**: static(챔피언 데이터+규칙) / dynamic(현재 상태) 분리 → `cache_control`
-- **LLM은 수치 계산 안 함**: actions + 상태값만 출력 → 출력 토큰 절약
-- **History 압축**: 최근 2턴 원문, 이전은 1줄 요약
+### 2.6 Cost Optimization
+- **Prompt caching**: static (champion data + rules) / dynamic (current state) split → `cache_control`
+- **LLM doesn't calculate numbers**: outputs only actions + state values → saves output tokens
+- **History compression**: last 2 turns verbatim, older turns as 1-line summaries
 
 ---
 
-## 3. 게임 설계
+## 3. Game Design
 
-### 3.1 HP 시스템
-- **실제 수치 기반** (리신 Lv1: 645 HP, 레벨당 +108)
-- UI에 실제 수치 표시 (예: 487 / 645)
-- 데미지는 서버 데미지 엔진이 LoL 공식으로 계산
-- LLM은 적중/회피만 판정, 수치 계산 안 함
+### 3.1 HP System
+- **Real values** (Lee Sin Lv1: 645 HP, +108 per level)
+- UI shows actual numbers (e.g., 487 / 645)
+- Damage calculated by server damage engine using LoL formulas
+- LLM only judges hit/miss, no number crunching
 
-### 3.2 거리 & 장애물
+### 3.2 Distance & Obstacles
 
-#### distance (숫자, 유닛)
-두 챔프 간 거리. LLM이 매 턴 반환.
-- 초기값: 800
-- LLM이 행동 결과에 따라 변경 (돌진, 후퇴, 접근 등)
+#### distance (number, units)
+Distance between two champions. LLM returns each turn.
+- Initial: 800
+- LLM changes based on actions (dash, retreat, approach, etc.)
 
 #### blocked (boolean)
-두 챔프를 잇는 **직선 경로**에 미니언이 있는지.
-- `true` → 투사체(Q1 등) 미니언에 막힘
-- `false` → 투사체 직통
-- E1(자기 주변 범위), R/AA(대상지정)는 blocked 무관
-- 다른 위치에 미니언이 있어도, 직선 경로에 없으면 `false`
+Whether minions exist on the **direct line** between two champions.
+- `true` → projectiles (Q1 etc.) blocked by minions
+- `false` → projectiles pass through
+- E1 (AoE around self), R/AA (targeted) are unaffected by blocked
+- Minions elsewhere (not on direct line) → still `false`
 
-#### 스킬 사거리
-각 스킬 사거리는 `data/champions/{id}.json`에 정의. 프롬프트에 동적 삽입.
-- distance 300 + Q1(사거리 1200) → 사거리 내
-- distance 300 + AA(사거리 125) → 사거리 밖
-- LLM이 distance와 사거리를 비교해서 적중/회피 판정
+#### Skill Ranges
+Each skill's range defined in `data/champions/{id}.json`. Dynamically injected into prompts.
+- distance 300 + Q1 (range 1200) → in range
+- distance 300 + AA (range 125) → out of range
+- LLM compares distance with skill range for hit/miss judgment
 
-### 3.3 턴 시스템
-- **1턴 = 플레이어의 1개 의도** (자연어 입력)
-- 콤보 전체가 1턴에 처리
-- 상대방도 같은 턴에 대응 행동 실행
-- **확률 요소 없음** — 의도 조합이 결과를 100% 결정
+### 3.3 Turn System
+- **1 turn = 1 player intent** (natural language input)
+- Full combo processed in one turn
+- Opponent also acts in the same turn
+- **No RNG** — intent combinations fully determine outcomes
 
-#### 턴 규모 자동 조절
-| 상황 | 처리 |
-|------|------|
-| 양쪽 저강도 (파밍/대기) | 요약 처리 (시간 많이 흐름) |
-| 한쪽이라도 고강도 (교전) | 세밀하게 처리 (시간 짧음) |
+#### Auto-scaling Turn Granularity
+| Situation | Processing |
+|-----------|-----------|
+| Both low intensity (farming/waiting) | Summarized (more time passes) |
+| Either high intensity (combat) | Detailed (less time passes) |
 
-#### 끼어들기 (Interrupt)
-- 플레이어 저강도 + AI 고강도 → LLM이 서술로 처리
-- "CS를 먹으려는 순간, 상대가 Q1을 날렸다!" 식 연출
-- 별도 메커니즘 없음 — LLM이 actions와 narrative에서 자연스럽게 표현
-- 플레이어의 원래 의도가 중단되고, AI 행동이 먼저 일어난 것으로 서술
+#### Interrupt
+- Player low intensity + AI high intensity → LLM handles via narration
+- "Just as you go for the CS, the opponent fires Q1!" style
+- No separate mechanism — LLM naturally expresses in actions and narrative
+- Player's original intent interrupted, AI action takes priority in narration
 
-### 3.4 자원 시스템
-- 챔피언마다 다른 자원 타입 (에너지, 마나, 무자원 등)
-- `data/champions/{id}.json`에 자원 관련 수치 정의
-- **서버가 전부 계산**: actions 기반 소모 + elapsed 기반 자연회복
-- 에너지: 초당 50 자연회복 (예: elapsed="short"(3초) → +150 회복)
+### 3.4 Resource System
+- Different resource types per champion (energy, mana, resourceless, etc.)
+- Resource values defined in `data/champions/{id}.json`
+- **Server calculates everything**: consumption from actions + natural recovery from elapsed
+- Energy: 50/sec natural recovery (e.g., elapsed="short" (3s) → +150 recovery)
 
-### 3.5 레벨업
-- **서버가 100% 관리** (LLM 판정 아님)
-- CS 기반 레벨 테이블:
+### 3.5 Level-Up
+- **Server manages 100%** (not LLM)
+- CS-based level table:
 
-| CS | 레벨 | 필요 CS |
-|----|------|---------|
+| CS | Level | CS Required |
+|----|-------|-------------|
 | 0 | 1 | - |
 | 4 | 2 | 4 |
 | 10 | 3 | 6 |
@@ -152,75 +152,75 @@ LoL 1v1 라인전을 시뮬레이션하는 **LLM 기반 텍스트 전략 게임*
 | 37 | 6 | 10 |
 | 48 | 7 | 11 |
 
-- 레벨업 시 `phase: 'skillup'` → 입력 비활성화 → 스킬 선택 → 완료 후 play
-- **적 레벨업**: LLM이 `enemySkillUp` 필드로 스킬 선택 (상황 기반), 서버는 유효성 검증만
+- On level-up: `phase: 'skillup'` → input disabled → skill selection → back to play
+- **Enemy level-up**: LLM chooses via `enemySkillUp` field (situation-based), server validates only
 
-### 3.6 미니언 시스템
-- LLM이 웨이브 도착 타이밍과 미니언 수를 판단 (비고정 시간 모델에 맞게)
-- 웨이브 구성: 근접 3 + 원거리 3
-- 미니언끼리 자동 교전 → 자연 소멸
-- 막타를 쳐야 CS로 인정
-- 미니언 유무가 `blocked`에 영향
-- LLM이 미니언 수 반환, 서버가 상태에 저장
+### 3.6 Minion System
+- LLM judges wave arrival timing and minion counts (matching non-fixed time model)
+- Wave composition: 3 melee + 3 ranged
+- Minions auto-fight each other → natural attrition
+- Last-hitting required for CS credit
+- Minion presence affects `blocked`
+- LLM returns minion counts, server stores in state
 
-### 3.7 승리 조건
-- **킬**: 상대 HP 0
-- **CS 50**: 먼저 CS 50 도달
-- 동시 사망 없음 — 먼저 맞힌 쪽이 킬
-
----
-
-## 4. 스킬 시스템
-
-### 4.1 표기 규칙
-- 스킬 구조는 **챔피언마다 다름** — recast 유무, 단계 수 등 JSON에 정의
-- recast 스킬: 1단계 사용 후 2단계 재사용 가능 (예: 리신 Q1→Q2, W1→W2, E1→E2)
-- 비recast 스킬: 단일 사용 (예: 리신 R)
-- recast 스킬 표기: **Q1/Q2** (항상 숫자 포함, 맨 Q 단독 사용 금지)
-- recast 스킬의 쿨다운은 **1단계 시전 시 즉시 시작** (2단계 사용 여부와 무관)
-- 기력 소모도 단계별로 다를 수 있음 (예: Q1: 50, Q2: 25)
-- **쿨다운은 초 단위** — 서버가 스킬 사용 시 설정 + elapsed 기반 차감. 0 = 사용 가능, 양수 = 남은 초.
-- 모든 스킬 구조는 `data/champions/{id}.json`에 정의
-
-### 4.2 챔피언 데이터
-- `data/champions/{id}.json`에 독립 파일로 관리
-- 스킬 사거리, 데미지 공식(baseDamage 배열, scaling ratio), recast 여부, 특수 메카닉 포함
-- 프롬프트 생성 시 JSON에서 읽어 동적 삽입
-- 챔피언 추가 = JSON 파일 추가 + 셋업 화면 추가. 코드 변경 불필요.
+### 3.7 Win Conditions
+- **Kill**: opponent HP reaches 0
+- **CS 50**: first to reach CS 50
+- No simultaneous kills — whoever lands the hit first gets the kill
 
 ---
 
-## 5. 상대방(AI)
+## 4. Skill System
 
-### 5.1 행동 원칙
-- **동등한 상대** — 봐주지 않음, 적극적으로 반격
-- 플레이어 공격이 항상 성공하는 것 아님
-- AI도 선공 가능, 편파 판정 금지
-- **고정된 성격 없음** — 현재 상태(HP, 쿨다운, 거리, CS 차이)에 따라 유동적 판단
-- **다양한 상황 연출** — 같은 패턴 반복 X, 여러 스킬 조합/전략 활용
+### 4.1 Notation Rules
+- Skill structure **varies per champion** — recast availability, phases, etc. defined in JSON
+- Recast skills: can recast phase 2 after using phase 1 (e.g., Lee Sin Q1→Q2, W1→W2, E1→E2)
+- Non-recast skills: single use (e.g., Lee Sin R)
+- Recast skill notation: **Q1/Q2** (always include number, never bare Q)
+- Recast cooldown **starts on phase 1 cast** (regardless of whether phase 2 is used)
+- Resource cost can differ per phase (e.g., Q1: 50, Q2: 25)
+- **Cooldowns in seconds** — server sets on skill use + reduces by elapsed. 0 = ready, positive = remaining seconds.
+- All skill structures defined in `data/champions/{id}.json`
 
-### 5.2 말투
-- 반말 종결: ~했음, ~됐음, ~인듯, ~ㅋㅋ
-- 친근하게 + 대응 이유 + 팁
-- 예: "잘 피했음", "Q2는 잃은 체력 비례라 지금 들어가면 더 아팠을듯"
+### 4.2 Champion Data
+- Independent JSON files at `data/champions/{id}.json`
+- Includes: skill ranges, damage formulas (baseDamage arrays, scaling ratios), recast flags, special mechanics
+- Dynamically injected into prompts during generation
+- Adding a champion = add JSON file + add to setup screen. No code changes needed.
 
-### 5.3 교육적 역할
-- 스킬 고유 효과를 상황에 맞게 활용 → 체험으로 학습
-- 다양한 스킬 조합 (같은 패턴 반복 X)
-- 대응 이유 설명으로 실전 지식 전달
+---
+
+## 5. Opponent (AI)
+
+### 5.1 Behavior Principles
+- **Equal opponent** — no mercy, actively counter-attacks
+- Player attacks don't always succeed
+- AI can initiate, no biased judgment
+- **No fixed personality** — dynamically adapts based on current state (HP, cooldowns, distance, CS gap)
+- **Diverse situations** — no pattern repetition, actively uses varied skill combinations/strategies
+
+### 5.2 Speech Style (Korean)
+- Casual endings: ~했음, ~됐음, ~인듯, ~ㅋㅋ
+- Friendly + reasoning for counter-play + tips
+- Examples: "잘 피했음", "Q2는 잃은 체력 비례라 지금 들어가면 더 아팠을듯"
+
+### 5.3 Educational Role
+- Uses each skill's unique effects situationally → learning through experience
+- Varied skill combinations (no pattern repetition)
+- Explains counter-play reasoning to transfer practical knowledge
 
 ---
 
 ## 6. Suggestions
 
-### 6.1 설계 원칙
-- 선택지는 **행동의 이유/근거/의도가 드러나야** 한다
-- 플레이어가 선택지를 읽는 것만으로도 라인전 판단력을 학습
-- ❌ "Q1으로 견제" → ✅ "상대 Q 쿨타임이니까 Q1으로 견제"
-- 이모지 사용 금지
+### 6.1 Design Principles
+- Suggestions must **reveal the reasoning/rationale/intent** behind the action
+- Players learn laning judgment just by reading suggestions
+- ❌ "Poke with Q1" → ✅ "Opponent Q is on cooldown, poke with Q1 now"
+- No emoji
 
-### 6.2 태그 시스템
-각 suggestion에 두 개의 태그:
+### 6.2 Tag System
+Each suggestion has two tags:
 
 ```json
 {"requires": "Q", "ifLevelUp": null, "text": "상대 Q 쿨타임이니까 Q1으로 견제"}
@@ -228,59 +228,59 @@ LoL 1v1 라인전을 시뮬레이션하는 **LLM 기반 텍스트 전략 게임*
 {"requires": null, "ifLevelUp": null, "text": "AA로 CS만 먹기"}
 ```
 
-| 태그 | 의미 | 사용 |
-|------|------|------|
-| `requires` | 이 선택지를 실행하려면 이 스킬이 필요 (습득 + 쿨다운 아님) | 클라이언트가 필터링 |
-| `ifLevelUp` | 레벨업 이벤트에서 이 스킬을 선택했을 때만 노출 | 스킬업 후 필터링 |
+| Tag | Meaning | Usage |
+|-----|---------|-------|
+| `requires` | This skill must be available (learned + off cooldown) to execute | Client filters |
+| `ifLevelUp` | Only shown when player levels up this specific skill | Post-skillup filtering |
 
-### 6.3 LLM 생성 규칙
-- 매 턴 **5-7개** suggestions 생성
-- 각 suggestion에 `requires`와 `ifLevelUp` 태그 포함
-- `requires`: 해당 스킬이 사용 가능해야 선택 가능한 경우 스킬명, 아니면 null
-- `ifLevelUp`: 이번 턴에 레벨업이 포함되어 있으면 배울 수 있는 각 스킬별로 suggestions 생성, 해당 스킬명 태그. 레벨업 무관한 일반 선택지는 null
-- **선택지 text에 행동 이유 포함** (쿨타임 이용, 체력 우위, 거리 이점, 미니언 상황, 자원 관리 등)
-- 우선순위 높은 순서대로 출력
+### 6.3 LLM Generation Rules
+- Generate **5-7** suggestions per turn
+- Each includes `requires` and `ifLevelUp` tags
+- `requires`: skill name if needed for execution, null otherwise
+- `ifLevelUp`: if level-up is included this turn, generate suggestions for each learnable skill with corresponding tag. General suggestions use null.
+- **Suggestion text includes action reasoning** (cooldown punish, HP advantage, distance, minion state, resource management, etc.)
+- Output in priority order (best first)
 
-### 6.4 클라이언트 필터링
-1. **일반 턴**: `ifLevelUp`이 null인 것만 → `requires` 기준 필터 (습득 + 쿨다운 체크) → 최대 3개
-2. **레벨업 턴**: 사용자가 선택한 스킬과 `ifLevelUp` 일치 + `ifLevelUp: null` → `requires` 필터 → 최대 3개
-- 스킬업 후 저장된 suggestions 재필터링 → **추가 API 호출 없음**
-
----
-
-## 7. 소환사 주문 & 룬
-
-### 소환사 주문 (5개 중 2개 자유 선택)
-| 주문 | 효과 |
-|------|------|
-| 점멸 (Flash) | 즉시 이동, 회피/기습 |
-| 점화 (Ignite) | 지속 피해 + 치유 감소 |
-| 탈진 (Exhaust) | 둔화 + 피해 35% 감소 |
-| 방어막 (Barrier) | 즉시 보호막 |
-| 텔레포트 (TP) | 귀환 후 빠른 복귀 |
-
-### 룬 (3개 중 1개 선택)
-| 룬 | 특성 |
-|------|------|
-| 정복자 | 장기 교전. 스택 → AD 증가 + 회복 |
-| 감전 | 짧은 교전. 3히트 시 추가 폭딜 |
-| 착취의 손아귀 | 지속 체력전. AA → 추가 피해 + 회복 + 영구 체력 |
+### 6.4 Client Filtering
+1. **Normal turn**: only `ifLevelUp: null` → filter by `requires` (learned + off cooldown) → max 3
+2. **Level-up turn**: match `ifLevelUp` with chosen skill + `ifLevelUp: null` → `requires` filter → max 3
+- Post-skillup: re-filter stored suggestions → **no additional API call**
 
 ---
 
-## 8. LLM 응답 형식
+## 7. Summoner Spells & Runes
+
+### Summoner Spells (pick 2 from 5)
+| Spell | Effect |
+|-------|--------|
+| Flash | Instant blink, dodge/engage |
+| Ignite | DoT + healing reduction |
+| Exhaust | Slow + 35% damage reduction |
+| Barrier | Instant shield |
+| Teleport (TP) | Quick return after recall |
+
+### Runes (pick 1 from 3)
+| Rune | Trait |
+|------|-------|
+| Conqueror | Extended trades. Stacks → AD increase + healing |
+| Electrocute | Short trades. 3 hits → burst damage |
+| Grasp of the Undying | Sustain. AA → bonus damage + heal + permanent HP |
+
+---
+
+## 8. LLM Response Format
 
 ```json
 {
-  "narrative": "교전 서술 1~2문장",
-  "aiChat": "상대방 코멘트. ~했음/~됐음 체",
+  "narrative": "Combat narration 1-2 sentences (Korean)",
+  "aiChat": "Opponent comment in Korean casual style",
   "actions": [
     {"who": "player", "skill": "Q1", "target": "enemy", "hit": true},
     {"who": "enemy", "skill": "E1", "target": "player", "hit": true}
   ],
+  "elapsed": "short",
   "distance": 100,
   "blocked": false,
-  "elapsed": "short",
   "cs": {"player": 2, "enemy": 1},
   "minions": {"player": {"melee": 2, "ranged": 3}, "enemy": {"melee": 1, "ranged": 2}},
   "enemySkillUp": null,
@@ -293,13 +293,13 @@ LoL 1v1 라인전을 시뮬레이션하는 **LLM 기반 텍스트 전략 게임*
 }
 ```
 
-### 서술 규칙
-- **1~2문장** 이내. 간결하게.
-- 스킬 효과 설명은 상황에 맞게 자연스럽게 포함
+### Narration Rules
+- **1-2 sentences** max. Keep concise.
+- Skill effect explanations woven naturally into context
 
 ---
 
-## 9. 게임 상태 스키마
+## 9. Game State Schema
 
 ```json
 {
@@ -338,93 +338,93 @@ LoL 1v1 라인전을 시뮬레이션하는 **LLM 기반 텍스트 전략 게임*
 
 ---
 
-## 10. 프로그램 흐름
+## 10. Program Flow
 
-### 게임 시작
+### Game Start
 ```
-[셋업 화면] 주문/룬 선택
-  → 클라이언트: 챔피언 JSON fetch → 초기 상태 생성
-  → state 저장, phase='skillup'
-  → 스킬 선택 UI (suggestions 영역)
+[Setup Screen] Select spells/rune
+  → Client: fetch champion JSON → create initial state
+  → Save state, phase='skillup'
+  → Skill selection UI (suggestions area)
   → POST /api/skillup
-  → 서버: 검증 + 상태 업데이트
-  → suggestions 필터링 → 입력 활성화
+  → Server: validate + update state
+  → Filter suggestions → enable input
 ```
 
-### 일반 턴
+### Normal Turn
 ```
-[플레이어 입력] "Q1으로 견제"
+[Player Input] "Q1으로 견제"
   → POST /api/turn (gameState, input, history)
-  → 서버:
-    1. LLM 호출 → actions, elapsed, distance, blocked, cs, ...
-    2. 데미지 엔진: actions 기반 데미지/쉴드/자원소모 계산
-    3. elapsed 기반 쿨다운 차감 + 자원 자연회복
-    4. CS 누적 → 레벨업 판정
-    5. 가드레일 (HP/자원/쿨다운 클램프)
-    6. gameOver 체크 (HP 0 / CS 50)
-  → 클라이언트:
-    1. narrative → 시스템 메시지
-    2. aiChat → 상대방 말풍선
-    3. state 업데이트 → 상태바 렌더링
-    4. suggestions 필터링 → 칩 버튼 (최대 3개)
-    5. levelUp → 스킬 선택 UI (입력 비활성화)
-    6. gameOver → 게임오버 오버레이
+  → Server:
+    1. LLM call → actions, elapsed, distance, blocked, cs, ...
+    2. Damage engine: damage/shield/resource consumption from actions
+    3. Elapsed-based cooldown reduction + resource natural recovery + HP regen
+    4. CS accumulation → level-up check
+    5. Guardrails (HP/resource/cooldown clamping)
+    6. gameOver check (HP 0 / CS 50)
+  → Client:
+    1. narrative → system message
+    2. aiChat → opponent chat bubble
+    3. state update → status bar render
+    4. suggestions filter → chip buttons (max 3)
+    5. levelUp → skill selection UI (input disabled)
+    6. gameOver → game over overlay
 ```
 
-### 레벨업 (턴 중간)
+### Level-Up (mid-turn)
 ```
-[턴 결과에 levelUp 포함]
-  → 입력 비활성화, suggestions에 스킬 선택 버튼
-  → POST /api/skillup → 검증 + 상태 업데이트
-  → skillPoints 0이면 → 저장된 suggestions 재필터링 → 입력 활성화
-  → skillPoints 남으면 → 다시 스킬 선택 UI
+[Turn result includes levelUp]
+  → Input disabled, skill selection buttons in suggestions area
+  → POST /api/skillup → validate + update state
+  → skillPoints 0 → re-filter stored suggestions → enable input
+  → skillPoints remaining → skill selection UI again
 ```
 
-### 게임 오버
+### Game Over
 ```
-[gameOver 수신]
-  → 오버레이 (승패 + 요약)
-  → 복기하기 / 새 게임
+[gameOver received]
+  → Overlay (win/loss + summary)
+  → Review / New Game
 ```
 
 ---
 
 ## 11. UI/UX
 
-### 셋업 화면
-- 소환사 주문 2개 선택 (DDragon 아이콘)
-- 룬 1개 선택 (DDragon 아이콘)
-- 시작 버튼
+### Setup Screen
+- Select 2 summoner spells (DDragon icons)
+- Select 1 rune (DDragon icons)
+- Start button
 
-### 게임 화면 — KakaoTalk 스타일 채팅
-- **노란 말풍선** = 내 입력 (오른쪽)
-- **흰 말풍선** = 상대방 (왼쪽, 챔피언 프로필 이미지)
-- **시스템 메시지** = 서술 (중앙, 날짜 구분선 스타일)
-- 상단: 양측 상태 (HP 실제 수치, 자원, CS, 레벨, 쿨다운 아이콘, 룬)
-- 하단: 텍스트 입력 + suggestions 칩 버튼
-- 스킬업 시: suggestions 영역에 Q/W/E 선택 버튼 + 전송 비활성화
-- 게임오버: 오버레이 (승패 + 요약 + 복기/재시작)
-- **턴 번호 표시 안 함**
+### Game Screen — KakaoTalk-style Chat
+- **Yellow bubble** = my input (right)
+- **White bubble** = opponent (left, champion profile image)
+- **System message** = narration (center, date-divider style)
+- Top: both sides' status (HP real values, resource, CS, level, cooldown icons, rune)
+- Bottom: text input + suggestion chip buttons
+- Skill-up: Q/W/E selection buttons in suggestions area + send disabled
+- Game over: overlay (win/loss + summary + review/restart)
+- **No turn counter displayed**
 
-### 아이콘
+### Icons
 - DDragon CDN: `https://ddragon.leagueoflegends.com/cdn/14.20.1`
-- 스킬/주문/룬/챔피언 초상화 모두 실제 게임 이미지
+- Skills/spells/runes/champion portraits all use real game images
 
 ---
 
-## 12. 기술 스택
+## 12. Tech Stack
 
-| 구분 | 기술 |
-|------|------|
-| 프론트엔드 | 바닐라 HTML/CSS/JS |
-| 서버 | Vercel Serverless Functions (Node.js ESM) |
-| LLM | Anthropic Claude (`claude-sonnet-4-6`, `LLM_MODEL` env) |
-| 배포 | Vercel |
-| 소스 | GitHub (`regrow1123/ib-lol-talk`) |
+| Component | Technology |
+|-----------|-----------|
+| Frontend | Vanilla HTML/CSS/JS |
+| Server | Vercel Serverless Functions (Node.js ESM) |
+| LLM | Anthropic Claude (`claude-sonnet-4-6`, configurable via `LLM_MODEL` env) |
+| Deploy | Vercel |
+| Source | GitHub (`regrow1123/ib-lol-talk`) |
 
 ---
 
-## 13. 파일 구조
+## 13. File Structure
 
 ```
 ib-lol-talk/
@@ -433,15 +433,15 @@ ib-lol-talk/
 │   ├── css/style.css
 │   └── js/main.js
 ├── api/
-│   ├── turn.js           # 턴 처리 (LLM 호출 + 데미지 엔진)
-│   └── skillup.js        # 스킬 레벨업 (검증만, LLM 호출 없음)
+│   ├── turn.js           # Turn processing (LLM call + damage engine)
+│   └── skillup.js        # Skill level-up (validation only, no LLM)
 ├── server/
-│   ├── llm.js            # LLM API 호출 + JSON 파싱 + 재시도
-│   ├── prompt.js          # 프롬프트 생성 (static/dynamic 분리)
-│   ├── damage.js          # 데미지 엔진 (LoL 공식) + elapsed 기반 시간 경과 처리
-│   ├── validate.js        # 가드레일 검증 (클램프)
-│   ├── game.js            # 상태 생성 + 초기화 + 레벨 테이블
-│   └── champions.js       # 챔피언 JSON 로더
+│   ├── llm.js            # LLM API call + JSON parsing + retry
+│   ├── prompt.js          # Prompt generation (static/dynamic split)
+│   ├── damage.js          # Damage engine (LoL formulas) + elapsed time processing
+│   ├── validate.js        # Guardrail validation (clamping)
+│   ├── game.js            # State creation + initialization + level table
+│   └── champions.js       # Champion JSON loader
 ├── data/
 │   └── champions/
 │       └── lee-sin.json
@@ -453,34 +453,34 @@ ib-lol-talk/
 
 ---
 
-## 14. API 엔드포인트
+## 14. API Endpoints
 
 ### POST /api/turn
 - Input: `{gameState, input, history}`
 - Output: `{state, narrative, aiChat, suggestions, levelUp, gameOver}`
-- 흐름: LLM → actions + elapsed → 데미지 엔진 + 시간 경과 처리 → 가드레일 → 응답
+- Flow: LLM → actions + elapsed → damage engine + time processing → guardrails → response
 
 ### POST /api/skillup
 - Input: `{gameState, skill}`
 - Output: `{ok, state}`
-- LLM 호출 없음
+- No LLM call
 
 ---
 
-## 15. 로드맵
+## 15. Roadmap
 
-### Phase 1: 클린 재구현 (현재)
-- [ ] 전체 코드 재작성
-- [ ] 프롬프트 재작성
-- [ ] E2E 테스트
-- [ ] LLM 응답 품질 튜닝
+### Phase 1: Clean Reimplementation (current)
+- [ ] Full code rewrite
+- [ ] Prompt rewrite
+- [ ] E2E testing
+- [ ] LLM response quality tuning
 
-### Phase 2: 폴리시
-- [ ] AI 행동 다양성 개선
-- [ ] 밸런스 튜닝
-- [ ] UI/UX 개선, 모바일 최적화
+### Phase 2: Polish
+- [ ] AI behavior diversity improvement
+- [ ] Balance tuning
+- [ ] UI/UX improvements, mobile optimization
 
-### Phase 3: 챔피언 확장
-- [ ] 셋업 화면 챔피언 선택 UI
-- [ ] 2~3개 챔피언 추가
-- [ ] 비대칭 매치업
+### Phase 3: Champion Expansion
+- [ ] Champion select UI on setup screen
+- [ ] Add 2-3 more champions
+- [ ] Asymmetric matchups
