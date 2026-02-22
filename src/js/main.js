@@ -1,5 +1,6 @@
 const IMG = '/src/img';
-const CHAMPION_ID = 'lee-sin';
+const DDRAGON = 'https://ddragon.leagueoflegends.com/cdn/14.20.1/img';
+let CHAMPION_ID = 'lee-sin';
 
 // ===== STATE =====
 let gameState = null;
@@ -50,25 +51,50 @@ const $gameoverSummary = document.getElementById('gameover-summary');
 const $restartBtn = document.getElementById('restart-btn');
 
 // ===== INIT =====
+let championList = [];
+
 async function init() {
   try {
-    const res = await fetch(`/data/champions/${CHAMPION_ID}.json`);
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    championData = await res.json();
-    console.log('[init] Champion data loaded:', championData.name);
+    const listRes = await fetch('/data/champions/index.json');
+    championList = await listRes.json();
   } catch (err) {
-    console.error('[init] Failed to load champion data:', err);
-    document.body.innerHTML = `<div style="padding:20px;text-align:center">
-      <h2>챔피언 데이터 로드 실패</h2>
-      <p>${err.message}</p>
-      <p>data/champions/lee-sin.json 파일을 확인해주세요.</p>
-    </div>`;
-    return;
+    console.error('[init] Failed to load champion list:', err);
   }
   renderSetup();
 }
 
+async function loadChampionData(id) {
+  const res = await fetch(`/data/champions/${id}.json`);
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  championData = await res.json();
+  CHAMPION_ID = id;
+  console.log('[init] Champion data loaded:', championData.name);
+}
+
 function renderSetup() {
+  // Champions
+  const $champSelect = document.getElementById('champion-select');
+  $champSelect.innerHTML = championList.map(c =>
+    `<button class="champion-card${championList.length === 1 ? ' selected' : ''}" data-champ="${c.id}">
+      <img src="${DDRAGON}/champion/${c.icon}.png" alt="${c.name}">
+      <span class="champ-name">${c.name}</span>
+    </button>`
+  ).join('');
+
+  // Auto-select if only one
+  if (championList.length === 1) {
+    CHAMPION_ID = championList[0].id;
+  }
+
+  $champSelect.addEventListener('click', e => {
+    const btn = e.target.closest('[data-champ]');
+    if (!btn) return;
+    $champSelect.querySelectorAll('.champion-card').forEach(b => b.classList.remove('selected'));
+    btn.classList.add('selected');
+    CHAMPION_ID = btn.dataset.champ;
+    checkReady();
+  });
+
   // Spells
   $spellSelect.innerHTML = SPELLS.map(s =>
     `<button class="icon-btn" data-spell="${s.id}" title="${s.name}">
@@ -110,12 +136,23 @@ function renderSetup() {
   $restartBtn.addEventListener('click', () => { location.reload(); });
 }
 
+function checkReady() { updateStartBtn(); }
 function updateStartBtn() {
-  $startBtn.disabled = !(selectedSpells.length === 2 && selectedRune);
+  $startBtn.disabled = !(CHAMPION_ID && selectedSpells.length === 2 && selectedRune);
 }
 
 // ===== GAME START =====
-function startGame() {
+async function startGame() {
+  $startBtn.disabled = true;
+  $startBtn.textContent = '로딩 중...';
+  try {
+    await loadChampionData(CHAMPION_ID);
+  } catch (err) {
+    alert('챔피언 데이터 로드 실패: ' + err.message);
+    $startBtn.disabled = false;
+    $startBtn.textContent = '게임 시작';
+    return;
+  }
   // Client-side state initialization
   const s = championData.baseStats;
   const createFighter = (spells, rune) => ({
