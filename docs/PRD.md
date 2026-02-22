@@ -331,9 +331,8 @@ LoL 1v1 라인전을 시뮬레이션하는 **LLM 기반 텍스트 전략 게임*
 ### 게임 시작
 ```
 [셋업 화면] 주문/룬 선택
-  → POST /api/start (spells, rune)
-  → 서버: 초기 상태 생성
-  → 클라이언트: state 저장, phase='skillup'
+  → 클라이언트: 챔피언 JSON fetch → 초기 상태 생성
+  → state 저장, phase='skillup'
   → 스킬 선택 UI (suggestions 영역)
   → POST /api/skillup
   → 서버: 검증 + 상태 업데이트
@@ -422,7 +421,6 @@ ib-lol-talk/
 │   ├── css/style.css
 │   └── js/main.js
 ├── api/
-│   ├── start.js          # 게임 시작 (LLM 호출 없음)
 │   ├── turn.js           # 턴 처리 (LLM 호출 + 데미지 엔진)
 │   └── skillup.js        # 스킬 레벨업 (검증만, LLM 호출 없음)
 ├── server/
@@ -444,11 +442,6 @@ ib-lol-talk/
 ---
 
 ## 14. API 엔드포인트
-
-### POST /api/start
-- Input: `{spells: [2개], rune: string}`
-- Output: `{state, narrative, suggestions}`
-- LLM 호출 없음
 
 ### POST /api/turn
 - Input: `{gameState, input, history}`
