@@ -20,7 +20,9 @@ export function applyActions(state, llmResult) {
     if (!validateAction(action, attacker, champ)) continue;
 
     if (!action.hit) {
-      // Miss — no damage. Resource/cooldown managed by LLM.
+      // Miss — no damage, but still consume resource and apply cooldown
+      consumeResource(action, attacker, champ);
+      applyCooldown(action, attacker, champ);
       continue;
     }
 
@@ -37,22 +39,23 @@ export function applyActions(state, llmResult) {
       attacker.shield += result.shield;
     }
 
-    // Resource and cooldown managed by LLM (non-fixed time intervals)
+    // Consume resource for skill usage
+    consumeResource(action, attacker, champ);
+
+    // Apply cooldown on skill use
+    applyCooldown(action, attacker, champ);
   }
 
-  // Apply LLM-determined cooldowns and resource (non-fixed time intervals)
-  if (llmResult.playerCooldowns) {
-    Object.assign(state.player.cooldowns, llmResult.playerCooldowns);
-  }
-  if (llmResult.enemyCooldowns) {
-    Object.assign(state.enemy.cooldowns, llmResult.enemyCooldowns);
-  }
-  if (llmResult.playerResource != null) {
-    state.player.resource = llmResult.playerResource;
-  }
-  if (llmResult.enemyResource != null) {
-    state.enemy.resource = llmResult.enemyResource;
-  }
+  // Elapsed time processing
+  const elapsedSec = ELAPSED_MAP[llmResult.elapsed] || ELAPSED_MAP.medium;
+
+  // Decrement cooldowns by elapsed time
+  decrementCooldowns(state.player, elapsedSec);
+  decrementCooldowns(state.enemy, elapsedSec);
+
+  // Natural resource recovery based on elapsed time
+  recoverResource(state.player, champ, elapsedSec);
+  recoverResource(state.enemy, champ, elapsedSec);
 
   // Update distance and blocked
   if (llmResult.distance != null) state.distance = Math.max(0, llmResult.distance);
@@ -181,5 +184,57 @@ function applyDamage(defender, damage) {
   defender.hp = Math.max(0, Math.round(defender.hp - damage));
 }
 
-// Resource, cooldown, and time-based recovery are managed by LLM
-// (non-fixed time intervals between turns)
+// Elapsed time mapping
+const ELAPSED_MAP = {
+  short: 2,   // combat, skill exchange
+  medium: 5,  // CS + minor actions
+  long: 10,   // farming phase, waiting
+};
+
+function consumeResource(action, attacker, champ) {
+  const skill = action.skill;
+  if (skill === 'AA') return;
+
+  const key = skill.replace(/[12]/, '');
+  const phase = skill.endsWith('2') ? 1 : 0;
+  const skillData = champ.skills[key];
+  if (!skillData) return;
+
+  const cost = skillData.cost?.[phase] || 0;
+  attacker.resource = Math.max(0, attacker.resource - cost);
+}
+
+function applyCooldown(action, attacker, champ) {
+  const skill = action.skill;
+  if (skill === 'AA') return;
+
+  const key = skill.replace(/[12]/, '');
+  const skillData = champ.skills[key];
+  if (!skillData) return;
+
+  // Recast: cooldown starts on first cast (regardless of phase 2)
+  const rank = attacker.skillLevels[key];
+  const cd = skillData.cooldown?.[rank - 1] || 0;
+
+  // Only set if not already on cooldown (avoid resetting on Q2 after Q1)
+  if (attacker.cooldowns[key] <= 0) {
+    attacker.cooldowns[key] = cd;
+  }
+}
+
+function decrementCooldowns(fighter, elapsedSec) {
+  for (const key of Object.keys(fighter.cooldowns)) {
+    fighter.cooldowns[key] = Math.max(0, fighter.cooldowns[key] - elapsedSec);
+  }
+  for (let i = 0; i < fighter.spellCooldowns.length; i++) {
+    fighter.spellCooldowns[i] = Math.max(0, fighter.spellCooldowns[i] - elapsedSec);
+  }
+}
+
+function recoverResource(fighter, champ, elapsedSec) {
+  if (champ.resource === 'energy') {
+    // Energy recovers 50/sec
+    fighter.resource = Math.min(fighter.maxResource, fighter.resource + 50 * elapsedSec);
+  }
+  // Mana recovery can be added here for other champions
+}
