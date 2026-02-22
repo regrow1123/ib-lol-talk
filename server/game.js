@@ -39,9 +39,7 @@ export function createGameState(championId, spells, rune) {
   const enemySpells = shuffled.slice(0, 2);
 
   const enemyFighter = fighter(enemySpells, enemyRune);
-  // Enemy auto-learns Q at start
-  enemyFighter.skillLevels.Q = 1;
-  enemyFighter.skillPoints = 0;
+  // Enemy keeps skillPoints=1, LLM chooses skill on first turn via enemySkillUp
 
   return {
     turn: 1,

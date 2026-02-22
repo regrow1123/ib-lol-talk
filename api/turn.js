@@ -68,6 +68,15 @@ export default async function handler(req, res) {
       }
     }
 
+    // 6.5. Enemy pending skillPoints (e.g. initial skill at game start)
+    if (state.enemy.skillPoints > 0 && llmResult.enemySkillUp) {
+      const key = llmResult.enemySkillUp;
+      if (isValidSkillUp(state.enemy, key)) {
+        state.enemy.skillLevels[key]++;
+        state.enemy.skillPoints--;
+      }
+    }
+
     // 7. Game over check
     let gameOver = llmResult.gameOver || null;
     if (!gameOver) {
