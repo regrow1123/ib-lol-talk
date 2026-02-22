@@ -69,12 +69,18 @@ export default async function handler(req, res) {
     }
 
     // 6.5. Enemy pending skillPoints (e.g. initial skill at game start)
-    if (state.enemy.skillPoints > 0 && llmResult.enemySkillUp) {
-      const key = llmResult.enemySkillUp;
-      if (isValidSkillUp(state.enemy, key)) {
-        state.enemy.skillLevels[key]++;
-        state.enemy.skillPoints--;
+    while (state.enemy.skillPoints > 0) {
+      if (llmResult.enemySkillUp) {
+        const key = llmResult.enemySkillUp;
+        if (isValidSkillUp(state.enemy, key)) {
+          state.enemy.skillLevels[key]++;
+          state.enemy.skillPoints--;
+          continue;
+        }
       }
+      // Fallback
+      autoSkillUp(state.enemy);
+      state.enemy.skillPoints--;
     }
 
     // 7. Game over check
