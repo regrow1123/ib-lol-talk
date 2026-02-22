@@ -38,13 +38,18 @@ export function createGameState(championId, spells, rune) {
   const shuffled = allSpells.sort(() => Math.random() - 0.5);
   const enemySpells = shuffled.slice(0, 2);
 
+  const enemyFighter = fighter(enemySpells, enemyRune);
+  // Enemy auto-learns Q at start
+  enemyFighter.skillLevels.Q = 1;
+  enemyFighter.skillPoints = 0;
+
   return {
     turn: 1,
     phase: 'skillup',
     distance: 800,
     blocked: true,
     player: fighter(spells, rune),
-    enemy: fighter(enemySpells, enemyRune),
+    enemy: enemyFighter,
     minions: {
       player: { melee: 3, ranged: 3 },
       enemy: { melee: 3, ranged: 3 },
