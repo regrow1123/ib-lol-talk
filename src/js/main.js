@@ -51,8 +51,20 @@ const $restartBtn = document.getElementById('restart-btn');
 
 // ===== INIT =====
 async function init() {
-  const res = await fetch(`/data/champions/${CHAMPION_ID}.json`);
-  championData = await res.json();
+  try {
+    const res = await fetch(`/data/champions/${CHAMPION_ID}.json`);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    championData = await res.json();
+    console.log('[init] Champion data loaded:', championData.name);
+  } catch (err) {
+    console.error('[init] Failed to load champion data:', err);
+    document.body.innerHTML = `<div style="padding:20px;text-align:center">
+      <h2>챔피언 데이터 로드 실패</h2>
+      <p>${err.message}</p>
+      <p>data/champions/lee-sin.json 파일을 확인해주세요.</p>
+    </div>`;
+    return;
+  }
   renderSetup();
 }
 
@@ -147,6 +159,7 @@ function startGame() {
   renderStatus();
   addSystemMessage('라인전이 시작됩니다. 첫 스킬을 선택하세요.');
   showSkillUpUI();
+  console.log('[startGame] state:', gameState.phase, 'suggestions HTML:', $suggestions.innerHTML);
 }
 
 // ===== STATUS RENDERING =====
