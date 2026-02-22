@@ -26,9 +26,9 @@ const RUNES = [
 ];
 
 const SKILL_ICONS = {
-  Q: 'LeeSinQ',
-  W: 'LeeSinW',
-  E: 'LeeSinE',
+  Q: 'LeeSinQOne',
+  W: 'LeeSinWOne',
+  E: 'LeeSinEOne',
   R: 'LeeSinR',
 };
 
