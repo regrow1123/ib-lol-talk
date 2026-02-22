@@ -443,7 +443,7 @@ async function sendInput() {
 
     // Game over?
     if (data.gameOver) {
-      showGameOver(data.gameOver);
+      showGameOver(data.gameOver, data.tips);
       isLoading = false;
       return;
     }
@@ -470,10 +470,19 @@ async function sendInput() {
 }
 
 // ===== GAME OVER =====
-function showGameOver(gameOver) {
+function showGameOver(gameOver, tips) {
   const isWin = gameOver.winner === 'player';
   $gameoverTitle.textContent = isWin ? '🎉 승리!' : '💀 패배';
   $gameoverSummary.textContent = gameOver.summary || '';
+
+  const $tips = document.getElementById('gameover-tips');
+  if (tips && tips.length > 0) {
+    $tips.innerHTML = `<div class="tips-title">💡 이번 라인전 꿀팁</div>` +
+      tips.map(t => `<div class="tip-item">${t}</div>`).join('');
+  } else {
+    $tips.innerHTML = '';
+  }
+
   $overlay.classList.remove('hidden');
 }
 

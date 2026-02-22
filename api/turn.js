@@ -1,8 +1,45 @@
+import Anthropic from '@anthropic-ai/sdk';
 import { callLLM } from '../server/llm.js';
 import { applyActions } from '../server/damage.js';
 import { validateState } from '../server/validate.js';
 import { csToLevel, recalcStats } from '../server/game.js';
 import { loadChampion } from '../server/champions.js';
+
+const TIPS_MODEL = process.env.LLM_MODEL || 'claude-sonnet-4-6';
+let tipsClient = null;
+
+async function generateTips(history, gameOver, state) {
+  if (!tipsClient) tipsClient = new Anthropic();
+
+  // Build condensed history summary
+  const lastMsgs = history.slice(-10).map(h => {
+    const role = h.role === 'user' ? '플레이어' : '상대';
+    return `${role}: ${typeof h.content === 'string' ? h.content : JSON.stringify(h.content)}`;
+  }).join('\n');
+
+  const prompt = `이번 리신 vs 리신 1v1 라인전이 끝났다.
+결과: ${gameOver.winner === 'player' ? '플레이어 승리' : '플레이어 패배'} (${gameOver.reason === 'kill' ? '킬' : 'CS 50'})
+최종 상태: 플레이어 HP ${state.player.hp}/${state.player.maxHp}, CS ${state.player.cs} | 상대 HP ${state.enemy.hp}/${state.enemy.maxHp}, CS ${state.enemy.cs}
+
+최근 전투 기록:
+${lastMsgs}
+
+이번 라인전에서 플레이어가 배울 수 있는 실전 꿀팁 3개를 JSON 배열로 줘.
+각 팁은 이번 경기에서 실제로 있었던 상황을 근거로, 구체적이고 실용적으로 써.
+리신 스킬 메카닉, 교전 타이밍, CS 관리 등 다양한 주제로.
+형식: ["팁1","팁2","팁3"]
+JSON만 출력.`;
+
+  const resp = await tipsClient.messages.create({
+    model: TIPS_MODEL,
+    max_tokens: 300,
+    messages: [{ role: 'user', content: prompt }],
+  });
+
+  const text = resp.content[0]?.text || '[]';
+  const match = text.match(/\[[\s\S]*\]/);
+  return match ? JSON.parse(match[0]) : [];
+}
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
@@ -75,6 +112,16 @@ export default async function handler(req, res) {
       gameOver = { winner: 'enemy', reason: 'cs', summary: '상대가 CS 50을 먼저 달성했습니다.' };
     }
 
+    // Generate tips on game over
+    let tips = null;
+    if (gameOver) {
+      try {
+        tips = await generateTips(history || [], gameOver, state);
+      } catch (e) {
+        console.error('[tips]', e);
+      }
+    }
+
     return res.status(200).json({
       state,
       narrative: llmResult.narrative || '',
@@ -82,6 +129,7 @@ export default async function handler(req, res) {
       suggestions: llmResult.suggestions || [],
       levelUp,
       gameOver,
+      tips,
     });
   } catch (err) {
     console.error('[turn]', err);
