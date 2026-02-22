@@ -116,13 +116,6 @@
       ]
     }
   },
-  "startItems": {
-    "default": {
-      "name": "도란의 검",
-      "ad": 10,
-      "omnivamp": 3.5
-    }
-  },
   "tips": {
     "combos": [
       "Q1 → AA → AA(패시브) → Q2 (기본 교환)",

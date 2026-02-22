@@ -14,7 +14,7 @@ export function createGameState(championId, spells, rune) {
     resourceType: champ.resource,
     level: 1,
     cs: 0,
-    ad: stats.ad + (champ.startItems.default.ad || 0),
+    ad: stats.ad,
     baseAd: stats.ad,
     armor: stats.armor,
     mr: stats.mr,
@@ -58,7 +58,7 @@ export function recalcStats(fighter, championId) {
   const s = champ.baseStats;
   const lv = fighter.level;
   fighter.maxHp = Math.round(s.hp + s.hpPerLevel * (lv - 1));
-  fighter.ad = Math.round((s.ad + s.adPerLevel * (lv - 1)) + (champ.startItems.default.ad || 0));
+  fighter.ad = Math.round(s.ad + s.adPerLevel * (lv - 1));
   fighter.baseAd = Math.round(s.ad + s.adPerLevel * (lv - 1));
   fighter.armor = Math.round(s.armor + s.armorPerLevel * (lv - 1));
   fighter.mr = Math.round(s.mr + s.mrPerLevel * (lv - 1));

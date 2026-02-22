@@ -315,7 +315,7 @@ LoL 1v1 라인전을 시뮬레이션하는 **LLM 기반 텍스트 전략 게임*
     "resourceType": "energy",
     "level": 1,
     "cs": 0,
-    "ad": 79,
+    "ad": 69,
     "baseAd": 69,
     "armor": 36,
     "mr": 32,
