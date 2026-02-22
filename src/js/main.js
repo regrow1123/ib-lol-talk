@@ -7,6 +7,7 @@ let state = null;
 let sending = false;
 let turnHistory = [];
 let allSuggestions = [];
+let skillRanges = {}; // {Q: 1200, W: 700, E: 450, R: 375, AA: 125}
 let setupChoices = { spells: [], rune: null };
 
 // ═══════════════════════════════════════
@@ -64,6 +65,7 @@ async function startGame() {
     });
     const data = await res.json();
     state = data.state;
+    skillRanges = data.skillRanges || {};
     allSuggestions = data.suggestions || [];
 
     const spellNames = { flash: '점멸', ignite: '점화', exhaust: '탈진', barrier: '방어막', tp: '텔레포트' };
@@ -426,14 +428,26 @@ function renderCooldowns(containerId, fighter) {
 function filterSuggestions(suggestions) {
   if (!state) return suggestions;
   const p = state.player;
-  return suggestions.filter(s => {
-    if (!s.skill) return true;
-    const key = s.skill.toUpperCase();
-    if (['Q', 'W', 'E', 'R'].includes(key)) {
-      return p.skillLevels[key] > 0 && p.cooldowns[key] <= 0;
-    }
-    return true;
-  });
+  const dist = state.distance || 0;
+
+  return suggestions
+    .filter(s => {
+      if (!s.skill) return true;
+      const key = s.skill.toUpperCase();
+      if (['Q', 'W', 'E', 'R'].includes(key)) {
+        return p.skillLevels[key] > 0 && p.cooldowns[key] <= 0;
+      }
+      return true;
+    })
+    .map(s => {
+      if (!s.skill) return s;
+      const key = s.skill.toUpperCase();
+      const range = skillRanges[key];
+      if (range && dist > range) {
+        return { ...s, text: `${s.text} (사거리 밖)`, outOfRange: true };
+      }
+      return s;
+    });
 }
 
 function renderSuggestions(suggestions) {
@@ -444,6 +458,7 @@ function renderSuggestions(suggestions) {
     const text = typeof s === 'string' ? s : s.text;
     const btn = document.createElement('button');
     btn.className = 'suggestion-btn';
+    if (s.outOfRange) btn.classList.add('out-of-range');
     btn.textContent = text;
     btn.onclick = () => {
       $('player-input').value = text;

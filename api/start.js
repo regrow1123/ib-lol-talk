@@ -17,8 +17,16 @@ export default function handler(req, res) {
     // Build initial suggestions with skill tags
     const suggestions = buildInitialSuggestions(champ);
 
+    // Extract skill ranges for client
+    const skillRanges = {};
+    for (const [key, skill] of Object.entries(champ.skills)) {
+      skillRanges[key] = skill.range[0]; // first cast range
+    }
+    skillRanges['AA'] = champ.baseStats.attackRange;
+
     res.json({
       state,
+      skillRanges,
       narrative: `⚔️ 미드 라인에 첫 미니언 웨이브가 도착했다. ${champ.name} vs ${champ.name} — 라인전 시작!`,
       suggestions,
     });

@@ -589,6 +589,11 @@ body {
 @media (max-width: 500px) {
   .chat-app { max-width: 100%; }
 }
+.suggestion-btn.out-of-range {
+  opacity: 0.5;
+  border-style: dashed;
+}
+
 @media (min-width: 501px) {
   body { background: #8a9aaa; display: flex; justify-content: center; }
   .chat-app { box-shadow: 0 0 40px rgba(0,0,0,0.2); }
