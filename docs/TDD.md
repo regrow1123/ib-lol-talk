@@ -77,7 +77,7 @@ Client                          Server
 
 #### Processing Order (critical — order matters)
 1. **Action loop** (sequential, order from LLM preserved):
-   - `validateAction()` — skip if skill not learned or not a valid key
+   - `validateAction()` — skip if skill not learned or invalid key
    - On miss: consume resource + set cooldown, skip damage
    - On hit: calculate damage/shield → apply damage → push shield → consume resource → set cooldown
 2. **Elapsed time processing**:
@@ -139,11 +139,6 @@ Clamps:
 - `spellCooldowns[i]`: ≥ 0
 - `distance`: ≥ 0
 
-Does NOT validate:
-- CS (can only increase, never decrease — enforced by engine)
-- Level (only increases via CS table)
-- Skill levels (validated in skillup endpoint)
-
 ### 3.3 `server/prompt.js` — Prompt Generation
 
 **Entry point**: `buildPromptParts(gameState) → {staticPrompt, dynamicPrompt}`
@@ -156,29 +151,21 @@ Content (doesn't change between turns):
 - Recast rules
 - Combo tips
 - Distance & blocked explanation
-- Output JSON format specification
-- Suggestion format rules
+- Output JSON format specification (with `elapsed`, `minions`, `requires`/`ifLevelUp` tags)
+- Suggestion generation rules (reasoning in text, `ifLevelUp` for level-up turns)
 - AI speech style rules
+
+Language: English instructions + Korean output examples
 
 #### Dynamic Prompt (changes every turn)
 Content:
 - Current distance, blocked status
-- Both fighters: HP, resource, level, CS, AD, armor, MR, shields
+- Both fighters: HP, resource, level, CS, AD, armor, MR
+- Shield status (array summary)
 - Skill levels + availability (learned/cooldown/resource check)
 - Spell status (name + cooldown)
 - Rune
 - Minion counts
-
-#### TODO (needs rewrite)
-Current prompt.js issues:
-- References removed fields (`turn`, `buffs`, `debuffs`, `shield` as number)
-- Suggestions format uses old `skill` tag instead of `requires`/`ifLevelUp`
-- No `elapsed` instruction in output format
-- No `minions` in output format
-- Korean instructions → should be English instructions + Korean output examples
-- Shield display should show array summary, not single number
-- Missing `gameOver` removal from output format
-- Missing initial suggestions / `ifLevelUp` generation rules
 
 ### 3.4 `server/llm.js` — LLM Integration
 
@@ -196,27 +183,15 @@ Current prompt.js issues:
 3. Manual brace matching (find first `{`, match closing `}`)
 
 #### History Compression
-- Last 4 messages (2 turns) sent verbatim
+- Last 4 messages (2 turns) sent verbatim as user/assistant pairs
 - Older messages summarized as 1-line: `action1 → action2 → ...`
 
 #### Fallback Response
-When all retries fail:
-```json
-{
-  "narrative": "양쪽 모두 조심스럽게 거리를 재고 있다.",
-  "aiChat": "잠깐 집중이 풀렸음. 다시 집중!",
-  "actions": [],
-  "distance": <current>,
-  "blocked": <current>,
-  "cs": {"player": 0, "enemy": 0},
-  "suggestions": [generic safe suggestions]
-}
-```
-
-#### TODO (needs update)
-- Fallback response uses old suggestion format (`skill` instead of `requires`/`ifLevelUp`)
-- Should include `elapsed: "medium"` in fallback
-- Should include `minions` in fallback
+When all retries fail, return a safe neutral response:
+- No actions, no CS change
+- Keep current distance/blocked/minions
+- `elapsed: "medium"`
+- Generic safe suggestions with `requires`/`ifLevelUp` tags
 
 ### 3.5 `server/game.js` — State Initialization
 
@@ -226,12 +201,13 @@ When all retries fail:
 - `phase: 'skillup'` (first skill selection)
 - `distance: 800`, `blocked: true`
 - Both fighters: full HP, full resource, all skills level 0, 1 skillPoint
+- `shields: []`
 - Minions: 3 melee + 3 ranged each side
 - Enemy: random rune (from 3) + random 2 spells (from 5)
 
 #### Level Table: `csToLevel(cs) → level`
-| CS | Level |
-|----|-------|
+| CS Range | Level |
+|----------|-------|
 | 0-3 | 1 |
 | 4-9 | 2 |
 | 10-17 | 3 |
@@ -245,11 +221,11 @@ On level-up:
 ```
 maxHp = baseHp + hpPerLevel × (level - 1)
 ad = baseAd + adPerLevel × (level - 1)
-baseAd = ad (no items)
+baseAd = ad (no items, so ad === baseAd always — but kept separate for rune bonusAD calc)
 armor = baseArmor + armorPerLevel × (level - 1)
 mr = baseMr + mrPerLevel × (level - 1)
 ```
-HP preserved proportionally: `hp = hpRatio × newMaxHp`
+HP preserved proportionally: `hp = round(hpRatio × newMaxHp)`
 
 ### 3.6 `server/champions.js` — Champion Data Loader
 
@@ -266,33 +242,39 @@ Simple JSON loader with in-memory cache.
 #### Request
 ```json
 {
-  "gameState": { ... },    // Full game state from client
-  "input": "Q1으로 견제",   // Player's natural language input
-  "history": [             // Chat history for LLM context
+  "gameState": { ... },
+  "input": "Q1으로 견제",
+  "history": [
     {"role": "user", "content": "..."},
     {"role": "assistant", "content": "..."}
   ]
 }
 ```
 
+`history`: array of past turns as user/assistant message pairs. Last 2 turns (4 messages) sent as full objects, older turns as 1-line summary strings. Used for LLM context.
+
 #### Response
 ```json
 {
-  "state": { ... },           // Updated game state
-  "narrative": "...",          // Combat narration (Korean)
-  "aiChat": "...",             // Opponent comment (Korean, casual)
-  "suggestions": [...],        // 5-7 tagged suggestions
-  "levelUp": null | {          // null or level-up info
-    "newLevel": 2,
-    "who": "player"
-  },
-  "gameOver": null | {         // null or game-over info
-    "winner": "player",
-    "reason": "kill",
-    "summary": "..."
-  }
+  "state": { ... },
+  "narrative": "...",
+  "aiChat": "...",
+  "suggestions": [...],
+  "levelUp": null | {"newLevel": 2, "who": "player"},
+  "gameOver": null | {"winner": "player", "reason": "kill", "summary": "..."}
 }
 ```
+
+#### Server Processing
+1. LLM call → get actions, elapsed, etc.
+2. Deep copy state
+3. `applyActions(state, llmResult)` — damage, cooldowns, resources, HP regen, shields
+4. `validateState(state)` — guardrails
+5. Level-up check for both players (CS → level table)
+   - Player: add skillPoints, set phase='skillup'
+   - Enemy: apply `enemySkillUp` from LLM (with fallback auto-skillup)
+6. Game over check — **server determines** (HP 0 or CS 50), ignore LLM
+7. Return updated state + LLM narrative/suggestions
 
 #### Error Responses
 - `400`: Missing gameState or input
@@ -305,7 +287,7 @@ Simple JSON loader with in-memory cache.
 ```json
 {
   "gameState": { ... },
-  "skill": "Q"              // Q, W, E, or R
+  "skill": "Q"
 }
 ```
 
@@ -326,13 +308,20 @@ Simple JSON loader with in-memory cache.
 
 ## 5. Client Architecture
 
-### 5.1 State Management
+### 5.1 Game State Initialization
+Client-side (no server call):
+1. Fetch `data/champions/{id}.json`
+2. Build initial state using champion base stats, selected spells, rune
+3. Set `phase: 'skillup'`
+4. Show skill selection UI
+
+### 5.2 State Management
 - Full game state stored in memory (JS variable)
 - Sent to server on each turn
 - Updated with server response
 - History array maintained locally
 
-### 5.2 Suggestion Filtering Logic
+### 5.3 Suggestion Filtering Logic
 
 ```javascript
 function filterSuggestions(suggestions, player, levelUpSkill = null) {
@@ -340,44 +329,39 @@ function filterSuggestions(suggestions, player, levelUpSkill = null) {
     .filter(s => {
       // Level-up filtering
       if (levelUpSkill) {
-        // Show: ifLevelUp matches chosen skill OR ifLevelUp is null
         if (s.ifLevelUp !== null && s.ifLevelUp !== levelUpSkill) return false;
       } else {
-        // Normal turn: only ifLevelUp null
         if (s.ifLevelUp !== null) return false;
       }
       // Requires filtering
       if (s.requires) {
         const key = s.requires;
-        if (player.skillLevels[key] <= 0) return false;  // not learned
-        if (player.cooldowns[key] > 0) return false;      // on cooldown
+        if (player.skillLevels[key] <= 0) return false;
+        if (player.cooldowns[key] > 0) return false;
       }
       return true;
     })
-    .slice(0, 3);  // max 3
+    .slice(0, 3);
 }
 ```
 
-### 5.3 Initial Suggestions (Game Start)
+### 5.4 Initial Suggestions (Game Start)
 - After first skillup, load from `championData.initialSuggestions[chosenSkill]`
 - No LLM call needed
-- Same tag format as LLM suggestions
+- Same tag format (`requires`/`ifLevelUp`) as LLM suggestions
 
-### 5.4 History Management
+### 5.5 History Management
 ```javascript
 // After each turn response:
 history.push({ role: 'user', content: playerInput });
 history.push({ role: 'assistant', content: JSON.stringify({
-  narrative: response.narrative,
-  aiChat: response.aiChat,
-  actions: response.state._lastActions  // or store separately
+  narrative, aiChat, actions
 }) });
-
 // Client sends full history array to server
 // Server handles compression (last 4 verbatim, older summarized)
 ```
 
-### 5.5 UI State Machine
+### 5.6 UI State Machine
 
 ```
 SETUP → SKILLUP → PLAY ⟷ SKILLUP → GAMEOVER
@@ -401,15 +385,15 @@ SETUP → SKILLUP → PLAY ⟷ SKILLUP → GAMEOVER
 ```jsonc
 {
   "id": "lee-sin",
-  "name": "리신",                    // Korean name
-  "nameEn": "Lee Sin",              // English name
-  "resource": "energy",              // energy | mana | none
+  "name": "리신",
+  "nameEn": "Lee Sin",
+  "resource": "energy",            // energy | mana | none
   "resourceMax": 200,
 
   "baseStats": {
     "hp": 645,
     "hpPerLevel": 108,
-    "hpRegen": 0.7,                  // HP regen per second
+    "hpRegen": 0.7,                // per second
     "hpRegenPerLevel": 0.13,
     "ad": 69,
     "adPerLevel": 3.7,
@@ -430,41 +414,45 @@ SETUP → SKILLUP → PLAY ⟷ SKILLUP → GAMEOVER
 
   "skills": {
     "Q": {
-      "name": ["음파", "공명타"],     // [phase1, phase2] for recast
+      "name": ["음파", "공명타"],
       "recast": true,
-      "range": [1200, 0],             // [phase1, phase2] (0 = dash to target)
-      "baseDamage": [                  // [phase][rank-1]
-        [55, 80, 105, 130, 155],       // Q1
-        [55, 80, 105, 130, 155]        // Q2 (before missing HP bonus)
+      "range": [1200, 0],            // [phase1, phase2]
+      "baseDamage": [
+        [55, 80, 105, 130, 155],     // Q1 per rank
+        [55, 80, 105, 130, 155]      // Q2 per rank
       ],
       "scaling": [
-        {"stat": "bonusAD", "ratio": 1.0},   // Q1
-        {"stat": "bonusAD", "ratio": 1.0}    // Q2
+        {"stat": "bonusAD", "ratio": 1.0},
+        {"stat": "bonusAD", "ratio": 1.0}
       ],
       "damageType": ["physical", "physical"],
-      "cost": [50, 25],               // [Q1, Q2] energy cost
-      "cooldown": [11, 10, 9, 8, 7],  // seconds per rank
+      "cost": [50, 25],              // [phase1, phase2]
+      "cooldown": [11, 10, 9, 8, 7], // seconds per rank
       "description": ["Q1: ...", "Q2: ..."]
     },
     "W": {
       "recast": true,
-      "shield": [55, 110, 165, 220, 275],  // shield amount per rank
-      "shieldDuration": 2,                    // seconds
+      "shield": [55, 110, 165, 220, 275],
+      "shieldDuration": 2,
       // ... similar structure
     }
     // E, R...
   },
 
   "initialSuggestions": {
-    "Q": [ /* suggestions for Q first */ ],
-    "W": [ /* suggestions for W first */ ],
-    "E": [ /* suggestions for E first */ ]
+    "Q": [
+      {"requires": "Q", "ifLevelUp": null, "text": "미니언 사이 빈틈으로 Q1 음파 견제"},
+      {"requires": "Q", "ifLevelUp": null, "text": "상대가 CS 먹으러 올 때 Q1으로 노리기"},
+      {"requires": null, "ifLevelUp": null, "text": "미니언 뒤에서 안전하게 CS 챙기기"}
+    ],
+    "W": [...],
+    "E": [...]
   },
 
   "tips": {
-    "combos": ["..."],
-    "strengths": ["..."],
-    "weaknesses": ["..."]
+    "combos": ["Q1 → AA → AA(패시브) → Q2", ...],
+    "strengths": ["초반 교전 강함", ...],
+    "weaknesses": ["후반 약화", ...]
   }
 }
 ```
@@ -485,8 +473,8 @@ System message:
       - Suggestion generation rules (requires/ifLevelUp tags)
   [2] Dynamic prompt
       - Current game state (HP, resource, CDs, distance, etc.)
+      - Shield status (array summary)
       - Minion counts
-      - Shield status
 
 User messages:
   [older turns summarized]
@@ -494,7 +482,7 @@ User messages:
   [current player input]
 ```
 
-### 7.2 Key Prompt Instructions (to implement)
+### 7.2 Key Prompt Instructions
 - Output must be valid JSON (no markdown wrapping)
 - `elapsed`: choose from instant/short/medium/long/very_long based on action intensity
 - `actions`: include ALL actions by both sides, in chronological order
@@ -503,12 +491,11 @@ User messages:
 - `enemySkillUp`: if enemy has skillPoints, MUST choose a skill key
 - Skill notation: always Q1/Q2, never bare Q
 - Korean output: narrative, aiChat, suggestions text
-- English: JSON keys
 
 ### 7.3 Prompt Language
-- Instructions in English (better LLM comprehension, token efficiency)
-- Output examples in Korean (to set the tone for Korean output)
-- Champion data can stay in Korean (names, descriptions)
+- Instructions: English (better LLM comprehension, token efficiency)
+- Output examples: Korean (to set tone)
+- Champion data: Korean names/descriptions OK
 
 ---
 
@@ -533,38 +520,36 @@ User messages:
 
 ---
 
-## 9. TODO — Implementation Tasks
+## 9. Implementation Checklist
 
-### 9.1 Rewrite Required
-- [ ] **`server/prompt.js`** — Full rewrite for new architecture
-  - English instructions
-  - `elapsed` in output format
-  - `requires`/`ifLevelUp` suggestion tags
-  - Remove `turn`, `buffs`, `debuffs`, `gameOver` references
-  - Shield array display
-  - `minions` in output format
-- [ ] **`server/llm.js`** — Update fallback response format
-  - Add `elapsed`, `minions`
-  - Update suggestion tags
-- [ ] **`api/turn.js`** — Remove old field references
-  - Remove `gameState.turn` logging
-  - Server-only gameOver (ignore LLM's gameOver)
-- [ ] **Frontend** — Full rewrite
-  - `src/js/main.js` — State management, API calls, suggestion filtering
-  - `src/css/style.css` — KakaoTalk chat UI
-  - `src/index.html` — Layout structure
+### 9.1 Server
+- [ ] `server/champions.js` — Champion JSON loader with cache
+- [ ] `server/game.js` — createGameState(), recalcStats(), csToLevel()
+- [ ] `server/damage.js` — Full damage engine (actions → elapsed → recovery → shields)
+- [ ] `server/validate.js` — Guardrail clamping
+- [ ] `server/prompt.js` — Static/dynamic prompt builder (English instructions)
+- [ ] `server/llm.js` — Anthropic API call, JSON extraction, retry, fallback
 
-### 9.2 New Implementation
-- [ ] Client-side game state initialization (from champion JSON)
-- [ ] Initial suggestions loading from champion JSON
-- [ ] Summoner spell effects in damage engine
-- [ ] Rune effects in damage engine (Conqueror stacks, Electrocute proc, Grasp heal)
-- [ ] Passive effects (Lee Sin Flurry energy restore)
+### 9.2 API
+- [ ] `api/turn.js` — LLM → damage engine → level-up → game over → response
+- [ ] `api/skillup.js` — Skill validation + state update
 
-### 9.3 Testing
+### 9.3 Client
+- [ ] `src/js/main.js` — State init, API calls, suggestion filtering, history
+- [ ] `src/css/style.css` — KakaoTalk chat UI
+- [ ] `src/index.html` — Layout (setup, chat, status bar)
+
+### 9.4 Data
+- [ ] `data/champions/lee-sin.json` — Full champion data with initialSuggestions
+
+### 9.5 Effects (can be deferred)
+- [ ] Summoner spell effects (Flash distance, Ignite DoT, Exhaust reduction, Barrier shield, TP)
+- [ ] Rune effects (Conqueror stacks/AD/heal, Electrocute burst, Grasp heal/permanent HP)
+- [ ] Passive effects (Lee Sin Flurry energy restore on AA after skill)
+
+### 9.6 Testing
 - [ ] Damage calculation unit tests
 - [ ] Shield absorption + decay tests
 - [ ] Elapsed time processing tests
 - [ ] Suggestion filtering tests
 - [ ] E2E: full game flow (setup → skillup → turns → game over)
-- [ ] LLM response parsing edge cases
