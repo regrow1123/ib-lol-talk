@@ -185,13 +185,13 @@ html, body {
   display: flex; gap: 6px; width: 100%;
 }
 .skillup-btn {
-  flex: 1; padding: 8px 0; border-radius: 8px; text-align: center;
-  border: 2px solid var(--accent); background: #fff; color: var(--accent);
-  font-size: 14px; font-weight: 600; cursor: pointer;
+  flex: 1; padding: 6px 12px; border-radius: 16px; text-align: center;
+  border: 1px solid #b2bec3; background: #fff; color: #2d3436;
+  font-size: 12px; cursor: pointer;
   -webkit-tap-highlight-color: transparent;
-  transition: all 0.15s;
+  transition: background 0.15s;
 }
-.skillup-btn:active { background: var(--accent); color: #fff; }
+.skillup-btn:active { background: #dfe6e9; }
 
 #input-area {
   display: flex; padding: 6px 8px; gap: 6px;
