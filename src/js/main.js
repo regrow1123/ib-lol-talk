@@ -396,8 +396,8 @@ async function sendInput() {
 
   // Show loading
   const loadingMsg = document.createElement('div');
-  loadingMsg.className = 'msg system';
-  loadingMsg.innerHTML = '<div class="bubble loading-dots">상대가 생각 중</div>';
+  loadingMsg.className = 'msg enemy';
+  loadingMsg.innerHTML = '<div class="typing-bubble"><span></span><span></span><span></span></div>';
   $chatArea.appendChild(loadingMsg);
   $chatArea.scrollTop = $chatArea.scrollHeight;
 
