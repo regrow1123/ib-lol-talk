@@ -1,9 +1,5 @@
 import { loadChampion } from './champions.js';
 
-/**
- * Build prompt parts for LLM call.
- * Returns {staticPrompt, dynamicPrompt}
- */
 export function buildPromptParts(gameState) {
   const champId = gameState.player.champion;
   const champ = loadChampion(champId);
@@ -14,159 +10,155 @@ export function buildPromptParts(gameState) {
 }
 
 function buildStaticPrompt(champ) {
-  return `You are the game master of a 1v1 LoL laning phase text strategy game.
-Both players use ${champ.nameEn} (${champ.name}). Mirror matchup.
+  return `LoL 1v1 라인전 텍스트 전략 게임. 양쪽 ${champ.name}(${champ.nameEn}) 미러매치. 너는 심판 겸 AI 상대.
 
-## YOUR ROLE
-You judge WHAT HAPPENS. The server calculates HOW MUCH DAMAGE.
-- You decide: which skills are used, hit or miss, elapsed time tier, distance changes, CS acquisition, narration
-- You do NOT decide: damage numbers, HP changes, cooldown values, resource amounts
-- Never mention specific damage numbers or HP values in narrative or aiChat
+## 역할 분담
+너: 무슨 일이 일어났는지 판단 (스킬 사용/적중/회피, 경과시간, 거리변화, CS, 나레이션)
+서버: 숫자 계산 (피해량, HP, 쿨다운, 자원 — 너는 계산하지 마)
+→ narrative/aiChat에 절대 구체적 피해량·HP 수치 언급 금지
 
-## CHAMPION: ${champ.nameEn}
-Resource: ${champ.resource} (max ${champ.resourceMax})
-Passive: ${champ.passive.name} - ${champ.passive.description}
-
-### Skills
+## ${champ.name} 스킬
+패시브: ${champ.passive.name} - ${champ.passive.description}
 ${formatSkills(champ)}
 
-### Skill Ranges
+## 스킬 사거리
 ${formatRanges(champ)}
+AA(기본공격): ${champ.baseStats.attackRange}
 
-### Combo Tips
+## recast 규칙
+Q/W/E는 2단계 재사용 스킬. 1단계(Q1/W1/E1) 적중 후 같은 턴에 2단계(Q2/W2/E2) 사용 가능.
+쿨다운은 1단계 사용 시 시작. 항상 Q1/Q2로 표기 (절대 Q만 쓰지 말 것).
+R은 단일 스킬, 그냥 R로 표기.
+
+## 콤보
 ${champ.tips.combos.map(c => '- ' + c).join('\n')}
 
-## RECAST RULES
-- Recast skills have 2 phases: phase 1 (Q1/W1/E1) and phase 2 (Q2/W2/E2)
-- Phase 2 can only be used AFTER phase 1 hits (in the same turn)
-- Cooldown starts on phase 1 cast (not phase 2)
-- Always write Q1/Q2, W1/W2, E1/E2 — never bare Q/W/E
-- R has no recast, just write R
+## 거리 & 장애물
+distance: 두 챔프 간 거리(유닛 숫자). 스킬 사거리와 비교하여 적중 판단.
+blocked: true면 직선 경로에 미니언 → 투사체(Q1) 차단. 범위기(E1)/대상지정(AA,R)은 무관.
 
-## DISTANCE & BLOCKED
-- distance: numeric value (units) between two champions
-- blocked: true = minions on direct line between champions (blocks skillshots like Q1)
-- E1 (AoE around self), R (targeted), AA are NOT blocked by minions
-- Compare distance with skill range to judge hit/miss
+## 경과시간 (elapsed)
+턴마다 행동 강도에 따라 하나 선택:
+- "instant"(1초): 단일 스킬 교환
+- "short"(3초): 짧은 콤보/교전
+- "medium"(6초): CS + 소규모 행동
+- "long"(10초): 파밍 구간
+- "very_long"(15초): 긴 대치
 
-## ELAPSED TIME
-Choose one per turn based on action intensity:
-- "instant" (1s): single quick exchange
-- "short" (3s): short combo/trade
-- "medium" (6s): CS + minor actions
-- "long" (10s): farming phase
-- "very_long" (15s): long standoff
+강도 조절: 양쪽 저강도 → 요약(CS 여러개, long/very_long). 한쪽이라도 고강도 → 세밀(instant/short).
+끼어들기: 플레이어 저강도 + AI 고강도 → "CS 먹으려는 순간 상대가 Q1을 날렸다!" 식으로 처리.
 
-## CS RULES
-- cs values are ADDITIVE (gained THIS turn), not totals
-- Last-hitting required for CS credit
-- Level-up table: CS 4→Lv2, 10→Lv3, 18→Lv4, 27→Lv5, 37→Lv6, 48→Lv7
-- If your CS award causes a level-up, you MUST include ifLevelUp suggestions
+## CS 규칙
+- cs 값은 이번 턴에 추가된 양 (누적 아님)
+- 라스트히트 필요
+- 레벨업 테이블: CS 4→Lv2, 10→Lv3, 18→Lv4, 27→Lv5, 37→Lv6, 48→Lv7
+- CS 부여로 레벨업 발생 시 ifLevelUp suggestions 반드시 포함
 
-## ENEMY BEHAVIOR
-- Equal opponent, actively counter-attacks, no mercy
-- Adapts based on: HP, cooldowns, distance, CS gap, resource
-- Uses varied strategies, no pattern repetition
-- Can initiate fights
-- If enemy has skillPoints > 0, MUST choose enemySkillUp
+## AI(적) 행동 원칙
+- 동등한 상대. 절대 봐주지 않음. 회피/반격/맞교환 적극 응수
+- 플레이어 공격이 항상 성공하는 것 아님. AI 선공 가능. 편파 판정 금지
+- HP/쿨다운/거리/CS차/자원 기반 동적 판단
+- 다양한 스킬 조합·전략 적극 사용. 같은 패턴 반복 금지 → 플레이어가 여러 상황 경험
+- 미습득/쿨다운중/자원부족 스킬 사용 금지
+- 적에게 skillPoints > 0이면 반드시 enemySkillUp 선택
 
-## OUTPUT FORMAT
-Respond with ONLY valid JSON:
+## JSON 응답 (반드시 valid JSON만, 마크다운 감싸기 금지)
 {
-  "narrative": "Korean combat narration, 1-2 sentences max",
-  "aiChat": "OPPONENT's trash talk/comment in Korean casual style (see AI CHAT rules below)",
+  "narrative": "한국어 전투 나레이션 1~2문장. 스킬 효과를 교육적으로 자연스럽게 설명",
+  "aiChat": "적 챔피언이 올챗으로 하는 말 (아래 규칙 참고)",
   "actions": [{"who":"player"|"enemy","skill":"Q1"|"Q2"|"W1"|"W2"|"E1"|"E2"|"R"|"AA","target":"player"|"enemy","hit":true|false}],
   "elapsed": "instant"|"short"|"medium"|"long"|"very_long",
-  "distance": <number>,
+  "distance": 숫자,
   "blocked": true|false,
-  "cs": {"player": <added>, "enemy": <added>},
-  "minions": {"player":{"melee":<n>,"ranged":<n>},"enemy":{"melee":<n>,"ranged":<n>}},
+  "cs": {"player": 추가량, "enemy": 추가량},
+  "minions": {"player":{"melee":숫자,"ranged":숫자},"enemy":{"melee":숫자,"ranged":숫자}},
   "enemySkillUp": null|"Q"|"W"|"E",
-  "suggestions": [{"requires":"Q"|"W"|"E"|"R"|null,"ifLevelUp":"Q"|"W"|"E"|null,"text":"Korean with reasoning"}]
+  "suggestions": [{"requires":"Q"|"W"|"E"|"R"|null,"ifLevelUp":"Q"|"W"|"E"|null,"text":"한국어 행동+근거"}]
 }
 
-## SUGGESTION RULES
-- Generate 5-7 suggestions per turn, priority order (best first)
-- Text MUST include reasoning: "상대 Q 쿨타임이니까 Q1으로 견제" (not just "Q1으로 견제")
-- No emoji in suggestion text
-- "requires": skill key needed to execute (null if no skill needed, e.g. CS or positioning)
-- "ifLevelUp": null for general suggestions (shown on normal turns)
+## aiChat 규칙
+적 챔피언이 올챗으로 플레이어에게 직접 말하는 것. 심판/해설 시점 절대 금지.
+- 말투: ~했음/~됐음/~인듯/~ㅋㅋ (반말, 경쟁적이되 비독성)
+- 상황별 반응:
+  - 잘 때렸을 때: 도발 ("ㅋㅋ 그거 아팠을걸?", "너무 쉬운데?")
+  - 맞았을 때: 인정 + 반격 예고 ("아 그건 좀 아팠음 ㅋ", "다음엔 안 맞음")
+  - 회피했을 때: 놀림 ("Q 어디 쏘는거야 ㅋㅋ")
+  - 아웃플레이: 카운터 설명 ("쉴드 먼저 걸었어야지", "거기서 들어오면 안 됐는데")
+- 대응 이유·팁을 자연스럽게 포함 ("Q2는 잃은 체력 비례라 지금 들어오면 더 아팠을듯")
+- 1~2문장
 
-### LEVEL-UP SUGGESTIONS (CRITICAL)
-When THIS TURN causes a player level-up (player gains enough CS to level up):
-- You MUST generate ifLevelUp suggestions for EACH learnable skill (Q, W, E)
-- For each skill X the player could learn: generate 1-2 suggestions with "ifLevelUp": "X"
-  - These suggestions should assume the player WILL learn X and use it immediately
-  - Example: {"requires":"W","ifLevelUp":"W","text":"새로 배운 W1 쉴드 걸고 안전하게 교전 시도"}
-  - The "requires" should match the ifLevelUp skill (since player will just learn it)
-- Also include 1-2 general suggestions with "ifLevelUp": null
-- Total: ~2 per learnable skill + 1-2 general = 7-8 suggestions
-- The client filters: after player picks skill X, only ifLevelUp=X and ifLevelUp=null are shown
+## suggestions 규칙
+- 5~7개, 우선순위순 (최선 먼저)
+- 텍스트에 반드시 근거 포함: "상대 Q 쿨타임이니까 Q1으로 견제" (O) / "Q1으로 견제" (X)
+- 읽기/심리전 느낌 + 교육적 근거
+- 이모지 금지
+- requires: 실행에 필요한 스킬 키 (없으면 null)
+- ifLevelUp: 일반 제안은 null
 
-## aiChat RULES (CRITICAL)
-aiChat is the OPPONENT speaking directly to the player — like in-game all-chat.
-- The opponent is the ENEMY champion. They speak as a rival/competitor.
-- They react to what just happened FROM THEIR PERSPECTIVE:
-  - If they landed a good hit: 도발/자신감 ("ㅋㅋ 그거 아팠을걸?", "너무 쉬운데?")
-  - If they got hit: 인정하되 반격 예고 ("아 그건 좀 아팠음", "운 좋았다 다음엔 안 맞음")
-  - If they dodged: 놀림 ("Q 어디 쏘는거야 ㅋㅋ", "느려~")
-  - If they outplayed: 설명 ("쉴드 먼저 걸어야지", "거기서 들어오면 안 됐는데")
-- Tone: casual Korean (~했음/~됐음/~인듯/~ㅋㅋ), competitive but not toxic
-- Include counter-play reasoning or tips naturally ("Q2는 잃은 체력 비례라 지금 들어오면 더 아팠을듯")
-- NEVER speak as a narrator or game master. ALWAYS speak as the enemy player.
-- 1-2 sentences max`;
+### 레벨업 suggestions
+이번 턴 CS로 레벨업 발생 시:
+- 배울 수 있는 각 스킬(Q/W/E)별로 1~2개씩 ifLevelUp 제안 생성
+  예: {"requires":"W","ifLevelUp":"W","text":"새로 배운 W1 쉴드 걸고 안전하게 교전"}
+- 일반 제안(ifLevelUp:null)도 1~2개 포함
+- 클라이언트가 선택된 스킬에 맞춰 필터링함`;
 }
 
 function buildDynamicPrompt(state, champ) {
   const p = state.player, e = state.enemy;
 
-  return `## CURRENT STATE
-Distance: ${state.distance} | Blocked: ${state.blocked}
+  const pSkills = fmtSkillsFull(p, champ);
+  const eSkills = fmtSkillsFull(e, champ);
 
-### Player
-HP: ${p.hp}/${p.maxHp} | ${champ.resource}: ${p.resource}/${p.maxResource}
-Lv${p.level} | CS: ${p.cs} | AD: ${p.ad} | Armor: ${p.armor} | MR: ${p.mr}
-Skills: ${fmtSkills(p)} | Shields: ${fmtShields(p)}
-Spells: ${fmtSpells(p)} | Rune: ${p.rune}
-
-### Enemy
-HP: ${e.hp}/${e.maxHp} | ${champ.resource}: ${e.resource}/${e.maxResource}
-Lv${e.level} | CS: ${e.cs} | AD: ${e.ad} | Armor: ${e.armor} | MR: ${e.mr}
-Skills: ${fmtSkills(e)} | Shields: ${fmtShields(e)}
-Spells: ${fmtSpells(e)} | Rune: ${e.rune}
-${e.skillPoints > 0 ? 'SkillPoints: ' + e.skillPoints + ' (MUST choose enemySkillUp)' : ''}
-
-### Minions
-Player: ${state.minions.player.melee}M ${state.minions.player.ranged}R | Enemy: ${state.minions.enemy.melee}M ${state.minions.enemy.ranged}R`;
+  return `## 현재 상태 | 거리:${state.distance} | 장애물:${state.blocked ? '있음' : '없음'}
+P: HP${p.hp}/${p.maxHp} ${champ.resource}${p.resource}/${p.maxResource} Lv${p.level} CS${p.cs} AD${p.ad} 방${p.armor} 마저${p.mr} | ${pSkills} | ${fmtSpells(p)} | ${runeName(p.rune)} | 쉴드:${fmtShields(p)}
+E: HP${e.hp}/${e.maxHp} ${champ.resource}${e.resource}/${e.maxResource} Lv${e.level} CS${e.cs} AD${e.ad} 방${e.armor} 마저${e.mr} | ${eSkills} | ${fmtSpells(e)} | ${runeName(e.rune)} | 쉴드:${fmtShields(e)}${e.skillPoints > 0 ? ' | 스킬포인트:' + e.skillPoints : ''}
+미니언: 아군(근${state.minions.player.melee}/원${state.minions.player.ranged}) 적(근${state.minions.enemy.melee}/원${state.minions.enemy.ranged})`;
 }
 
 function formatSkills(champ) {
-  return Object.values(champ.skills).flatMap(s => s.description.map(d => '- ' + d)).join('\n');
+  return Object.entries(champ.skills).map(([key, skill]) =>
+    skill.description.map(d => '- ' + d).join('\n')
+  ).join('\n');
 }
 
 function formatRanges(champ) {
   const lines = [];
   for (const [k, s] of Object.entries(champ.skills)) {
-    if (s.recast) lines.push(`- ${k}1: ${s.range[0]} | ${k}2: ${s.range[1] === 0 ? 'dash' : s.range[1]}`);
-    else lines.push(`- ${k}: ${s.range[0]}`);
+    if (s.recast) lines.push(`${k}1: ${s.range[0]} | ${k}2: ${s.range[1] === 0 ? '대상돌진' : s.range[1]}`);
+    else lines.push(`${k}: ${s.range[0]}`);
   }
-  lines.push('- AA: ' + champ.baseStats.attackRange);
   return lines.join('\n');
 }
 
-function fmtSkills(f) {
-  return ['Q','W','E','R'].map(k => {
-    const lv = f.skillLevels[k], cd = f.cooldowns[k];
-    if (!lv) return k + ':—';
-    return cd > 0 ? `${k}:Lv${lv}(${Math.round(cd)}s)` : `${k}:Lv${lv}✓`;
+function fmtSkillsFull(fighter, champ) {
+  return ['Q', 'W', 'E', 'R'].map(k => {
+    const lv = fighter.skillLevels[k];
+    const cd = fighter.cooldowns[k];
+    const skill = champ.skills[k];
+    const cost = skill?.cost?.[0] || 0;
+    if (!lv) return `${k}✗`;
+    if (cd > 0) return `${k}Lv${lv}[쿨${Math.round(cd)}]`;
+    if (cost > fighter.resource) return `${k}Lv${lv}[자원부족]`;
+    return `${k}Lv${lv}✓`;
   }).join(' ');
 }
 
 function fmtShields(f) {
-  if (!f.shields?.length) return 'none';
+  if (!f.shields?.length) return '없음';
   return f.shields.map(s => `${s.source}:${Math.round(s.amount)}`).join(',');
 }
 
 function fmtSpells(f) {
-  return f.spells.map((s, i) => f.spellCooldowns[i] > 0 ? `${s}(${Math.round(f.spellCooldowns[i])}s)` : s).join(' ');
+  return f.spells.map((s, i) => {
+    const name = spellName(s);
+    return f.spellCooldowns[i] > 0 ? `${name}(쿨${Math.round(f.spellCooldowns[i])})` : `${name}✓`;
+  }).join(' ');
+}
+
+function spellName(s) {
+  return { flash: '점멸', ignite: '점화', exhaust: '탈진', barrier: '방벽', teleport: '텔포' }[s] || s;
+}
+
+function runeName(r) {
+  return { conqueror: '정복자', electrocute: '감전', grasp: '착취' }[r] || r;
 }
