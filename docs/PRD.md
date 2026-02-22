@@ -210,24 +210,38 @@ LoL 1v1 라인전을 시뮬레이션하는 **LLM 기반 텍스트 전략 게임*
 
 ## 6. Suggestions
 
-### 6.1 LLM 생성
-- 턴 응답에 **5~7개** suggestions 포함
-- **스킬 태그**: `[{skill: "Q", text: "..."}, {skill: null, text: "..."}]`
-- 미습득 스킬 포함 OK (클라이언트가 필터)
+### 6.1 설계 원칙
+- 선택지는 **행동의 이유/근거/의도가 드러나야** 한다
+- 플레이어가 선택지를 읽는 것만으로도 라인전 판단력을 학습
+- ❌ "Q1으로 견제" → ✅ "상대 Q 쿨타임이니까 Q1으로 견제"
 - 이모지 사용 금지
 
-### 6.2 클라이언트 필터링
-- 습득 여부 + 쿨다운(>0이면 비활성) 기준 필터링
-- 필터 후 **최대 3개** 표시
+### 6.2 태그 시스템
+각 suggestion에 두 개의 태그:
 
-### 6.3 스킬업 후 재필터링
-- 레벨업 → 스킬 선택 → 저장된 suggestions 재필터링 → 새 스킬 관련 suggestion 노출
-- 추가 API 호출 없음
+```json
+{"requires": "Q", "ifLevelUp": null, "text": "상대 Q 쿨타임이니까 Q1으로 견제"}
+{"requires": null, "ifLevelUp": "W", "text": "새로 배운 W1 쉴드 걸고 안전하게 진입"}
+{"requires": null, "ifLevelUp": null, "text": "AA로 CS만 먹기"}
+```
 
-### 6.4 게임 시작 시
-- 챔피언 데이터 기반 스킬태그 suggestions
-- 스킬 안 배운 상태 → 일반 suggestions만 표시
-- 스킬업 후 해당 스킬 suggestions 노출
+| 태그 | 의미 | 사용 |
+|------|------|------|
+| `requires` | 이 선택지를 실행하려면 이 스킬이 필요 (습득 + 쿨다운 아님) | 클라이언트가 필터링 |
+| `ifLevelUp` | 레벨업 이벤트에서 이 스킬을 선택했을 때만 노출 | 스킬업 후 필터링 |
+
+### 6.3 LLM 생성 규칙
+- 매 턴 **5-7개** suggestions 생성
+- 각 suggestion에 `requires`와 `ifLevelUp` 태그 포함
+- `requires`: 해당 스킬이 사용 가능해야 선택 가능한 경우 스킬명, 아니면 null
+- `ifLevelUp`: 이번 턴에 레벨업이 포함되어 있으면 배울 수 있는 각 스킬별로 suggestions 생성, 해당 스킬명 태그. 레벨업 무관한 일반 선택지는 null
+- **선택지 text에 행동 이유 포함** (쿨타임 이용, 체력 우위, 거리 이점, 미니언 상황, 자원 관리 등)
+- 우선순위 높은 순서대로 출력
+
+### 6.4 클라이언트 필터링
+1. **일반 턴**: `ifLevelUp`이 null인 것만 → `requires` 기준 필터 (습득 + 쿨다운 체크) → 최대 3개
+2. **레벨업 턴**: 사용자가 선택한 스킬과 `ifLevelUp` 일치 + `ifLevelUp: null` → `requires` 필터 → 최대 3개
+- 스킬업 후 저장된 suggestions 재필터링 → **추가 API 호출 없음**
 
 ---
 
@@ -270,8 +284,9 @@ LoL 1v1 라인전을 시뮬레이션하는 **LLM 기반 텍스트 전략 게임*
   "enemyResource": 175,
   "enemySkillUp": null,
   "suggestions": [
-    {"skill": "Q", "text": "Q1으로 견제"},
-    {"skill": null, "text": "안전하게 CS 챙기기"}
+    {"requires": "Q", "ifLevelUp": null, "text": "상대 Q 쿨타임이니까 Q1으로 견제"},
+    {"requires": null, "ifLevelUp": null, "text": "미니언 뒤에서 안전하게 CS 챙기기"},
+    {"requires": null, "ifLevelUp": "W", "text": "새로 배운 W1 쉴드로 안전하게 진입"}
   ],
   "gameOver": null
 }
