@@ -42,7 +42,6 @@ export function createGameState(championId, spells, rune) {
   // Enemy keeps skillPoints=1, LLM chooses skill on first turn via enemySkillUp
 
   return {
-    turn: 1,
     phase: 'skillup',
     distance: 800,
     blocked: true,

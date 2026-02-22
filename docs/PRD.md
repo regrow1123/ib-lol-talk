@@ -287,7 +287,6 @@ LoL 1v1 라인전을 시뮬레이션하는 **LLM 기반 텍스트 전략 게임*
 
 ```json
 {
-  "turn": 1,
   "phase": "play",
   "distance": 800,
   "blocked": true,

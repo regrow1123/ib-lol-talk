@@ -72,9 +72,6 @@ export function applyActions(state, llmResult) {
     state.minions = llmResult.minions;
   }
 
-  // Turn increment
-  state.turn++;
-
   // Shield decay (simplified: shield lasts 1 turn)
   state.player.shield = 0;
   state.enemy.shield = 0;
