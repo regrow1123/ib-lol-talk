@@ -166,7 +166,7 @@ html, body {
 #suggestions {
   display: flex; flex-direction: column; gap: 6px; padding: 6px 8px;
   overflow-y: auto; -webkit-overflow-scrolling: touch;
-  align-items: stretch;
+  align-items: flex-start;
   scrollbar-width: none;
 }
 #suggestions::-webkit-scrollbar { display: none; }
