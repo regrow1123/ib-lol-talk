@@ -4,12 +4,12 @@ import { loadChampion } from './champions.js';
  * Build prompt parts for LLM call.
  * Returns {staticPrompt, dynamicPrompt}
  */
-export function buildPromptParts(gameState, { levelUpHint = false } = {}) {
+export function buildPromptParts(gameState) {
   const champId = gameState.player.champion;
   const champ = loadChampion(champId);
   return {
     staticPrompt: buildStaticPrompt(champ),
-    dynamicPrompt: buildDynamicPrompt(gameState, champ, levelUpHint),
+    dynamicPrompt: buildDynamicPrompt(gameState, champ),
   };
 }
 
@@ -60,6 +60,8 @@ Choose one per turn based on action intensity:
 ## CS RULES
 - cs values are ADDITIVE (gained THIS turn), not totals
 - Last-hitting required for CS credit
+- Level-up table: CS 4→Lv2, 10→Lv3, 18→Lv4, 27→Lv5, 37→Lv6, 48→Lv7
+- If your CS award causes a level-up, you MUST include ifLevelUp suggestions
 
 ## ENEMY BEHAVIOR
 - Equal opponent, actively counter-attacks, no mercy
@@ -102,28 +104,8 @@ When THIS TURN causes a player level-up (player gains enough CS to level up):
 - The client filters: after player picks skill X, only ifLevelUp=X and ifLevelUp=null are shown`;
 }
 
-function buildDynamicPrompt(state, champ, levelUpHint) {
+function buildDynamicPrompt(state, champ) {
   const p = state.player, e = state.enemy;
-
-  // Figure out which skills the player could learn
-  let levelUpNote = '';
-  if (levelUpHint) {
-    const learnable = [];
-    for (const key of ['Q', 'W', 'E']) {
-      const skill = champ.skills[key];
-      const maxRank = skill.maxRank || 5;
-      if (p.skillLevels[key] < maxRank) learnable.push(key);
-    }
-    if (champ.skills.R?.unlockLevel) {
-      // Check if new level qualifies for R
-      // We don't know exact new level here, but include if R not maxed
-      const rLv = p.skillLevels.R;
-      if (rLv < (champ.skills.R.maxRank || 3)) learnable.push('R');
-    }
-    levelUpNote = `\n\n⚠️ LEVEL-UP EXPECTED THIS TURN. Player will gain a skill point.
-Learnable skills: ${learnable.join(', ')}
-YOU MUST generate ifLevelUp suggestions for each: ${learnable.filter(k => k !== 'R').join(', ')}`;
-  }
 
   return `## CURRENT STATE
 Distance: ${state.distance} | Blocked: ${state.blocked}
@@ -142,7 +124,7 @@ Spells: ${fmtSpells(e)} | Rune: ${e.rune}
 ${e.skillPoints > 0 ? 'SkillPoints: ' + e.skillPoints + ' (MUST choose enemySkillUp)' : ''}
 
 ### Minions
-Player: ${state.minions.player.melee}M ${state.minions.player.ranged}R | Enemy: ${state.minions.enemy.melee}M ${state.minions.enemy.ranged}R${levelUpNote}`;
+Player: ${state.minions.player.melee}M ${state.minions.player.ranged}R | Enemy: ${state.minions.enemy.melee}M ${state.minions.enemy.ranged}R`;
 }
 
 function formatSkills(champ) {
