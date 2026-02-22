@@ -224,10 +224,11 @@ html, body {
 
 /* ===== TYPING INDICATOR ===== */
 .typing-indicator {
-  display: flex; align-items: center; gap: 4px;
+  display: flex; align-items: center; gap: 5px;
+  height: 19.5px;
 }
 .typing-indicator span {
-  width: 6px; height: 6px;
+  width: 8px; height: 8px;
   background: #aaa;
   border-radius: 50%;
   animation: typingBounce 1.2s infinite;
