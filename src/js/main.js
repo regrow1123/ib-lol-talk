@@ -1,4 +1,4 @@
-const DDRAGON = 'https://ddragon.leagueoflegends.com/cdn/14.20.1';
+const IMG = '/src/img';
 const CHAMPION_ID = 'lee-sin';
 
 // ===== STATE =====
@@ -20,9 +20,9 @@ const SPELLS = [
 ];
 
 const RUNES = [
-  { id: 'conqueror', name: '정복자', icon: 'Precision/Conqueror/Conqueror' },
-  { id: 'electrocute', name: '감전', icon: 'Domination/Electrocute/Electrocute' },
-  { id: 'grasp', name: '착취', icon: 'Resolve/GraspOfTheUndying/GraspOfTheUndying' },
+  { id: 'conqueror', name: '정복자', icon: 'conqueror' },
+  { id: 'electrocute', name: '감전', icon: 'electrocute' },
+  { id: 'grasp', name: '착취', icon: 'grasp' },
 ];
 
 const SKILL_ICONS = {
@@ -72,7 +72,7 @@ function renderSetup() {
   // Spells
   $spellSelect.innerHTML = SPELLS.map(s =>
     `<button class="icon-btn" data-spell="${s.id}" title="${s.name}">
-      <img src="${DDRAGON}/img/spell/${s.icon}.png" alt="${s.name}">
+      <img src="${IMG}/spell/${s.icon}.png" alt="${s.name}">
     </button>`
   ).join('');
 
@@ -93,7 +93,7 @@ function renderSetup() {
   // Runes
   $runeSelect.innerHTML = RUNES.map(r =>
     `<button class="icon-btn" data-rune="${r.id}" title="${r.name}">
-      <img src="https://ddragon.leagueoflegends.com/cdn/img/perk-images/Styles/${r.icon}.png" alt="${r.name}">
+      <img src="${IMG}/rune/${r.icon}.png" alt="${r.name}">
     </button>`
   ).join('');
 
@@ -171,7 +171,7 @@ function renderStatus() {
 function renderFighterStatus(el, fighter, label) {
   const hpPct = Math.max(0, (fighter.hp / fighter.maxHp) * 100);
   const hpColor = hpPct > 50 ? 'var(--hp-green)' : 'var(--hp-red)';
-  const portrait = `${DDRAGON}/img/champion/LeeSin.png`;
+  const portrait = `${IMG}/champion/LeeSin.png`;
 
   let cdHtml = '';
   for (const key of ['Q', 'W', 'E', 'R']) {
@@ -181,7 +181,7 @@ function renderFighterStatus(el, fighter, label) {
     const iconName = SKILL_ICONS[key];
     if (lv > 0) {
       cdHtml += `<div class="cd-icon ${onCd ? 'on-cd' : ''}">
-        <img src="${DDRAGON}/img/spell/${iconName}.png" alt="${key}">
+        <img src="${IMG}/spell/${iconName}.png" alt="${key}">
         ${onCd ? `<div class="cd-text">${Math.ceil(cd)}</div>` : ''}
       </div>`;
     }
@@ -194,7 +194,7 @@ function renderFighterStatus(el, fighter, label) {
     const cd = fighter.spellCooldowns[i];
     if (spell) {
       spellCdHtml += `<div class="cd-icon ${cd > 0 ? 'on-cd' : ''}">
-        <img src="${DDRAGON}/img/spell/${spell.icon}.png" alt="${spell.name}">
+        <img src="${IMG}/spell/${spell.icon}.png" alt="${spell.name}">
         ${cd > 0 ? `<div class="cd-text">${Math.ceil(cd)}</div>` : ''}
       </div>`;
     }
