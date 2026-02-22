@@ -20,9 +20,7 @@ export function applyActions(state, llmResult) {
     if (!validateAction(action, attacker, champ)) continue;
 
     if (!action.hit) {
-      // Miss — still consume resource; recast skills start cooldown on miss
-      consumeResource(action, attacker, champ);
-      applyCooldownForced(action, attacker, champ); // miss = cooldown starts immediately
+      // Miss — no damage. Resource/cooldown managed by LLM.
       continue;
     }
 
@@ -39,20 +37,22 @@ export function applyActions(state, llmResult) {
       attacker.shield += result.shield;
     }
 
-    // Apply resource cost
-    consumeResource(action, attacker, champ);
-
-    // Apply cooldown
-    applyCooldown(action, attacker, champ);
+    // Resource and cooldown managed by LLM (non-fixed time intervals)
   }
 
-  // Decrement cooldowns by 1 turn for both
-  decrementCooldowns(state.player);
-  decrementCooldowns(state.enemy);
-
-  // Apply passive energy recovery (simplified: +30 per turn base)
-  recoverResource(state.player, champ);
-  recoverResource(state.enemy, champ);
+  // Apply LLM-determined cooldowns and resource (non-fixed time intervals)
+  if (llmResult.playerCooldowns) {
+    Object.assign(state.player.cooldowns, llmResult.playerCooldowns);
+  }
+  if (llmResult.enemyCooldowns) {
+    Object.assign(state.enemy.cooldowns, llmResult.enemyCooldowns);
+  }
+  if (llmResult.playerResource != null) {
+    state.player.resource = llmResult.playerResource;
+  }
+  if (llmResult.enemyResource != null) {
+    state.enemy.resource = llmResult.enemyResource;
+  }
 
   // Update distance and blocked
   if (llmResult.distance != null) state.distance = Math.max(0, llmResult.distance);
@@ -187,63 +187,5 @@ function applyDamage(defender, damage) {
   defender.hp = Math.max(0, Math.round(defender.hp - damage));
 }
 
-function consumeResource(action, attacker, champ) {
-  const skill = action.skill;
-  if (skill === 'AA') return;
-
-  const key = skill.replace(/[12]/, '');
-  const phase = skill.endsWith('2') ? 1 : 0;
-  const skillData = champ.skills[key];
-  if (!skillData) return;
-
-  const cost = skillData.cost?.[phase] || 0;
-  attacker.resource = Math.max(0, attacker.resource - cost);
-}
-
-function applyCooldown(action, attacker, champ) {
-  const skill = action.skill;
-  if (skill === 'AA') return;
-
-  const key = skill.replace(/[12]/, '');
-  const skillData = champ.skills[key];
-  if (!skillData) return;
-
-  // Only set cooldown on final cast (recast phase 2, or non-recast)
-  const isRecast = skillData.recast;
-  const isFinalCast = !isRecast || skill.endsWith('2');
-
-  if (isFinalCast) {
-    const rank = attacker.skillLevels[key];
-    const cd = skillData.cooldown?.[rank - 1] || 0;
-    // Convert seconds to turns (rough: 1 turn ≈ 3 seconds)
-    attacker.cooldowns[key] = Math.ceil(cd / 3);
-  }
-}
-
-// Forced cooldown (used on miss — recast doesn't matter)
-function applyCooldownForced(action, attacker, champ) {
-  const skill = action.skill;
-  if (skill === 'AA') return;
-  const key = skill.replace(/[12]/, '');
-  const skillData = champ.skills[key];
-  if (!skillData) return;
-  const rank = attacker.skillLevels[key];
-  const cd = skillData.cooldown?.[rank - 1] || 0;
-  attacker.cooldowns[key] = Math.ceil(cd / 3);
-}
-
-function decrementCooldowns(fighter) {
-  for (const key of Object.keys(fighter.cooldowns)) {
-    fighter.cooldowns[key] = Math.max(0, fighter.cooldowns[key] - 1);
-  }
-  for (let i = 0; i < fighter.spellCooldowns.length; i++) {
-    fighter.spellCooldowns[i] = Math.max(0, fighter.spellCooldowns[i] - 1);
-  }
-}
-
-function recoverResource(fighter, champ) {
-  if (champ.resource === 'energy') {
-    // Energy recovers 50/sec, ~150 per turn (3 sec)
-    fighter.resource = Math.min(fighter.maxResource, fighter.resource + 50);
-  }
-}
+// Resource, cooldown, and time-based recovery are managed by LLM
+// (non-fixed time intervals between turns)
