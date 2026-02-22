@@ -7,8 +7,25 @@ const cache = {};
 
 export function loadChampion(id) {
   if (cache[id]) return cache[id];
-  const filePath = join(__dirname, '..', 'data', 'champions', `${id}.json`);
-  const data = JSON.parse(readFileSync(filePath, 'utf-8'));
+
+  // Try multiple paths for Vercel compatibility
+  const paths = [
+    join(__dirname, '..', 'data', 'champions', `${id}.json`),
+    join(process.cwd(), 'data', 'champions', `${id}.json`),
+  ];
+
+  let data = null;
+  for (const p of paths) {
+    try {
+      data = JSON.parse(readFileSync(p, 'utf-8'));
+      break;
+    } catch {}
+  }
+
+  if (!data) {
+    throw new Error(`Champion data not found: ${id}`);
+  }
+
   cache[id] = data;
   return data;
 }
