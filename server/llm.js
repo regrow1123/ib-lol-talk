@@ -14,8 +14,8 @@ function getClient() {
  * Call LLM with game state, player input, and history.
  * Returns parsed JSON response.
  */
-export async function callLLM(gameState, input, history = []) {
-  const { staticPrompt, dynamicPrompt } = buildPromptParts(gameState);
+export async function callLLM(gameState, input, history = [], { levelUpHint = false } = {}) {
+  const { staticPrompt, dynamicPrompt } = buildPromptParts(gameState, { levelUpHint });
 
   const systemMessages = [
     {

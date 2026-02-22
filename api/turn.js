@@ -15,8 +15,11 @@ export default async function handler(req, res) {
   }
 
   try {
+    // Check if level-up is likely (within 3 CS of next level)
+    const levelUpHint = isLevelUpClose(gameState.player.cs, gameState.player.level);
+
     // 1. Call LLM
-    const llmResult = await callLLM(gameState, input, history || []);
+    const llmResult = await callLLM(gameState, input, history || [], { levelUpHint });
 
     // 2. Deep copy state
     const state = JSON.parse(JSON.stringify(gameState));
@@ -87,6 +90,16 @@ export default async function handler(req, res) {
     console.error('[turn]', err);
     return res.status(500).json({ error: 'Internal server error' });
   }
+}
+
+const CS_THRESHOLDS = [4, 10, 18, 27, 37, 48];
+
+function isLevelUpClose(currentCs, currentLevel) {
+  // Find next level threshold
+  const nextThreshold = CS_THRESHOLDS.find(t => t > currentCs);
+  if (!nextThreshold) return false;
+  // If within 3 CS of next level, hint to LLM
+  return (nextThreshold - currentCs) <= 3;
 }
 
 function applyEnemySkillUp(enemy, skillKey, champId) {

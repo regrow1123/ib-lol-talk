@@ -4,12 +4,12 @@ import { loadChampion } from './champions.js';
  * Build prompt parts for LLM call.
  * Returns {staticPrompt, dynamicPrompt}
  */
-export function buildPromptParts(gameState) {
+export function buildPromptParts(gameState, { levelUpHint = false } = {}) {
   const champId = gameState.player.champion;
   const champ = loadChampion(champId);
   return {
     staticPrompt: buildStaticPrompt(champ),
-    dynamicPrompt: buildDynamicPrompt(gameState, champ),
+    dynamicPrompt: buildDynamicPrompt(gameState, champ, levelUpHint),
   };
 }
 
@@ -84,14 +84,47 @@ Respond with ONLY valid JSON:
 }
 
 ## SUGGESTION RULES
-- 5-7 per turn, priority order
-- Text MUST include reasoning
-- No emoji
-- If level-up: include ifLevelUp suggestions for each learnable skill`;
+- Generate 5-7 suggestions per turn, priority order (best first)
+- Text MUST include reasoning: "상대 Q 쿨타임이니까 Q1으로 견제" (not just "Q1으로 견제")
+- No emoji in suggestion text
+- "requires": skill key needed to execute (null if no skill needed, e.g. CS or positioning)
+- "ifLevelUp": null for general suggestions (shown on normal turns)
+
+### LEVEL-UP SUGGESTIONS (CRITICAL)
+When THIS TURN causes a player level-up (player gains enough CS to level up):
+- You MUST generate ifLevelUp suggestions for EACH learnable skill (Q, W, E)
+- For each skill X the player could learn: generate 1-2 suggestions with "ifLevelUp": "X"
+  - These suggestions should assume the player WILL learn X and use it immediately
+  - Example: {"requires":"W","ifLevelUp":"W","text":"새로 배운 W1 쉴드 걸고 안전하게 교전 시도"}
+  - The "requires" should match the ifLevelUp skill (since player will just learn it)
+- Also include 1-2 general suggestions with "ifLevelUp": null
+- Total: ~2 per learnable skill + 1-2 general = 7-8 suggestions
+- The client filters: after player picks skill X, only ifLevelUp=X and ifLevelUp=null are shown`;
 }
 
-function buildDynamicPrompt(state, champ) {
+function buildDynamicPrompt(state, champ, levelUpHint) {
   const p = state.player, e = state.enemy;
+
+  // Figure out which skills the player could learn
+  let levelUpNote = '';
+  if (levelUpHint) {
+    const learnable = [];
+    for (const key of ['Q', 'W', 'E']) {
+      const skill = champ.skills[key];
+      const maxRank = skill.maxRank || 5;
+      if (p.skillLevels[key] < maxRank) learnable.push(key);
+    }
+    if (champ.skills.R?.unlockLevel) {
+      // Check if new level qualifies for R
+      // We don't know exact new level here, but include if R not maxed
+      const rLv = p.skillLevels.R;
+      if (rLv < (champ.skills.R.maxRank || 3)) learnable.push('R');
+    }
+    levelUpNote = `\n\n⚠️ LEVEL-UP EXPECTED THIS TURN. Player will gain a skill point.
+Learnable skills: ${learnable.join(', ')}
+YOU MUST generate ifLevelUp suggestions for each: ${learnable.filter(k => k !== 'R').join(', ')}`;
+  }
+
   return `## CURRENT STATE
 Distance: ${state.distance} | Blocked: ${state.blocked}
 
@@ -109,7 +142,7 @@ Spells: ${fmtSpells(e)} | Rune: ${e.rune}
 ${e.skillPoints > 0 ? 'SkillPoints: ' + e.skillPoints + ' (MUST choose enemySkillUp)' : ''}
 
 ### Minions
-Player: ${state.minions.player.melee}M ${state.minions.player.ranged}R | Enemy: ${state.minions.enemy.melee}M ${state.minions.enemy.ranged}R`;
+Player: ${state.minions.player.melee}M ${state.minions.player.ranged}R | Enemy: ${state.minions.enemy.melee}M ${state.minions.enemy.ranged}R${levelUpNote}`;
 }
 
 function formatSkills(champ) {
