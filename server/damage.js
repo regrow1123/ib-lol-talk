@@ -20,9 +20,9 @@ export function applyActions(state, llmResult) {
     if (!validateAction(action, attacker, champ)) continue;
 
     if (!action.hit) {
-      // Miss — still consume resource and set cooldown
+      // Miss — still consume resource; recast skills start cooldown on miss
       consumeResource(action, attacker, champ);
-      applyCooldown(action, attacker, champ);
+      applyCooldownForced(action, attacker, champ); // miss = cooldown starts immediately
       continue;
     }
 
@@ -218,6 +218,18 @@ function applyCooldown(action, attacker, champ) {
     // Convert seconds to turns (rough: 1 turn ≈ 3 seconds)
     attacker.cooldowns[key] = Math.ceil(cd / 3);
   }
+}
+
+// Forced cooldown (used on miss — recast doesn't matter)
+function applyCooldownForced(action, attacker, champ) {
+  const skill = action.skill;
+  if (skill === 'AA') return;
+  const key = skill.replace(/[12]/, '');
+  const skillData = champ.skills[key];
+  if (!skillData) return;
+  const rank = attacker.skillLevels[key];
+  const cd = skillData.cooldown?.[rank - 1] || 0;
+  attacker.cooldowns[key] = Math.ceil(cd / 3);
 }
 
 function decrementCooldowns(fighter) {

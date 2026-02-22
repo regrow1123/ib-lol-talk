@@ -108,7 +108,8 @@ export default async function handler(req, res) {
       state.phase = 'play';
     }
 
-    console.log(`Turn ${gameState.turn}: "${input}" → HP ${state.player.hp}/${state.enemy.hp} CS ${state.player.cs}/${state.enemy.cs}`);
+    console.log(`Turn ${gameState.turn}: "${input}" → HP ${state.player.hp}/${state.enemy.hp} Res ${state.player.resource}/${state.enemy.resource} CD ${JSON.stringify(state.player.cooldowns)} Actions: ${JSON.stringify(llmResult.actions?.map(a => `${a.who}:${a.skill}:${a.hit}`))}`);
+
 
     res.json({
       state,
