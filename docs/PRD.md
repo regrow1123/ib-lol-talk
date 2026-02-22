@@ -310,9 +310,7 @@ LoL 1v1 라인전을 시뮬레이션하는 **LLM 기반 텍스트 전략 게임*
     "shield": 0,
     "spells": ["flash", "ignite"],
     "spellCooldowns": [0, 0],
-    "rune": "conqueror",
-    "buffs": [],
-    "debuffs": []
+    "rune": "conqueror"
   },
   "enemy": { "...same structure..." },
   "minions": {

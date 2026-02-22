@@ -26,8 +26,6 @@ export function createGameState(championId, spells, rune) {
     spells,
     spellCooldowns: [0, 0],
     rune,
-    buffs: [],
-    debuffs: [],
   });
 
   // Random enemy rune
