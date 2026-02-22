@@ -21,7 +21,7 @@ export function createGameState(championId, spells, rune) {
     skillLevels: { Q: 0, W: 0, E: 0, R: 0 },
     skillPoints: 1,
     cooldowns: { Q: 0, W: 0, E: 0, R: 0 },
-    shield: 0,
+    shields: [],
     spells,
     spellCooldowns: [0, 0],
     rune,

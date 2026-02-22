@@ -36,7 +36,11 @@ export function applyActions(state, llmResult) {
 
     // Apply shield
     if (result.shield > 0) {
-      attacker.shield += result.shield;
+      attacker.shields.push({
+        amount: result.shield,
+        remaining: result.shieldDuration || 2,
+        source: action.skill,
+      });
     }
 
     // Consume resource for skill usage
@@ -74,9 +78,9 @@ export function applyActions(state, llmResult) {
     state.minions = llmResult.minions;
   }
 
-  // Shield decay (simplified: shield lasts 1 turn)
-  state.player.shield = 0;
-  state.enemy.shield = 0;
+  // Shield decay — reduce remaining time by elapsed, remove expired
+  decayShields(state.player, elapsedSec);
+  decayShields(state.enemy, elapsedSec);
 
   return state;
 }
@@ -149,11 +153,13 @@ function calculateSkillEffect(action, attacker, defender, champ) {
   }
 
   // W1 shield
+  let shieldDuration = 2; // default 2 sec
   if (skill === 'W1' && skillData.shield) {
     shield = skillData.shield[rank - 1] || 0;
+    shieldDuration = skillData.shieldDuration || 2;
   }
 
-  return { damage: Math.round(damage), shield: Math.round(shield) };
+  return { damage: Math.round(damage), shield: Math.round(shield), shieldDuration };
 }
 
 function getStatValue(fighter, stat) {
@@ -174,16 +180,27 @@ function applyMR(damage, mr) {
 }
 
 function applyDamage(defender, damage) {
-  // Shield absorbs first
-  if (defender.shield > 0) {
-    if (defender.shield >= damage) {
-      defender.shield -= damage;
-      return;
+  // Shields absorb first (oldest shield consumed first)
+  while (damage > 0 && defender.shields.length > 0) {
+    const shield = defender.shields[0];
+    if (shield.amount >= damage) {
+      shield.amount -= damage;
+      damage = 0;
+    } else {
+      damage -= shield.amount;
+      defender.shields.shift();
     }
-    damage -= defender.shield;
-    defender.shield = 0;
   }
-  defender.hp = Math.max(0, Math.round(defender.hp - damage));
+  if (damage > 0) {
+    defender.hp = Math.max(0, Math.round(defender.hp - damage));
+  }
+}
+
+function decayShields(fighter, elapsedSec) {
+  for (const shield of fighter.shields) {
+    shield.remaining -= elapsedSec;
+  }
+  fighter.shields = fighter.shields.filter(s => s.remaining > 0 && s.amount > 0);
 }
 
 // Elapsed time mapping

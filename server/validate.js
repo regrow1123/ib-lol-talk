@@ -14,7 +14,6 @@ export function validateState(state) {
 function clampFighter(f) {
   f.hp = Math.max(0, Math.min(f.maxHp, Math.round(f.hp)));
   f.resource = Math.max(0, Math.min(f.maxResource, Math.round(f.resource)));
-  f.shield = Math.max(0, Math.round(f.shield));
 
   for (const key of Object.keys(f.cooldowns)) {
     f.cooldowns[key] = Math.max(0, f.cooldowns[key]);
