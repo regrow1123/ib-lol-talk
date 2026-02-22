@@ -279,6 +279,8 @@ LoL 1v1 라인전을 시뮬레이션하는 **LLM 기반 텍스트 전략 게임*
   "enemyCooldowns": {"Q": 8, "W": 0, "E": 0, "R": 0},
   "playerResource": 125,
   "enemyResource": 175,
+  "playerSpellCooldowns": [0, 210],
+  "enemySpellCooldowns": [300, 0],
   "enemySkillUp": null,
   "suggestions": [
     {"requires": "Q", "ifLevelUp": null, "text": "상대 Q 쿨타임이니까 Q1으로 견제"},
