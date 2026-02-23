@@ -333,12 +333,14 @@ async function doSkillUp(skill) {
       // More skill points available
       showSkillUpUI();
     } else {
-      // Play phase — filter suggestions with chosen skill
-      if (isFirstSkillUp()) {
+      // Play phase — use suggestions from skillup API response
+      if (data.suggestions && data.suggestions.length > 0) {
+        currentSuggestions = data.suggestions;
+        renderSuggestions(filterSuggestions(currentSuggestions));
+      } else if (isFirstSkillUp()) {
         showInitialSuggestions(skill);
       } else {
-        // Mid-game levelup: re-filter stored suggestions with ifLevelUp
-        renderSuggestions(filterSuggestions(currentSuggestions, skill));
+        renderSuggestions([]);
       }
       enableInput();
     }
@@ -361,14 +363,9 @@ function showInitialSuggestions(firstSkill) {
 }
 
 // ===== SUGGESTIONS =====
-function filterSuggestions(suggestions, levelUpSkill = null) {
+function filterSuggestions(suggestions) {
   return suggestions
     .filter(s => {
-      if (levelUpSkill) {
-        if (s.ifLevelUp !== null && s.ifLevelUp !== levelUpSkill) return false;
-      } else {
-        if (s.ifLevelUp !== null) return false;
-      }
       if (s.requires) {
         const key = s.requires;
         if (!gameState.player.skillLevels[key] || gameState.player.skillLevels[key] <= 0) return false;

@@ -1,6 +1,11 @@
+import Anthropic from '@anthropic-ai/sdk';
 import { loadChampion } from '../server/champions.js';
+import { buildSuggestionsPrompt } from '../server/prompt.js';
 
-export default function handler(req, res) {
+const MODEL = process.env.LLM_MODEL || 'claude-sonnet-4-6';
+let client = null;
+
+export default async function handler(req, res) {
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
   }
@@ -43,14 +48,36 @@ export default function handler(req, res) {
     player.skillLevels[skill]++;
     player.skillPoints--;
 
-    // If no more skill points, switch to play phase
+    // If no more skill points, switch to play phase + get suggestions
+    let suggestions = [];
     if (player.skillPoints <= 0) {
       state.phase = 'play';
+      suggestions = await generateSuggestions(state);
     }
 
-    return res.status(200).json({ ok: true, state });
+    return res.status(200).json({ ok: true, state, suggestions });
   } catch (err) {
     console.error('[skillup] error:', err);
     return res.status(500).json({ error: err.message });
+  }
+}
+
+async function generateSuggestions(state) {
+  try {
+    if (!client) client = new Anthropic();
+
+    const prompt = buildSuggestionsPrompt(state);
+    const resp = await client.messages.create({
+      model: MODEL,
+      max_tokens: 400,
+      messages: [{ role: 'user', content: prompt }],
+    });
+
+    const text = resp.content[0]?.text || '[]';
+    const match = text.match(/\[[\s\S]*\]/);
+    return match ? JSON.parse(match[0]) : [];
+  } catch (err) {
+    console.error('[skillup suggestions]', err);
+    return [];
   }
 }

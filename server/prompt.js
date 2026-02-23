@@ -72,7 +72,7 @@ blocked: true면 직선 경로에 미니언 → 투사체(Q1) 차단. 범위기(
 - cs 값은 이번 턴에 추가된 양 (누적 아님)
 - 라스트히트 필요
 - 레벨업 테이블: CS 4→Lv2, 10→Lv3, 18→Lv4, 27→Lv5, 37→Lv6, 48→Lv7
-- CS 부여로 레벨업 발생 시 ifLevelUp suggestions 반드시 포함
+- CS 부여로 레벨업 발생 시 suggestions를 빈 배열([])로 반환 (스킬업 후 별도 요청)
 
 ## AI(적) 행동 원칙
 - 동등한 상대. 절대 봐주지 않음. 회피/반격/맞교환 적극 응수
@@ -93,7 +93,7 @@ blocked: true면 직선 경로에 미니언 → 투사체(Q1) 차단. 범위기(
   "cs": {"player": 추가량, "enemy": 추가량},
   "minions": {"player":{"melee":숫자,"ranged":숫자},"enemy":{"melee":숫자,"ranged":숫자}},
   "enemySkillUp": null|"Q"|"W"|"E",
-  "suggestions": [{"requires":"Q"|"W"|"E"|"R"|null,"ifLevelUp":"Q"|"W"|"E"|null,"text":"한국어 행동+근거"}]
+  "suggestions": [{"requires":"Q"|"W"|"E"|"R"|null,"text":"한국어 행동+근거"}]
 }
 
 ## aiChat 규칙
@@ -114,14 +114,7 @@ blocked: true면 직선 경로에 미니언 → 투사체(Q1) 차단. 범위기(
 - 근거를 자연스럽게 포함: "쉴드 없을 때 한 대 때려야지", "미니언 정리하면서 렙업 노려보자"
 - 이모지 금지
 - requires: 실행에 필요한 스킬 키 (없으면 null)
-- ifLevelUp: 일반 제안은 null
-
-### 레벨업 suggestions
-이번 턴 CS로 레벨업 발생 시:
-- 배울 수 있는 각 스킬(Q/W/E)별로 1~2개씩 ifLevelUp 제안 생성
-  예: {"requires":"W","ifLevelUp":"W","text":"W 배워서 쉴드 깔고 들어가보자"}
-- 일반 제안(ifLevelUp:null)도 1~2개 포함
-- 클라이언트가 선택된 스킬에 맞춰 필터링함`;
+- 레벨업 발생 턴에는 suggestions를 빈 배열로 (스킬업 후 별도 요청됨)`;
 }
 
 function buildDynamicPrompt(state, champ) {
@@ -182,4 +175,29 @@ function spellName(s) {
 
 function runeName(r) {
   return { conqueror: '정복자', electrocute: '감전', grasp: '착취' }[r] || r;
+}
+
+export function buildSuggestionsPrompt(gameState) {
+  const champId = gameState.player.champion;
+  const champ = loadChampion(champId);
+  const p = gameState.player, e = gameState.enemy;
+
+  const pSkills = fmtSkillsFull(p, champ);
+  const eSkills = fmtSkillsFull(e, champ);
+
+  return `스킬업 완료 후 상태. 다음 행동 suggestions 5~7개를 JSON 배열로 생성.
+
+상태: 거리${gameState.distance} 장애물:${gameState.blocked ? 'O' : 'X'}
+P: HP${p.hp}/${p.maxHp} ${champ.resource}${p.resource}/${p.maxResource} Lv${p.level} CS${p.cs} | ${pSkills}
+E: HP${e.hp}/${e.maxHp} Lv${e.level} CS${e.cs} | ${eSkills}
+미니언: 아군${gameState.minions?.player?.melee||0}근+${gameState.minions?.player?.ranged||0}원 vs 적${gameState.minions?.enemy?.melee||0}근+${gameState.minions?.enemy?.ranged||0}원
+
+규칙:
+- 1인칭 구어체 ("Q1 꽂아볼까", "CS 먹으면서 기다리자")
+- 근거 포함 ("상대 Q 쿨이니까", "미니언 많을 때")
+- requires: 필요 스킬 키 또는 null
+- 이모지 금지
+- 우선순위순 (최선 먼저)
+
+JSON만 출력: [{"requires":"Q"|null,"text":"..."},...]`;
 }
