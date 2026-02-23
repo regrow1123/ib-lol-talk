@@ -138,6 +138,8 @@ Each skill's range defined in `data/champions/{id}.json`. Dynamically injected i
 - Resource values defined in `data/champions/{id}.json`
 - **Server calculates everything**: consumption from actions + natural recovery from elapsed
 - Energy: 50/sec natural recovery (e.g., elapsed="short" (3s) → +150 recovery)
+- **Turn order**: time passes first (cooldowns, recovery, regen) → actions execute at end of turn
+- This ensures resource consumption is visible (not immediately recovered)
 
 ### 3.5 Level-Up
 - **Server manages 100%** (not LLM)
@@ -193,7 +195,8 @@ Each skill's range defined in `data/champions/{id}.json`. Dynamically injected i
 - Independent JSON files at `data/champions/{id}.json`
 - Includes: skill ranges, damage formulas (baseDamage arrays, scaling ratios), recast flags, special mechanics
 - Dynamically injected into prompts during generation
-- Adding a champion = add JSON file + add to setup screen. No code changes needed.
+- Adding a champion = add JSON file + add to `data/champions/index.json`. No code changes needed.
+- **Scaling note**: Since there's no item system, `bonusAD` scaling is replaced with `totalAD` (bonusAD = 0 without items)
 
 ---
 
@@ -224,6 +227,9 @@ Each skill's range defined in `data/champions/{id}.json`. Dynamically injected i
 - Suggestions must **reveal the reasoning/rationale/intent** behind the action
 - Players learn laning judgment just by reading suggestions
 - ❌ "Poke with Q1" → ✅ "Opponent Q is on cooldown, poke with Q1 now"
+- **Written in player's first-person casual voice** (action declaration, not third-person advice)
+  - ✅ "상대 Q 쿨 돌았으니 Q1 꽂아볼까"
+  - ❌ "Q1으로 견제하세요" / "Q1을 사용하여 견제합니다"
 - No emoji
 
 ### 6.2 Tag System
@@ -392,17 +398,21 @@ Each suggestion has two tags:
 ### Game Over
 ```
 [gameOver received]
-  → Overlay (win/loss + summary)
-  → Review / New Game
+  → LLM generates 3 practical tips based on match history
+  → Overlay (win/loss + summary + tips)
+  → New Game
 ```
+- **Tips**: LLM analyzes recent combat history → 3 situational tips (specific to what happened this game)
+- Tips returned as `tips` array in turn response when `gameOver` is present
 
 ---
 
 ## 11. UI/UX
 
 ### Setup Screen
-- Select 2 summoner spells (DDragon icons)
-- Select 1 rune (DDragon icons)
+- **Champion select** (grid of champion cards with portrait + name, from `data/champions/index.json`)
+- Select 2 summoner spells
+- Select 1 rune
 - Start button
 
 ### Game Screen — KakaoTalk-style Chat
@@ -412,12 +422,16 @@ Each suggestion has two tags:
 - Top: both sides' status (HP real values, resource, CS, level, cooldown icons, rune)
 - Bottom: text input + suggestion chip buttons
 - Skill-up: Q/W/E selection buttons in suggestions area + send disabled
-- Game over: overlay (win/loss + summary + review/restart)
+- Game over: overlay (win/loss + summary + 3 match tips + restart)
+- **Typing indicator**: animated dots bubble (enemy style) while waiting for LLM response
+- **Unlearned skills**: shown as grayscale icons in status bar (opacity 0.3)
+- **Suggestions layout**: vertical stack (one per line), left-aligned, shrink-to-fit text width
+- **Skill-up buttons**: horizontal single row, same style as suggestion chips
 - **No turn counter displayed**
 
 ### Icons
-- DDragon CDN: `https://ddragon.leagueoflegends.com/cdn/14.20.1`
-- Skills/spells/runes/champion portraits all use real game images
+- **All local** (`src/img/champion/`, `src/img/spell/`, `src/img/rune/`)
+- No external CDN dependencies — all images bundled in repo
 
 ---
 
@@ -440,7 +454,11 @@ ib-lol-talk/
 ├── src/
 │   ├── index.html
 │   ├── css/style.css
-│   └── js/main.js
+│   ├── js/main.js
+│   ├── js/champion.js
+│   ├── js/engine.js
+│   ├── js/templates.js
+│   └── js/minions.js
 ├── api/
 │   ├── turn.js           # Turn processing (LLM call + damage engine)
 │   └── skillup.js        # Skill level-up (validation only, no LLM)
@@ -453,6 +471,7 @@ ib-lol-talk/
 │   └── champions.js       # Champion JSON loader
 ├── data/
 │   └── champions/
+│       ├── index.json       # Champion list for select UI
 │       └── lee-sin.json
 ├── docs/
 │   └── PRD.md
@@ -466,7 +485,7 @@ ib-lol-talk/
 
 ### POST /api/turn
 - Input: `{gameState, input, history}`
-- Output: `{state, narrative, aiChat, suggestions, levelUp, gameOver}`
+- Output: `{state, narrative, aiChat, suggestions, levelUp, gameOver, tips}`
 - `history`: array of past turns. Last 2 as full objects `{input, narrative, aiChat, actions}`, older turns as 1-line summary strings. Used for LLM context.
 - Flow: LLM → actions + elapsed → damage engine + time processing → guardrails → response
 
@@ -491,6 +510,6 @@ ib-lol-talk/
 - [ ] UI/UX improvements, mobile optimization
 
 ### Phase 3: Champion Expansion
-- [ ] Champion select UI on setup screen
+- [x] Champion select UI on setup screen
 - [ ] Add 2-3 more champions
 - [ ] Asymmetric matchups
