@@ -215,12 +215,11 @@ function renderFighterStatus(el, fighter, label) {
     const cd = fighter.cooldowns[key];
     const onCd = cd > 0;
     const iconName = SKILL_ICONS[key];
-    if (lv > 0) {
-      cdHtml += `<div class="cd-icon ${onCd ? 'on-cd' : ''}">
-        <img src="${IMG}/spell/${iconName}.png" alt="${key}">
-        ${onCd ? `<div class="cd-text">${Math.ceil(cd)}</div>` : ''}
-      </div>`;
-    }
+    const notLearned = lv === 0;
+    cdHtml += `<div class="cd-icon ${onCd ? 'on-cd' : ''} ${notLearned ? 'not-learned' : ''}">
+      <img src="${IMG}/spell/${iconName}.png" alt="${key}">
+      ${onCd ? `<div class="cd-text">${Math.ceil(cd)}</div>` : ''}
+    </div>`;
   }
 
   // Spell cooldown icons
