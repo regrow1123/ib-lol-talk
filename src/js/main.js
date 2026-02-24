@@ -233,6 +233,9 @@ function renderFighterStatus(el, fighter, label) {
     }
   }
 
+  const runeInfo = RUNES.find(r => r.id === fighter.rune);
+  const runeHtml = runeInfo ? `<div class="cd-icon rune-icon"><img src="${IMG}/rune/${runeInfo.icon}.png" alt="${runeInfo.name}"></div>` : '';
+
   el.innerHTML = `
     <div class="name-line">
       <img src="${portrait}" alt="${label}">
@@ -246,7 +249,7 @@ function renderFighterStatus(el, fighter, label) {
       <span style="color:var(--energy-yellow)">${Math.round(fighter.resource)}/${fighter.maxResource}</span>
       <span>CS ${fighter.cs}</span>
     </div>
-    <div class="cd-icons">${cdHtml}${spellCdHtml}</div>
+    <div class="cd-icons">${cdHtml}${spellCdHtml}${runeHtml}</div>
   `;
 }
 
