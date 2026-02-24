@@ -1,5 +1,5 @@
 import Anthropic from '@anthropic-ai/sdk';
-import { callLLM } from '../server/llm.js';
+import { callResolve } from '../server/llm.js';
 import { applyActions } from '../server/damage.js';
 import { validateState } from '../server/validate.js';
 import { csToLevel, recalcStats } from '../server/game.js';
@@ -11,7 +11,6 @@ let tipsClient = null;
 async function generateTips(history, gameOver, state) {
   if (!tipsClient) tipsClient = new Anthropic();
 
-  // Build condensed history summary
   const lastMsgs = history.slice(-10).map(h => {
     const role = h.role === 'user' ? '플레이어' : '상대';
     return `${role}: ${typeof h.content === 'string' ? h.content : JSON.stringify(h.content)}`;
@@ -46,14 +45,20 @@ export default async function handler(req, res) {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
-  const { gameState, input, history } = req.body || {};
-  if (!gameState || !input) {
-    return res.status(400).json({ error: 'Missing gameState or input' });
+  const { gameState, playerAction, input, enemyAction, history } = req.body || {};
+  if (!gameState || !enemyAction) {
+    return res.status(400).json({ error: 'Missing gameState or enemyAction' });
+  }
+  if (!playerAction && !input) {
+    return res.status(400).json({ error: 'Missing playerAction or input' });
   }
 
+  const isFreeText = !playerAction && !!input;
+  const playerIntent = playerAction || input;
+
   try {
-    // 1. Call LLM
-    const llmResult = await callLLM(gameState, input, history || []);
+    // 1. Call LLM (resolve)
+    const llmResult = await callResolve(gameState, playerIntent, enemyAction, isFreeText, history || []);
 
     // 2. Deep copy state
     const state = JSON.parse(JSON.stringify(gameState));
@@ -86,12 +91,10 @@ export default async function handler(req, res) {
       state.enemy.level = enemyNewLevel;
       state.enemy.skillPoints += pointsGained;
       recalcStats(state.enemy, champId);
-
-      // Apply enemy skillup from LLM (or auto-choose)
       applyEnemySkillUp(state.enemy, llmResult.enemySkillUp, champId);
     }
 
-    // Also handle enemy skillup if they had pending points (not from level-up this turn)
+    // Also handle enemy skillup if they had pending points
     if (state.enemy.skillPoints > 0 && llmResult.enemySkillUp) {
       applyEnemySkillUp(state.enemy, llmResult.enemySkillUp, champId);
     }
@@ -126,7 +129,6 @@ export default async function handler(req, res) {
       state,
       narrative: llmResult.narrative || '',
       aiChat: llmResult.aiChat || '',
-      suggestions: llmResult.suggestions || [],
       levelUp,
       gameOver,
       tips,
@@ -146,13 +148,11 @@ function applyEnemySkillUp(enemy, skillKey, champId) {
 
   const maxRank = skill.maxRank || 5;
 
-  // R unlock level check
   if (skillKey === 'R' && skill.unlockLevel) {
     if (!skill.unlockLevel.includes(enemy.level)) return;
   }
 
   if (enemy.skillLevels[skillKey] >= maxRank) {
-    // Already maxed, auto-choose another skill
     autoSkillUp(enemy, champId);
     return;
   }
@@ -163,7 +163,6 @@ function applyEnemySkillUp(enemy, skillKey, champId) {
 
 function autoSkillUp(enemy, champId) {
   const champ = loadChampion(champId);
-  // Priority: Q > W > E
   for (const key of ['Q', 'W', 'E']) {
     const skill = champ.skills[key];
     const maxRank = skill.maxRank || 5;

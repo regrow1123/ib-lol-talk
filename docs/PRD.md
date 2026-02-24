@@ -28,20 +28,38 @@ Client (holds state) → Server (LLM call + damage calc + guardrails) → Client
 
 | Role | Responsibility | Details |
 |------|---------------|---------|
-| **LLM** | Judgment | Intent interpretation, AI behavior, hit/miss, elapsed, distance/blocked, narration, suggestions |
+| **LLM (plan)** | Action generation | Generate player choices (3) + enemy best action (1) based on current state |
+| **LLM (resolve)** | Judgment | Hit/miss, elapsed, distance/blocked, narration, aiChat from confirmed actions |
 | **Server (Damage Engine)** | Numeric calculation | Damage/shield calc from actions (LoL formulas), rune/spell effects, cooldown/resource management |
 | **Server (Guardrails)** | Range validation | HP/resource/cooldown clamping, CS decrease prevention |
-| **Client** | State + UI | Holds full state, sends to server each turn, UI rendering, suggestion filtering |
+| **Client** | State + UI | Holds full state, sends to server each turn, UI rendering, enemy action caching |
 
-### 2.2 Core Principle
+### 2.2 State Machine
 
-**LLM = what happened, Server = how much it hurts**
+```
+setup → skillup → plan → play → resolve → (plan | skillup | gameover)
+```
 
-- LLM: "Q1 hit, followed up with Q2, opponent shielded with W1"
+| Phase | Description |
+|-------|-------------|
+| `setup` | Spell/rune selection |
+| `skillup` | Skill point allocation (no LLM) |
+| `plan` | LLM generates player choices (3) + enemy action (1) |
+| `play` | Player selects a choice or types free text |
+| `resolve` | LLM judges outcome from confirmed player + enemy actions |
+
+**Two LLM calls per turn**: plan (action generation) → resolve (outcome judgment). Enemy action is locked at plan time and cannot change during resolve.
+
+### 2.3 Core Principle
+
+**Plan = what could happen, Resolve = what did happen, Server = how much it hurts**
+
+- Plan LLM: "Player can Q1 poke / farm CS / W1 shield in. Enemy will Q1 poke."
+- Resolve LLM: "Q1 hit, followed up with Q2, opponent shielded with W1"
 - Server: Q1 damage + Q2 damage - W1 shield = actual HP change
 - LLM doesn't know numbers → no specific numbers needed in narration
 
-### 2.3 Non-Fixed Time Model (elapsed)
+### 2.4 Non-Fixed Time Model (elapsed)
 
 Time interval between turns is **not fixed**.
 
@@ -57,7 +75,7 @@ Time interval between turns is **not fixed**.
 
 **Why this approach**: A player's choice could be "poke with Q1" (1 sec) or "farm 3 CS while clearing minions" (10 sec). LLM can't estimate exact seconds reliably, but choosing from 5 tiers is straightforward. Server uses fixed mapping for numeric consistency.
 
-### 2.4 Role Boundaries
+### 2.5 Role Boundaries
 
 | | LLM | Server |
 |---|---|---|
@@ -74,13 +92,14 @@ Time interval between turns is **not fixed**.
 | HP regen | ❌ | ✅ elapsed-based natural regen |
 | Shield | ❌ | ✅ Calc + damage absorption |
 | Narration / comments | ✅ | ❌ |
-| Suggestions | ✅ Generates | ❌ (client filters) |
+| Player choices (plan) | ✅ Generates 3 | ❌ (client displays) |
+| Enemy action (plan) | ✅ Generates best 1 | ❌ (client caches) |
 
-### 2.5 Stateless Server
+### 2.6 Stateless Server
 - Vercel Serverless Functions
 - No state storage — client sends full state each turn
 
-### 2.6 Cost Optimization
+### 2.7 Cost Optimization
 - **Prompt caching**: static (champion data + rules) / dynamic (current state) split → `cache_control`
 - **LLM doesn't calculate numbers**: outputs only actions + state values → saves output tokens
 - **History compression**: last 2 turns verbatim, older turns as 1-line summaries
@@ -115,11 +134,27 @@ Each skill's range defined in `data/champions/{id}.json`. Dynamically injected i
 - distance 300 + AA (range 125) → out of range
 - LLM compares distance with skill range for hit/miss judgment
 
-### 3.3 Turn System
-- **1 turn = 1 player intent** (natural language input)
-- Full combo processed in one turn
-- Opponent also acts in the same turn
-- **No RNG** — intent combinations fully determine outcomes
+### 3.3 Turn System (Plan / Resolve Split)
+
+Each turn consists of two LLM calls:
+
+#### Plan Phase
+1. Server receives current game state
+2. LLM generates:
+   - **3 player action choices** (priority order, best first) — each with `action` description, `skills` used, `target`, and `text` (1st-person casual action declaration)
+   - **1 enemy action** (best action for current state) — same format
+3. Enemy action is **locked** at this point (stored on client)
+4. Player choices displayed as suggestion chips
+
+#### Play Phase
+- Player clicks a choice OR types free text
+- Free text allows any action (not limited to 3 choices)
+
+#### Resolve Phase
+1. Player's chosen/typed action + locked enemy action sent to server
+2. LLM judges outcome: hit/miss, elapsed, distance, narrative, aiChat
+3. Server applies damage engine, level-up, game over checks
+4. **No suggestions generated** — plan phase handles this
 
 #### Auto-scaling Turn Granularity
 | Situation | Processing |
@@ -127,11 +162,10 @@ Each skill's range defined in `data/champions/{id}.json`. Dynamically injected i
 | Both low intensity (farming/waiting) | Summarized (more time passes) |
 | Either high intensity (combat) | Detailed (less time passes) |
 
-#### Interrupt
-- Player low intensity + AI high intensity → LLM handles via narration
-- "Just as you go for the CS, the opponent fires Q1!" style
-- No separate mechanism — LLM naturally expresses in actions and narrative
-- Player's original intent interrupted, AI action takes priority in narration
+#### Key Constraint
+- Enemy action is determined at plan time, not resolve time
+- This prevents the AI from "reacting" to the player's choice after seeing it
+- Creates genuine strategic decision-making
 
 ### 3.4 Resource System
 - Different resource types per champion (energy, mana, resourceless, etc.)
@@ -221,43 +255,41 @@ Each skill's range defined in `data/champions/{id}.json`. Dynamically injected i
 
 ---
 
-## 6. Suggestions
+## 6. Action Choices (Plan Phase)
 
 ### 6.1 Design Principles
-- Suggestions must **reveal the reasoning/rationale/intent** behind the action
-- Players learn laning judgment just by reading suggestions
-- ❌ "Poke with Q1" → ✅ "Opponent Q is on cooldown, poke with Q1 now"
-- **Written in player's first-person casual voice** (action declaration, not third-person advice)
+- Choices are generated by the **plan LLM call**, not the resolve call
+- Each choice must **reveal the reasoning/rationale/intent** behind the action
+- Players learn laning judgment just by reading choices
+- **Written in player's first-person casual voice** (action declaration)
   - ✅ "상대 Q 쿨 돌았으니 Q1 꽂아볼까"
-  - ❌ "Q1으로 견제하세요" / "Q1을 사용하여 견제합니다"
+  - ❌ "Q1으로 견제하세요"
 - No emoji
 
-### 6.2 Tag System
-Each suggestion has two tags:
-
+### 6.2 Plan Output Format
 ```json
-{"requires": "Q", "ifLevelUp": null, "text": "상대 Q 쿨타임이니까 Q1으로 견제"}
-{"requires": null, "ifLevelUp": "W", "text": "새로 배운 W1 쉴드 걸고 안전하게 진입"}
-{"requires": null, "ifLevelUp": null, "text": "AA로 CS만 먹기"}
+{
+  "playerActions": [
+    {"action": "Q1 poke", "skills": ["Q1"], "target": "enemy", "text": "상대 Q 쿨 돌았으니 Q1 꽂아볼까"},
+    {"action": "CS farm", "skills": [], "target": null, "text": "미니언 뒤에서 안전하게 CS 챙기자"},
+    {"action": "W1 shield in", "skills": ["W1"], "target": "self", "text": "W1 쉴드 걸고 접근해볼까"}
+  ],
+  "enemyAction": {"action": "Q1 poke", "skills": ["Q1"], "target": "player", "text": "음파 한 발 꽂아줄까"}
+}
 ```
 
-| Tag | Meaning | Usage |
-|-----|---------|-------|
-| `requires` | This skill must be available (learned + off cooldown) to execute | Client filters |
-| `ifLevelUp` | Only shown when player levels up this specific skill | Post-skillup filtering |
+### 6.3 Generation Rules
+- **3 player choices**, priority order (best first)
+- **1 enemy action** — best action for current state (not 3 to pick from)
+- `text`: 1st-person casual Korean action declaration with reasoning
+- `skills`: list of skills involved (for client-side availability display)
+- `requires`: primary skill key needed (for filtering), null if none
+- Enemy action locked at plan time — cannot change during resolve
 
-### 6.3 LLM Generation Rules
-- Generate **5-7** suggestions per turn
-- Each includes `requires` and `ifLevelUp` tags
-- `requires`: skill name if needed for execution, null otherwise
-- `ifLevelUp`: if level-up is included this turn, generate suggestions for each learnable skill with corresponding tag. General suggestions use null.
-- **Suggestion text includes action reasoning** (cooldown punish, HP advantage, distance, minion state, resource management, etc.)
-- Output in priority order (best first)
-
-### 6.4 Client Filtering
-1. **Normal turn**: only `ifLevelUp: null` → filter by `requires` (learned + off cooldown) → max 3
-2. **Level-up turn**: match `ifLevelUp` with chosen skill + `ifLevelUp: null` → `requires` filter → max 3
-- Post-skillup: re-filter stored suggestions → **no additional API call**
+### 6.4 Client Display
+- All 3 player choices shown as suggestion chips (no additional filtering)
+- Player can also type free text instead of clicking a choice
+- Free text goes through resolve with intent interpretation
 
 ---
 
@@ -281,8 +313,21 @@ Each suggestion has two tags:
 
 ---
 
-## 8. LLM Response Format
+## 8. LLM Response Formats
 
+### 8.1 Plan Response
+```json
+{
+  "playerActions": [
+    {"action": "Q1 poke", "skills": ["Q1"], "target": "enemy", "requires": "Q", "text": "상대 Q 쿨 돌았으니 Q1 꽂아볼까"},
+    {"action": "CS farm", "skills": [], "target": null, "requires": null, "text": "미니언 뒤에서 안전하게 CS 챙기자"},
+    {"action": "W1 shield in", "skills": ["W1"], "target": "self", "requires": "W", "text": "W1 쉴드 걸고 접근해볼까"}
+  ],
+  "enemyAction": {"action": "Q1 poke", "skills": ["Q1"], "target": "player", "text": "음파 한 발 꽂아줄까"}
+}
+```
+
+### 8.2 Resolve Response
 ```json
 {
   "narrative": "Combat narration 1-2 sentences (Korean)",
@@ -296,12 +341,7 @@ Each suggestion has two tags:
   "blocked": false,
   "cs": {"player": 2, "enemy": 1},
   "minions": {"player": {"melee": 2, "ranged": 3}, "enemy": {"melee": 1, "ranged": 2}},
-  "enemySkillUp": null,
-  "suggestions": [
-    {"requires": "Q", "ifLevelUp": null, "text": "상대 Q 쿨타임이니까 Q1으로 견제"},
-    {"requires": null, "ifLevelUp": null, "text": "미니언 뒤에서 안전하게 CS 챙기기"},
-    {"requires": null, "ifLevelUp": "W", "text": "새로 배운 W1 쉴드로 안전하게 진입"}
-  ]
+  "enemySkillUp": null
 }
 ```
 
@@ -360,30 +400,33 @@ Each suggestion has two tags:
   → Skill selection UI (suggestions area)
   → POST /api/skillup
   → Server: validate + update state
-  → Load initial suggestions from champion JSON (per chosen skill)
-  → Filter suggestions → enable input
+  → When skillPoints=0: POST /api/plan → get player choices + enemy action
+  → Cache enemy action, display player choices → enable input
 ```
-- Initial suggestions are pre-defined in `data/champions/{id}.json` per first skill choice (Q/W/E)
-- No LLM call needed for first suggestions
 
-### Normal Turn
+### Normal Turn (Plan → Play → Resolve)
 ```
-[Player Input] "Q1으로 견제"
-  → POST /api/turn (gameState, input, history)
+[Plan] POST /api/plan (gameState, history)
+  → LLM: generate 3 player choices + 1 enemy action
+  → Client: cache enemyAction, display playerActions as chips
+
+[Play] Player clicks choice OR types free text
+
+[Resolve] POST /api/turn (gameState, playerAction|input, enemyAction, history)
   → Server:
-    1. LLM call → actions, elapsed, distance, blocked, cs, ...
-    2. Damage engine: damage/shield/resource consumption from actions
-    3. Elapsed-based cooldown reduction + resource natural recovery + HP regen
+    1. LLM call (resolve) → hit/miss, elapsed, distance, narrative, aiChat
+    2. Damage engine: damage/shield/resource consumption
+    3. Elapsed-based cooldown reduction + resource recovery + HP regen
     4. CS accumulation → level-up check
-    5. Guardrails (HP/resource/cooldown clamping)
-    6. gameOver check (HP 0 / CS 50)
+    5. Guardrails
+    6. gameOver check
   → Client:
     1. narrative → system message
     2. aiChat → opponent chat bubble
     3. state update → status bar render
-    4. suggestions filter → chip buttons (max 3)
-    5. levelUp → skill selection UI (input disabled)
-    6. gameOver → game over overlay
+    4. levelUp → skill selection UI → after skillup → POST /api/plan
+    5. gameOver → game over overlay
+    6. Normal → POST /api/plan → next turn choices
 ```
 
 ### Level-Up (mid-turn)
@@ -391,8 +434,7 @@ Each suggestion has two tags:
 [Turn result includes levelUp]
   → Input disabled, skill selection buttons in suggestions area
   → POST /api/skillup → validate + update state
-  → skillPoints 0 → re-filter stored suggestions → enable input
-  → skillPoints remaining → skill selection UI again
+  → skillPoints 0 → POST /api/plan → new choices for updated state
 ```
 
 ### Game Over
@@ -402,7 +444,7 @@ Each suggestion has two tags:
   → Overlay (win/loss + summary + tips)
   → New Game
 ```
-- **Tips**: LLM analyzes recent combat history → 3 situational tips (specific to what happened this game)
+- **Tips**: LLM analyzes recent combat history → 3 situational tips
 - Tips returned as `tips` array in turn response when `gameOver` is present
 
 ---
@@ -460,7 +502,8 @@ ib-lol-talk/
 │   ├── js/templates.js
 │   └── js/minions.js
 ├── api/
-│   ├── turn.js           # Turn processing (LLM call + damage engine)
+│   ├── plan.js           # Plan phase (LLM: generate player choices + enemy action)
+│   ├── turn.js           # Resolve phase (LLM: judge outcome + damage engine)
 │   └── skillup.js        # Skill level-up (validation only, no LLM)
 ├── server/
 │   ├── llm.js            # LLM API call + JSON parsing + retry
@@ -483,11 +526,18 @@ ib-lol-talk/
 
 ## 14. API Endpoints
 
-### POST /api/turn
-- Input: `{gameState, input, history}`
-- Output: `{state, narrative, aiChat, suggestions, levelUp, gameOver, tips}`
-- `history`: array of past turns. Last 2 as full objects `{input, narrative, aiChat, actions}`, older turns as 1-line summary strings. Used for LLM context.
-- Flow: LLM → actions + elapsed → damage engine + time processing → guardrails → response
+### POST /api/plan
+- Input: `{gameState, history}`
+- Output: `{playerActions: [...], enemyAction: {...}}`
+- Flow: LLM (plan prompt) → 3 player choices + 1 enemy best action
+- Called after: skillup completion, resolve completion (non-gameover)
+
+### POST /api/turn (Resolve)
+- Input: `{gameState, playerAction, enemyAction, history}` (choice click) OR `{gameState, input, enemyAction, history}` (free text)
+- Output: `{state, narrative, aiChat, levelUp, gameOver, tips}`
+- `enemyAction`: locked from plan phase, passed through by client
+- Flow: LLM (resolve prompt) → actions + elapsed → damage engine + time processing → guardrails → response
+- **No suggestions** in output (plan handles action generation)
 
 ### POST /api/skillup
 - Input: `{gameState, skill}`

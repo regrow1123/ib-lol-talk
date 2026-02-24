@@ -1,5 +1,5 @@
 import Anthropic from '@anthropic-ai/sdk';
-import { buildPromptParts } from './prompt.js';
+import { buildResolvePrompt } from './prompt.js';
 
 const MODEL = process.env.LLM_MODEL || 'claude-sonnet-4-6';
 const MAX_RETRIES = 2;
@@ -11,11 +11,13 @@ function getClient() {
 }
 
 /**
- * Call LLM with game state, player input, and history.
- * Returns parsed JSON response.
+ * Call LLM for resolve phase.
+ * playerAction: the chosen action object or free text string
+ * enemyAction: the locked enemy action from plan phase
+ * isFreeText: whether playerAction is free text
  */
-export async function callLLM(gameState, input, history = []) {
-  const { staticPrompt, dynamicPrompt } = buildPromptParts(gameState);
+export async function callResolve(gameState, playerAction, enemyAction, isFreeText, history = []) {
+  const { staticPrompt, dynamicPrompt } = buildResolvePrompt(gameState, playerAction, enemyAction, isFreeText);
 
   const systemMessages = [
     {
@@ -29,7 +31,7 @@ export async function callLLM(gameState, input, history = []) {
     },
   ];
 
-  const userMessages = buildUserMessages(input, history);
+  const userMessages = buildUserMessages(history);
 
   for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
     try {
@@ -40,7 +42,6 @@ export async function callLLM(gameState, input, history = []) {
         messages: userMessages,
       });
 
-      // Check for max_tokens truncation
       if (response.stop_reason === 'max_tokens') {
         console.warn('[LLM] Response truncated (max_tokens)');
         return getFallbackResponse(gameState);
@@ -52,7 +53,6 @@ export async function callLLM(gameState, input, history = []) {
 
       console.warn(`[LLM] JSON parse failed (attempt ${attempt + 1})`);
     } catch (err) {
-      // Don't retry auth/billing errors
       if (err.status === 401 || err.status === 402 || err.status === 403) {
         console.error(`[LLM] Auth error: ${err.status}`);
         return getFallbackResponse(gameState);
@@ -65,7 +65,7 @@ export async function callLLM(gameState, input, history = []) {
   return getFallbackResponse(gameState);
 }
 
-function buildUserMessages(input, history) {
+function buildUserMessages(history) {
   const messages = [];
 
   // Compress older history, keep last 4 messages (2 turns) verbatim
@@ -93,8 +93,8 @@ function buildUserMessages(input, history) {
     messages.push({ role: msg.role, content: msg.content });
   }
 
-  // Current input
-  messages.push({ role: 'user', content: input });
+  // Current request
+  messages.push({ role: 'user', content: '이번 턴 결과를 판정해줘.' });
 
   return messages;
 }
@@ -103,12 +103,10 @@ function buildUserMessages(input, history) {
  * 3-stage JSON extraction
  */
 function extractJSON(text) {
-  // Stage 1: direct parse
   try {
     return JSON.parse(text);
   } catch {}
 
-  // Stage 2: markdown code block
   const codeBlockMatch = text.match(/```(?:json)?\s*\n?([\s\S]*?)\n?```/);
   if (codeBlockMatch) {
     try {
@@ -116,7 +114,6 @@ function extractJSON(text) {
     } catch {}
   }
 
-  // Stage 3: manual brace matching
   const start = text.indexOf('{');
   if (start !== -1) {
     let depth = 0;
@@ -147,10 +144,5 @@ function getFallbackResponse(gameState) {
     cs: { player: 0, enemy: 0 },
     minions: gameState.minions,
     enemySkillUp: null,
-    suggestions: [
-      { requires: null, ifLevelUp: null, text: '안전하게 미니언 뒤에서 CS 챙기기' },
-      { requires: null, ifLevelUp: null, text: '상대 움직임 보면서 거리 유지하기' },
-      { requires: null, ifLevelUp: null, text: '미니언 관리하면서 웨이브 밀기' },
-    ],
   };
 }
