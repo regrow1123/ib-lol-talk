@@ -432,7 +432,7 @@ async function sendAction(playerAction) {
   const loadingMsg = showLoadingBubble();
 
   try {
-    const res = await fetch('/api/turn', {
+    const res = await fetch('/api/resolve', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -477,7 +477,7 @@ async function sendInput() {
   const loadingMsg = showLoadingBubble();
 
   try {
-    const res = await fetch('/api/turn', {
+    const res = await fetch('/api/resolve', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({

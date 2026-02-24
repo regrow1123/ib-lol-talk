@@ -231,13 +231,4 @@ export function buildResolvePrompt(gameState, playerAction, enemyAction, isFreeT
   return { staticPrompt: staticPart, dynamicPrompt: dynamicPart + '\n\n' + actionContext };
 }
 
-// ===== Legacy exports for backward compatibility =====
-
-export function buildPromptParts(gameState) {
-  const champId = gameState.player.champion;
-  const champ = loadChampion(champId);
-  return {
-    staticPrompt: buildSharedRules(champ),
-    dynamicPrompt: buildStateBlock(gameState, champ),
-  };
-}
+// Legacy removed — use buildPlanPrompt / buildResolvePrompt
