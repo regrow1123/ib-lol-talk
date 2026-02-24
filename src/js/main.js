@@ -184,6 +184,10 @@ async function startGame() {
     winner: null,
   };
 
+  // Enemy auto skill-up at game start (top lane Lee Sin: Q first)
+  gameState.enemy.skillLevels.Q = 1;
+  gameState.enemy.skillPoints = 0;
+
   $setup.classList.remove('active');
   $game.classList.add('active');
 
