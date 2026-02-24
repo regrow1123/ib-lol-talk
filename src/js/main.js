@@ -342,7 +342,7 @@ async function doSkillUp(skill) {
 // ===== PLAN =====
 async function callPlan() {
   disableInput();
-  $suggestions.innerHTML = '<span class="suggestion-chip loading">행동 계획 중...</span>';
+  $suggestions.innerHTML = '<span class="suggestion-chip loading">추천 행동 생성 중...</span>';
 
   try {
     const res = await fetch('/api/plan', {
