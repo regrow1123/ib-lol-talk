@@ -81,6 +81,13 @@ html, body {
   -webkit-tap-highlight-color: transparent;
 }
 .btn-primary:disabled { opacity: 0.4; cursor: not-allowed; }
+.btn-secondary {
+  padding: 12px 40px; border: 1px solid #ddd; border-radius: 8px;
+  background: #fff; color: #333; font-size: 15px; font-weight: 600;
+  cursor: pointer; transition: opacity 0.15s;
+  -webkit-tap-highlight-color: transparent;
+}
+.gameover-buttons { display: flex; gap: 12px; justify-content: center; }
 
 /* ===== STATUS BAR ===== */
 #status-bar {

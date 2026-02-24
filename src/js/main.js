@@ -49,6 +49,7 @@ const $overlay = document.getElementById('gameover-overlay');
 const $gameoverTitle = document.getElementById('gameover-title');
 const $gameoverSummary = document.getElementById('gameover-summary');
 const $restartBtn = document.getElementById('restart-btn');
+const $reviewBtn = document.getElementById('review-btn');
 
 // ===== INIT =====
 let championList = [];
@@ -129,6 +130,10 @@ function renderSetup() {
 
   $startBtn.addEventListener('click', startGame);
   $restartBtn.addEventListener('click', () => { location.reload(); });
+  $reviewBtn.addEventListener('click', () => {
+    $overlay.classList.add('hidden');
+    $chatArea.scrollTop = 0;
+  });
 }
 
 function checkReady() { updateStartBtn(); }
