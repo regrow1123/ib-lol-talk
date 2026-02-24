@@ -143,6 +143,5 @@ function getFallbackResponse(gameState) {
     blocked: gameState.blocked,
     cs: { player: 0, enemy: 0 },
     minions: gameState.minions,
-    enemySkillUp: null,
   };
 }

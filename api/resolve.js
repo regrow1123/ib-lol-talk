@@ -84,19 +84,17 @@ export default async function handler(req, res) {
       levelUp = { newLevel: playerNewLevel, who: 'player' };
     }
 
-    // Enemy level-up
+    // Enemy level-up + auto skill-up
     const enemyNewLevel = csToLevel(state.enemy.cs);
     if (enemyNewLevel > state.enemy.level) {
       const pointsGained = enemyNewLevel - state.enemy.level;
       state.enemy.level = enemyNewLevel;
       state.enemy.skillPoints += pointsGained;
       recalcStats(state.enemy, champId);
-      applyEnemySkillUp(state.enemy, llmResult.enemySkillUp, champId);
     }
-
-    // Also handle enemy skillup if they had pending points
-    if (state.enemy.skillPoints > 0 && llmResult.enemySkillUp) {
-      applyEnemySkillUp(state.enemy, llmResult.enemySkillUp, champId);
+    // Always auto skill-up if enemy has points
+    if (state.enemy.skillPoints > 0) {
+      applyEnemySkillUp(state.enemy, champId);
     }
 
     // 6. Game over check
@@ -139,37 +137,45 @@ export default async function handler(req, res) {
   }
 }
 
-function applyEnemySkillUp(enemy, skillKey, champId) {
-  if (!skillKey || enemy.skillPoints <= 0) return;
+// Top lane Lee Sin skill order: Q > E > W, R at 6/11/16
+const ENEMY_SKILL_ORDER = [
+  'Q', 'E', 'W', 'Q', 'Q', 'R',  // Lv1-6
+  'Q', 'E', 'Q', 'E', 'R',        // Lv7-11
+  'E', 'E', 'W', 'W', 'R',        // Lv12-16
+  'W', 'W',                         // Lv17-18
+];
+
+function applyEnemySkillUp(enemy, champId) {
+  if (enemy.skillPoints <= 0) return;
 
   const champ = loadChampion(champId);
-  const skill = champ.skills[skillKey];
-  if (!skill) return;
+  const totalLeveled = Object.values(enemy.skillLevels).reduce((a, b) => a + b, 0);
 
-  const maxRank = skill.maxRank || 5;
+  while (enemy.skillPoints > 0) {
+    const nextSkill = ENEMY_SKILL_ORDER[totalLeveled + (Object.values(enemy.skillLevels).reduce((a, b) => a + b, 0) - totalLeveled)];
+    let key = nextSkill;
 
-  if (skillKey === 'R' && skill.unlockLevel) {
-    if (!skill.unlockLevel.includes(enemy.level)) return;
-  }
+    // Fallback if order exhausted or skill maxed
+    if (!key) key = ['Q', 'E', 'W'].find(k => enemy.skillLevels[k] < (champ.skills[k]?.maxRank || 5));
+    if (!key) break;
 
-  if (enemy.skillLevels[skillKey] >= maxRank) {
-    autoSkillUp(enemy, champId);
-    return;
-  }
-
-  enemy.skillLevels[skillKey]++;
-  enemy.skillPoints--;
-}
-
-function autoSkillUp(enemy, champId) {
-  const champ = loadChampion(champId);
-  for (const key of ['Q', 'W', 'E']) {
     const skill = champ.skills[key];
-    const maxRank = skill.maxRank || 5;
-    if (enemy.skillLevels[key] < maxRank) {
-      enemy.skillLevels[key]++;
-      enemy.skillPoints--;
-      return;
+    if (!skill) break;
+
+    // R unlock check
+    if (key === 'R' && skill.unlockLevel && !skill.unlockLevel.includes(enemy.level)) {
+      // Can't learn R yet, pick next priority basic skill
+      key = ['Q', 'E', 'W'].find(k => enemy.skillLevels[k] < (champ.skills[k]?.maxRank || 5));
+      if (!key) break;
     }
+
+    const maxRank = champ.skills[key]?.maxRank || (key === 'R' ? 3 : 5);
+    if (enemy.skillLevels[key] >= maxRank) {
+      key = ['Q', 'E', 'W'].find(k => enemy.skillLevels[k] < (champ.skills[k]?.maxRank || 5));
+      if (!key) break;
+    }
+
+    enemy.skillLevels[key]++;
+    enemy.skillPoints--;
   }
 }

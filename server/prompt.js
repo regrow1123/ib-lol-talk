@@ -49,7 +49,7 @@ elapsed (턴 시간 규모):
 
 숫자 금지: 피해량·HP 수치를 narrative/aiChat에 절대 쓰지 마. 서버가 계산함.
 CS: 이번 턴 추가량만 (누적 아님). 레벨업 테이블: 4→Lv2, 10→Lv3, 18→Lv4, 27→Lv5, 37→Lv6, 48→Lv7.
-적 SP: skillPoints > 0이면 반드시 enemySkillUp 선택.`;
+적 스킬업: 서버가 자동 처리 (프롬프트에서 결정 불필요).`;
 
 // ===== Plan prompt =====
 
@@ -72,7 +72,6 @@ JSON만 출력:
     {"skills":["W1"],"target":"self","requires":"W","text":"행동+근거"}
   ],
   "enemyAction": {"skills":["Q1"],"target":"player","text":"행동+근거"},
-  "enemySkillUp": null
 }`;
 
   return { staticPrompt, dynamicPrompt: stateBlock(gameState, champ) };
@@ -103,7 +102,6 @@ JSON만 출력:
   "blocked": bool,
   "cs": {"player":0,"enemy":0},
   "minions": {"player":{"melee":3,"ranged":3},"enemy":{"melee":3,"ranged":3}},
-  "enemySkillUp": null
 }`;
 
   const state = stateBlock(gameState, champ);

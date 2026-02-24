@@ -69,7 +69,6 @@ export default async function handler(req, res) {
     return res.status(200).json({
       playerActions: result.playerActions,
       enemyAction: result.enemyAction,
-      enemySkillUp: result.enemySkillUp || null,
     });
   } catch (err) {
     console.error('[plan]', err);
@@ -132,6 +131,5 @@ function getFallbackPlan() {
       { action: 'wave manage', skills: [], target: null, requires: null, text: '미니언 관리하면서 웨이브 밀기' },
     ],
     enemyAction: { action: 'CS farm', skills: [], target: null, text: 'CS 좀 먹어야지' },
-    enemySkillUp: null,
   };
 }

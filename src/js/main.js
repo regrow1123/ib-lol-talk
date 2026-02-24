@@ -357,11 +357,6 @@ async function callPlan() {
     pendingEnemyAction = data.enemyAction;
     currentPlayerActions = data.playerActions || [];
 
-    // Handle enemy skillup from plan
-    if (data.enemySkillUp && gameState.enemy.skillPoints > 0) {
-      // Store for resolve to handle
-    }
-
     // Display player choices
     renderPlayerActions(currentPlayerActions);
     gameState.phase = 'play';
