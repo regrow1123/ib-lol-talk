@@ -137,23 +137,16 @@ export default async function handler(req, res) {
   }
 }
 
-// Top lane Lee Sin skill order: Q > E > W, R at 6/11/16
-const ENEMY_SKILL_ORDER = [
-  'Q', 'E', 'W', 'Q', 'Q', 'R',  // Lv1-6
-  'Q', 'E', 'Q', 'E', 'R',        // Lv7-11
-  'E', 'E', 'W', 'W', 'R',        // Lv12-16
-  'W', 'W',                         // Lv17-18
-];
-
 function applyEnemySkillUp(enemy, champId) {
   if (enemy.skillPoints <= 0) return;
 
   const champ = loadChampion(champId);
+  const skillOrder = champ.enemySkillOrder || ['Q','W','E','Q','Q','R'];
   const totalLeveled = Object.values(enemy.skillLevels).reduce((a, b) => a + b, 0);
 
   while (enemy.skillPoints > 0) {
-    const nextSkill = ENEMY_SKILL_ORDER[totalLeveled + (Object.values(enemy.skillLevels).reduce((a, b) => a + b, 0) - totalLeveled)];
-    let key = nextSkill;
+    const idx = totalLeveled + (Object.values(enemy.skillLevels).reduce((a, b) => a + b, 0) - totalLeveled);
+    let key = skillOrder[idx];
 
     // Fallback if order exhausted or skill maxed
     if (!key) key = ['Q', 'E', 'W'].find(k => enemy.skillLevels[k] < (champ.skills[k]?.maxRank || 5));
