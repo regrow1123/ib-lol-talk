@@ -56,7 +56,7 @@ function processAction(state, action) {
 
   // Parse skill key and phase: "Q1" -> key="Q", phase=0; "Q2" -> key="Q", phase=1
   // "AA" -> auto attack; "R" -> key="R", phase=0
-  if (skill === 'AA') {
+  if (skill === 'AA' || skill === '기본공격') {
     if (hit && defender) {
       const rawDmg = attacker.ad;
       applyDamage(defender, rawDmg, 'physical');
@@ -64,7 +64,8 @@ function processAction(state, action) {
     return;
   }
 
-  const { key, phase } = parseSkill(skill);
+  const champData = loadChampion(attacker.champion);
+  const { key, phase } = parseSkill(skill, champData);
   if (!key) return;
 
   // Validate: skill must be learned
@@ -107,13 +108,28 @@ function processAction(state, action) {
   }
 }
 
-function parseSkill(skill) {
-  // "Q1" -> {key:"Q", phase:0}, "Q2" -> {key:"Q", phase:1}, "R" -> {key:"R", phase:0}
+function parseSkill(skill, champData) {
+  // Try code format first: "Q1" -> {key:"Q", phase:0}
   const match = skill.match(/^([QWER])(\d)?$/);
-  if (!match) return { key: null, phase: 0 };
-  const key = match[1];
-  const num = match[2] ? parseInt(match[2]) : 1;
-  return { key, phase: num - 1 };
+  if (match) {
+    const key = match[1];
+    const num = match[2] ? parseInt(match[2]) : 1;
+    return { key, phase: num - 1 };
+  }
+
+  // Try skill name: "음파" -> {key:"Q", phase:0}, "공명타" -> {key:"Q", phase:1}
+  if (champData) {
+    for (const [k, s] of Object.entries(champData.skills)) {
+      const names = Array.isArray(s.name) ? s.name : [s.name];
+      for (let i = 0; i < names.length; i++) {
+        if (skill === names[i] || skill.includes(names[i])) {
+          return { key: k, phase: i };
+        }
+      }
+    }
+  }
+
+  return { key: null, phase: 0 };
 }
 
 function calculateSkillEffect(attacker, defender, skillData, key, phase, rank) {

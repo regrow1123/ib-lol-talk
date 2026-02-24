@@ -48,7 +48,7 @@ E HP${e.hp}/${e.maxHp} 기력${e.resource}/${e.maxResource} Lv${e.level} CS${e.c
 
 const GAME_RULES = `## 우리 게임 규칙 (LoL 지식은 이미 있으니 게임 특수 규칙만)
 
-스킬 표기: actions JSON에서는 Q1/Q2/W1/W2/E1/E2/R/AA 코드 사용. narrative/aiChat에서는 스킬 이름(음파, 공명타격 등) 자유 사용.
+스킬 표기: 모든 곳에서 스킬 이름 사용 (음파, 공명타격, 방호, 철갑, 폭풍, 쇠약, 용의 분노, 기본공격).
 recast: 1단계(음파/방호/폭풍) 적중 후 같은 턴에 2단계(공명타격/철갑/쇠약) 연계 가능. 쿨다운은 1단계 사용 시 시작.
 
 elapsed (턴 시간 규모):
@@ -75,11 +75,11 @@ ${GAME_RULES}
 JSON만 출력:
 {
   "playerActions": [
-    {"skills":["Q1"],"target":"enemy","requires":"Q","text":"행동+근거"},
+    {"skills":["음파"],"target":"enemy","requires":"Q","text":"행동+근거"},
     {"skills":[],"target":null,"requires":null,"text":"행동+근거"},
-    {"skills":["W1"],"target":"self","requires":"W","text":"행동+근거"}
+    {"skills":["방호"],"target":"self","requires":"W","text":"행동+근거"}
   ],
-  "enemyAction": {"skills":["Q1"],"target":"player","text":"행동+근거"},
+  "enemyAction": {"skills":["음파"],"target":"player","text":"행동+근거"},
 }`;
 
   return { staticPrompt, dynamicPrompt: stateBlock(gameState, champ) };
@@ -104,7 +104,7 @@ JSON만 출력:
 {
   "narrative": "나레이션",
   "aiChat": "적 올챗",
-  "actions": [{"who":"player"|"enemy","skill":"Q1","target":"enemy","hit":true}],
+  "actions": [{"who":"player"|"enemy","skill":"음파"|"공명타격"|"방호"|"철갑"|"폭풍"|"쇠약"|"용의 분노"|"기본공격","target":"enemy","hit":true}],
   "elapsed": "short",
   "distance": 숫자,
   "blocked": bool,
