@@ -111,13 +111,13 @@ JSON만 출력:
   let actionCtx;
   if (isFreeText) {
     actionCtx = `플레이어 입력: "${playerAction}"
-적 확정: ${JSON.stringify(enemyAction)}
+적 확정 행동: ${enemyAction.text} (스킬: ${enemyAction.skills?.join('+') || 'none'})
 플레이어 의도를 해석해서 적 행동과 함께 판정해. 입력이 행동이 아니어도 적 행동은 실행됨.`;
   } else {
-    actionCtx = `플레이어: ${JSON.stringify(playerAction)}
-적: ${JSON.stringify(enemyAction)}
+    actionCtx = `플레이어 선택: ${playerAction.text} (스킬: ${playerAction.skills?.join('+') || 'none'})
+적 확정 행동: ${enemyAction.text} (스킬: ${enemyAction.skills?.join('+') || 'none'})
 동시 실행. 결과 판정해.`;
   }
 
-  return { staticPrompt, dynamicPrompt: state + '\n\n' + actionCtx };
+  return { staticPrompt, dynamicPrompt: state, actionContext: actionCtx };
 }

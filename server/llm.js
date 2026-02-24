@@ -17,7 +17,7 @@ function getClient() {
  * isFreeText: whether playerAction is free text
  */
 export async function callResolve(gameState, playerAction, enemyAction, isFreeText, history = []) {
-  const { staticPrompt, dynamicPrompt } = buildResolvePrompt(gameState, playerAction, enemyAction, isFreeText);
+  const { staticPrompt, dynamicPrompt, actionContext } = buildResolvePrompt(gameState, playerAction, enemyAction, isFreeText);
 
   const systemMessages = [
     {
@@ -31,7 +31,7 @@ export async function callResolve(gameState, playerAction, enemyAction, isFreeTe
     },
   ];
 
-  const userMessages = buildUserMessages(history);
+  const userMessages = buildUserMessages(history, actionContext);
 
   for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
     try {
@@ -65,7 +65,7 @@ export async function callResolve(gameState, playerAction, enemyAction, isFreeTe
   return getFallbackResponse(gameState);
 }
 
-function buildUserMessages(history) {
+function buildUserMessages(history, actionContext) {
   const messages = [];
 
   // Compress older history, keep last 4 messages (2 turns) verbatim
@@ -93,8 +93,8 @@ function buildUserMessages(history) {
     messages.push({ role: msg.role, content: msg.content });
   }
 
-  // Current request
-  messages.push({ role: 'user', content: '이번 턴 결과를 판정해줘.' });
+  // Current turn action context as user message
+  messages.push({ role: 'user', content: actionContext });
 
   return messages;
 }
