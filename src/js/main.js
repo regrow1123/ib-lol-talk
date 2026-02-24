@@ -373,12 +373,36 @@ async function callPlan() {
   }
 }
 
+// Build skill name → key map from champion data for display
+function buildSkillNameMap() {
+  const map = {};
+  if (!championData?.skills) return map;
+  for (const [key, skill] of Object.entries(championData.skills)) {
+    const names = Array.isArray(skill.name) ? skill.name : [skill.name];
+    names.forEach((n, i) => {
+      map[n] = key + (names.length > 1 ? (i + 1) : '');
+    });
+  }
+  return map;
+}
+
+function addSkillKeys(text) {
+  const map = buildSkillNameMap();
+  let result = text;
+  // Sort by name length descending to avoid partial matches
+  const sorted = Object.entries(map).sort((a, b) => b[0].length - a[0].length);
+  for (const [name, code] of sorted) {
+    result = result.replaceAll(name, `${name}(${code})`);
+  }
+  return result;
+}
+
 function renderPlayerActions(actions) {
   if (!actions || actions.length === 0) {
     $suggestions.innerHTML = '<span class="suggestion-chip" data-idx="0" data-text="CS 챙기기">CS 챙기기</span>';
   } else {
     $suggestions.innerHTML = actions.map((a, i) =>
-      `<span class="suggestion-chip" data-idx="${i}" data-text="${escapeHtml(a.text)}">${escapeHtml(a.text)}</span>`
+      `<span class="suggestion-chip" data-idx="${i}" data-text="${escapeHtml(a.text)}">${escapeHtml(addSkillKeys(a.text))}</span>`
     ).join('');
   }
 
