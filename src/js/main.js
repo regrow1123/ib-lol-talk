@@ -246,6 +246,7 @@ function renderFighterStatus(el, fighter, label) {
       <img src="${portrait}" alt="${label}">
       <span>${label}</span>
       <span style="font-size:11px;color:#b2bec3">Lv${fighter.level}</span>
+      ${runeInfo ? `<img class="rune-badge" src="${IMG}/rune/${runeInfo.icon}.png" alt="${runeInfo.name}">` : ''}
     </div>
     <div class="hp-bar"><div class="hp-fill" style="width:${hpPct}%;background:${hpColor}"></div></div>
     <div class="resource-bar"><div class="resource-fill" style="width:${Math.max(0, (fighter.resource / fighter.maxResource) * 100)}%"></div></div>
@@ -254,7 +255,7 @@ function renderFighterStatus(el, fighter, label) {
       <span style="color:var(--energy-yellow)">${Math.round(fighter.resource)}/${fighter.maxResource}</span>
       <span>CS ${fighter.cs}</span>
     </div>
-    <div class="cd-icons">${cdHtml}${spellCdHtml}${runeHtml}</div>
+    <div class="cd-icons">${cdHtml}${spellCdHtml}</div>
   `;
 }
 
