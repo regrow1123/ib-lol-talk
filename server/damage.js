@@ -71,7 +71,6 @@ function processAction(state, action) {
   // Validate: skill must be learned
   if (!attacker.skillLevels[key] || attacker.skillLevels[key] <= 0) return;
 
-  const champData = loadChampion(attacker.champion);
   const skillData = champData.skills[key];
   if (!skillData) return;
 
