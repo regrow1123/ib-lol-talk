@@ -2,15 +2,23 @@ import { loadChampion } from './champions.js';
 
 // ===== Helpers =====
 
+function skillName(k, champ) {
+  const s = champ.skills[k];
+  if (!s) return k;
+  const n = Array.isArray(s.name) ? s.name[0] : s.name;
+  return `${n}(${k})`;
+}
+
 function fmtSkills(fighter, champ) {
   return ['Q', 'W', 'E', 'R'].map(k => {
     const lv = fighter.skillLevels[k];
     const cd = fighter.cooldowns[k];
     const cost = champ.skills[k]?.cost?.[0] || 0;
-    if (!lv) return `${k}✗`;
-    if (cd > 0) return `${k}Lv${lv}[쿨${Math.round(cd)}s]`;
-    if (cost > fighter.resource) return `${k}Lv${lv}[자원부족]`;
-    return `${k}Lv${lv}✓`;
+    const name = skillName(k, champ);
+    if (!lv) return `${name}✗`;
+    if (cd > 0) return `${name}Lv${lv}[쿨${Math.round(cd)}s]`;
+    if (cost > fighter.resource) return `${name}Lv${lv}[자원부족]`;
+    return `${name}Lv${lv}✓`;
   }).join(' ');
 }
 
@@ -40,8 +48,8 @@ E HP${e.hp}/${e.maxHp} 기력${e.resource}/${e.maxResource} Lv${e.level} CS${e.c
 
 const GAME_RULES = `## 우리 게임 규칙 (LoL 지식은 이미 있으니 게임 특수 규칙만)
 
-표기: recast 스킬은 반드시 Q1/Q2, W1/W2, E1/E2로 표기. 절대 Q만 쓰지 말 것. R은 단일.
-쿨: 1단계 사용 시 시작. 같은 턴에 1→2단계 연계 가능.
+스킬 표기: actions JSON에서는 Q1/Q2/W1/W2/E1/E2/R/AA 코드 사용. narrative/aiChat에서는 스킬 이름(음파, 공명타격 등) 자유 사용.
+recast: 1단계(음파/방호/폭풍) 적중 후 같은 턴에 2단계(공명타격/철갑/쇠약) 연계 가능. 쿨다운은 1단계 사용 시 시작.
 
 elapsed (턴 시간 규모):
 - instant(1s) / short(3s) / medium(6s) / long(10s) / very_long(15s)
