@@ -133,6 +133,7 @@ function renderSetup() {
   $reviewBtn.addEventListener('click', () => {
     $overlay.classList.add('hidden');
     $chatArea.scrollTop = 0;
+    $suggestions.innerHTML = '<button class="btn-primary" onclick="location.reload()">새 게임 시작</button>';
   });
 }
 
