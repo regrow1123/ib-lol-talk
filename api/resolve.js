@@ -142,11 +142,9 @@ function applyEnemySkillUp(enemy, champId) {
 
   const champ = loadChampion(champId);
   const skillOrder = champ.enemySkillOrder || ['Q','W','E','Q','Q','R'];
-  const totalLeveled = Object.values(enemy.skillLevels).reduce((a, b) => a + b, 0);
-
   while (enemy.skillPoints > 0) {
-    const idx = totalLeveled + (Object.values(enemy.skillLevels).reduce((a, b) => a + b, 0) - totalLeveled);
-    let key = skillOrder[idx];
+    const totalLeveled = Object.values(enemy.skillLevels).reduce((a, b) => a + b, 0);
+    let key = skillOrder[totalLeveled];
 
     // Fallback if order exhausted or skill maxed
     if (!key) key = ['Q', 'E', 'W'].find(k => enemy.skillLevels[k] < (champ.skills[k]?.maxRank || 5));

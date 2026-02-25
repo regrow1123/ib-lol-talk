@@ -240,7 +240,6 @@ function renderFighterStatus(el, fighter, label) {
   }
 
   const runeInfo = RUNES.find(r => r.id === fighter.rune);
-  const runeHtml = runeInfo ? `<div class="cd-icon rune-icon"><img src="${IMG}/rune/${runeInfo.icon}.png" alt="${runeInfo.name}"></div>` : '';
 
   el.innerHTML = `
     <div class="name-line">
@@ -562,7 +561,7 @@ function handleTurnResult(data, playerText) {
     content: JSON.stringify({
       narrative: data.narrative,
       aiChat: data.aiChat,
-      actions: data.state._lastActions || [],
+      actions: [],
     }),
   });
 
