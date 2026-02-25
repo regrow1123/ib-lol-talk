@@ -118,8 +118,14 @@ export default async function handler(req, res) {
     if (gameOver) {
       try {
         tips = await generateTips(history || [], gameOver, state);
+        console.log('[tips] generated:', tips?.length, 'tips');
       } catch (e) {
-        console.error('[tips]', e);
+        console.error('[tips] error:', e.message || e);
+        tips = [
+          '기력 관리: 스킬 연계 후 패시브 AA 2회로 기력 회복하면 지속 교전력이 올라간다.',
+          'Q1은 미니언에 막히니 빈 틈을 노려서 쏘자. 미니언이 적으면 견제 찬스.',
+          'W1 쉴드로 상대 스킬 데미지를 흡수하면서 교환하면 체력 이득을 볼 수 있다.',
+        ];
       }
     }
 
