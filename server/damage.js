@@ -222,7 +222,7 @@ function recoverResource(state, elapsedSec) {
   for (const side of ['player', 'enemy']) {
     const f = state[side];
     if (f.resourceType === 'energy') {
-      f.resource = Math.min(f.maxResource, f.resource + 50 * elapsedSec);
+      f.resource = Math.min(f.maxResource, f.resource + 10 * elapsedSec);
     }
     // mana recovery can be added here later
   }

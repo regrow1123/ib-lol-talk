@@ -37,7 +37,7 @@ export async function callResolve(gameState, playerAction, enemyAction, isFreeTe
     try {
       const response = await getClient().messages.create({
         model: MODEL,
-        max_tokens: 4096,
+        max_tokens: 1024,
         system: systemMessages,
         messages: userMessages,
       });
