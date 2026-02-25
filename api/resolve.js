@@ -31,13 +31,20 @@ JSON만 출력.`;
 
   const resp = await tipsClient.messages.create({
     model: TIPS_MODEL,
-    max_tokens: 300,
+    max_tokens: 512,
     messages: [{ role: 'user', content: prompt }],
   });
 
   const text = resp.content[0]?.text || '[]';
+  console.log('[tips] raw response:', text.substring(0, 500));
   const match = text.match(/\[[\s\S]*\]/);
-  return match ? JSON.parse(match[0]) : [];
+  if (!match) {
+    console.warn('[tips] no array found in response');
+    return [];
+  }
+  const parsed = JSON.parse(match[0]);
+  console.log('[tips] parsed count:', parsed.length);
+  return parsed;
 }
 
 export default async function handler(req, res) {
