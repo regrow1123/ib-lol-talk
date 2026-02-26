@@ -36,6 +36,24 @@ function fmtShields(f) {
 
 const RUNE_NAME = { conqueror:'정복자', electrocute:'감전', grasp:'착취' };
 
+function champProfile(champ) {
+  const passive = champ.passive;
+  const lines = [`## ${champ.name} 스킬 레퍼런스`,
+    `패시브 [${passive.name}]: ${passive.description}`];
+  for (const k of ['Q','W','E','R']) {
+    const s = champ.skills[k];
+    if (!s) continue;
+    const descs = s.description || [];
+    const specials = s.special ? Object.values(s.special) : [];
+    const name = Array.isArray(s.name) ? s.name.join('/') : s.name;
+    lines.push(`${k} [${name}]: ${descs.join(' ')}${specials.length ? ' | ' + specials.join(' ') : ''}`);
+  }
+  if (champ.tips) {
+    if (champ.tips.combos) lines.push(`콤보: ${champ.tips.combos.join(' / ')}`);
+  }
+  return lines.join('\n');
+}
+
 function stateBlock(state, champ) {
   const p = state.player, e = state.enemy;
   return `거리:${state.distance} 장애물:${state.blocked ? 'O' : 'X'}
@@ -66,11 +84,14 @@ export function buildPlanPrompt(gameState) {
 
   const staticPrompt = `${champ.name} 미러매치 1v1 라인전. 너는 양쪽 전략 플래너.
 
+${champProfile(champ)}
+
 ${GAME_RULES}
 
 ## 출력
 플레이어 행동 3개 (우선순위순) + 적 행동 1개 (최선).
 행동 텍스트: 1인칭 구어체 ("Q1 꽂아볼까", "CS 먹으면서 기다리자"). 근거 포함. 이모지 금지.
+패시브·스킬 시너지를 구체적으로 언급 (예: "연타 패시브로 기력 회복", "Q2 잃은 체력 비례 추가딜").
 
 JSON만 출력:
 {
@@ -92,10 +113,20 @@ export function buildResolvePrompt(gameState, playerAction, enemyAction, isFreeT
 
   const staticPrompt = `${champ.name} 미러매치 1v1 라인전 심판. 양쪽 행동이 정해졌고, 결과를 판정해.
 
+${champProfile(champ)}
+
 ${GAME_RULES}
 
 ## aiChat
-적 챔피언의 올챗. 반말(~했음/~인듯/~ㅋㅋ). 도발·인정·놀림·카운터 설명 자연스럽게. 1~2문장.
+적 챔피언의 올챗. 다이아+ 실력의 자존심 강한 플레이어 성격.
+말투: 반말(~했음/~인듯/~ㅋㅋ), 한국 롤 올챗 문화.
+반드시 이번 턴에 일어난 구체적 스킬/메카닉을 언급:
+- 패시브 활용 여부 ("연타 안 쓰고 Q2 바로 감? 기력 아깝겠다")
+- 스킬 적중/회피 읽기 ("미니언 뒤에 숨는 건 좋은데 E는 안 막히지ㅋ")
+- 상대 실수 지적 ("쿨 다 빠진 상태에서 들어오네")
+- 자기 플레이 자랑 ("Q2 잃은 체력 비례라 지금 들어가면 끝남")
+- 심리전/블러핑 ("다음 턴 점멸 들어간다 조심해")
+1~2문장.
 
 ## narrative
 턴 결과 보고. 묘사·비유 금지, 팩트만. "음파 적중" "회피" "CS 2개 수급" 식으로. 1~3문장.
