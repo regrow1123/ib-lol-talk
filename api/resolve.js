@@ -8,6 +8,18 @@ import { loadChampion } from '../server/champions.js';
 const TIPS_MODEL = process.env.LLM_MODEL || 'claude-sonnet-4-6';
 let tipsClient = null;
 
+const TIPS_SCHEMA = {
+  type: 'object',
+  properties: {
+    tips: {
+      type: 'array',
+      items: { type: 'string' },
+    },
+  },
+  required: ['tips'],
+  additionalProperties: false,
+};
+
 async function generateTips(history, gameOver, state) {
   if (!tipsClient) tipsClient = new Anthropic();
 
@@ -23,28 +35,26 @@ async function generateTips(history, gameOver, state) {
 최근 전투 기록:
 ${lastMsgs}
 
-이번 라인전에서 플레이어가 배울 수 있는 실전 꿀팁 3개를 JSON 배열로 줘.
+이번 라인전에서 플레이어가 배울 수 있는 실전 꿀팁 3개를 줘.
 각 팁은 이번 경기에서 실제로 있었던 상황을 근거로, 구체적이고 실용적으로 써.
-리신 스킬 메카닉, 교전 타이밍, CS 관리 등 다양한 주제로.
-형식: ["팁1","팁2","팁3"]
-JSON만 출력.`;
+리신 스킬 메카닉, 교전 타이밍, CS 관리 등 다양한 주제로.`;
 
   const resp = await tipsClient.messages.create({
     model: TIPS_MODEL,
     max_tokens: 512,
     messages: [{ role: 'user', content: prompt }],
+    output_config: {
+      format: {
+        type: 'json_schema',
+        schema: TIPS_SCHEMA,
+      },
+    },
   });
 
-  const text = resp.content[0]?.text || '[]';
-  console.log('[tips] raw response:', text.substring(0, 500));
-  const match = text.match(/\[[\s\S]*\]/);
-  if (!match) {
-    console.warn('[tips] no array found in response');
-    return [];
-  }
-  const parsed = JSON.parse(match[0]);
-  console.log('[tips] parsed count:', parsed.length);
-  return parsed;
+  const text = resp.content[0]?.text || '{"tips":[]}';
+  const parsed = JSON.parse(text);
+  console.log('[tips] generated:', parsed.tips?.length, 'tips');
+  return parsed.tips || [];
 }
 
 export default async function handler(req, res) {
@@ -99,7 +109,6 @@ export default async function handler(req, res) {
       state.enemy.skillPoints += pointsGained;
       recalcStats(state.enemy, champId);
     }
-    // Always auto skill-up if enemy has points
     if (state.enemy.skillPoints > 0) {
       applyEnemySkillUp(state.enemy, champId);
     }
@@ -125,7 +134,6 @@ export default async function handler(req, res) {
     if (gameOver) {
       try {
         tips = await generateTips(history || [], gameOver, state);
-        console.log('[tips] generated:', tips?.length, 'tips');
       } catch (e) {
         console.error('[tips] error:', e.message || e);
         tips = [
@@ -159,16 +167,13 @@ function applyEnemySkillUp(enemy, champId) {
     const totalLeveled = Object.values(enemy.skillLevels).reduce((a, b) => a + b, 0);
     let key = skillOrder[totalLeveled];
 
-    // Fallback if order exhausted or skill maxed
     if (!key) key = ['Q', 'E', 'W'].find(k => enemy.skillLevels[k] < (champ.skills[k]?.maxRank || 5));
     if (!key) break;
 
     const skill = champ.skills[key];
     if (!skill) break;
 
-    // R unlock check
     if (key === 'R' && skill.unlockLevel && !skill.unlockLevel.includes(enemy.level)) {
-      // Can't learn R yet, pick next priority basic skill
       key = ['Q', 'E', 'W'].find(k => enemy.skillLevels[k] < (champ.skills[k]?.maxRank || 5));
       if (!key) break;
     }
