@@ -93,14 +93,14 @@ ${GAME_RULES}
 행동 텍스트: 1인칭 구어체 ("Q1 꽂아볼까", "CS 먹으면서 기다리자"). 근거 포함. 이모지 금지.
 패시브·스킬 시너지를 구체적으로 언급 (예: "연타 패시브로 기력 회복", "Q2 잃은 체력 비례 추가딜").
 
-JSON만 출력:
+반드시 순수 JSON만 출력. 설명/주석/마크다운 코드블록 없이 { 로 시작해서 } 로 끝나는 JSON만:
 {
   "playerActions": [
     {"skills":["음파"],"target":"enemy","requires":"Q","text":"행동+근거"},
     {"skills":[],"target":null,"requires":null,"text":"행동+근거"},
     {"skills":["방호"],"target":"self","requires":"W","text":"행동+근거"}
   ],
-  "enemyAction": {"skills":["음파"],"target":"player","text":"행동+근거"},
+  "enemyAction": {"skills":["음파"],"target":"player","text":"행동+근거"}
 }`;
 
   return { staticPrompt, dynamicPrompt: stateBlock(gameState, champ) };
@@ -131,16 +131,16 @@ ${GAME_RULES}
 ## narrative
 턴 결과 보고. 묘사·비유 금지, 팩트만. "음파 적중" "회피" "CS 2개 수급" 식으로. 1~3문장.
 
-JSON만 출력:
+반드시 순수 JSON만 출력. 설명/주석/마크다운 코드블록 없이 { 로 시작해서 } 로 끝나는 JSON만:
 {
   "narrative": "나레이션",
   "aiChat": "적 올챗",
-  "actions": [{"who":"player"|"enemy","skill":"음파"|"공명타격"|"방호"|"철갑"|"폭풍"|"쇠약"|"용의 분노"|"기본공격","target":"enemy","hit":true}],
+  "actions": [{"who":"player","skill":"음파","target":"enemy","hit":true}],
   "elapsed": "short",
   "distance": 숫자,
   "blocked": bool,
   "cs": {"player":0,"enemy":0},
-  "minions": {"player":{"melee":3,"ranged":3},"enemy":{"melee":3,"ranged":3}},
+  "minions": {"player":{"melee":3,"ranged":3},"enemy":{"melee":3,"ranged":3}}
 }`;
 
   const state = stateBlock(gameState, champ);
