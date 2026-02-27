@@ -40,7 +40,6 @@ export async function callResolve(gameState, playerAction, enemyAction, isFreeTe
         max_tokens: 1500,
         system: systemMessages,
         messages: userMessages,
-        output: { format: { type: 'json' } },
       });
 
       if (response.stop_reason === 'max_tokens') {
