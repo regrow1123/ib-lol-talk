@@ -10,11 +10,64 @@ function getClient() {
   return client;
 }
 
+const RESOLVE_SCHEMA = {
+  type: 'object',
+  properties: {
+    narrative: { type: 'string' },
+    aiChat: { type: 'string' },
+    actions: {
+      type: 'array',
+      items: {
+        type: 'object',
+        properties: {
+          who: { type: 'string', enum: ['player', 'enemy'] },
+          skill: { type: 'string' },
+          target: { type: 'string' },
+          hit: { type: 'boolean' },
+        },
+        required: ['who', 'skill', 'target', 'hit'],
+        additionalProperties: false,
+      },
+    },
+    elapsed: { type: 'string', enum: ['instant', 'short', 'medium', 'long', 'very_long'] },
+    distance: { type: 'number' },
+    blocked: { type: 'boolean' },
+    cs: {
+      type: 'object',
+      properties: {
+        player: { type: 'number' },
+        enemy: { type: 'number' },
+      },
+      required: ['player', 'enemy'],
+      additionalProperties: false,
+    },
+    minions: {
+      type: 'object',
+      properties: {
+        player: {
+          type: 'object',
+          properties: { melee: { type: 'number' }, ranged: { type: 'number' } },
+          required: ['melee', 'ranged'],
+          additionalProperties: false,
+        },
+        enemy: {
+          type: 'object',
+          properties: { melee: { type: 'number' }, ranged: { type: 'number' } },
+          required: ['melee', 'ranged'],
+          additionalProperties: false,
+        },
+      },
+      required: ['player', 'enemy'],
+      additionalProperties: false,
+    },
+    enemySkillUp: { type: ['string', 'null'] },
+  },
+  required: ['narrative', 'aiChat', 'actions', 'elapsed', 'distance', 'blocked', 'cs', 'minions', 'enemySkillUp'],
+  additionalProperties: false,
+};
+
 /**
  * Call LLM for resolve phase.
- * playerAction: the chosen action object or free text string
- * enemyAction: the locked enemy action from plan phase
- * isFreeText: whether playerAction is free text
  */
 export async function callResolve(gameState, playerAction, enemyAction, isFreeText, history = []) {
   const { staticPrompt, dynamicPrompt, actionContext } = buildResolvePrompt(gameState, playerAction, enemyAction, isFreeText);
@@ -40,6 +93,12 @@ export async function callResolve(gameState, playerAction, enemyAction, isFreeTe
         max_tokens: 1500,
         system: systemMessages,
         messages: userMessages,
+        output_config: {
+          format: {
+            type: 'json_schema',
+            schema: RESOLVE_SCHEMA,
+          },
+        },
       });
 
       if (response.stop_reason === 'max_tokens') {
@@ -48,10 +107,7 @@ export async function callResolve(gameState, playerAction, enemyAction, isFreeTe
       }
 
       const text = response.content[0]?.text || '';
-      const parsed = extractJSON(text);
-      if (parsed) return parsed;
-
-      console.warn(`[LLM] JSON parse failed (attempt ${attempt + 1}), raw:`, text.substring(0, 500));
+      return JSON.parse(text);
     } catch (err) {
       if (err.status === 401 || err.status === 402 || err.status === 403) {
         console.error(`[LLM] Auth error: ${err.status}`);
@@ -68,7 +124,6 @@ export async function callResolve(gameState, playerAction, enemyAction, isFreeTe
 function buildUserMessages(history, actionContext) {
   const messages = [];
 
-  // Compress older history, keep last 4 messages (2 turns) verbatim
   if (history.length > 4) {
     const older = history.slice(0, -4);
     const summary = older
@@ -87,50 +142,14 @@ function buildUserMessages(history, actionContext) {
     }
   }
 
-  // Recent history (last 4 or all if <= 4)
   const recent = history.length > 4 ? history.slice(-4) : history;
   for (const msg of recent) {
     messages.push({ role: msg.role, content: msg.content });
   }
 
-  // Current turn action context as user message
   messages.push({ role: 'user', content: actionContext });
 
   return messages;
-}
-
-/**
- * 3-stage JSON extraction
- */
-function extractJSON(text) {
-  try {
-    return JSON.parse(text);
-  } catch {}
-
-  const codeBlockMatch = text.match(/```(?:json)?\s*\n?([\s\S]*?)\n?```/);
-  if (codeBlockMatch) {
-    try {
-      return JSON.parse(codeBlockMatch[1].trim());
-    } catch {}
-  }
-
-  const start = text.indexOf('{');
-  if (start !== -1) {
-    let depth = 0;
-    for (let i = start; i < text.length; i++) {
-      if (text[i] === '{') depth++;
-      else if (text[i] === '}') {
-        depth--;
-        if (depth === 0) {
-          try {
-            return JSON.parse(text.substring(start, i + 1));
-          } catch { break; }
-        }
-      }
-    }
-  }
-
-  return null;
 }
 
 function getFallbackResponse(gameState) {
@@ -143,5 +162,6 @@ function getFallbackResponse(gameState) {
     blocked: gameState.blocked,
     cs: { player: 0, enemy: 0 },
     minions: gameState.minions,
+    enemySkillUp: null,
   };
 }
