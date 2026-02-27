@@ -33,13 +33,19 @@ export async function callResolve(gameState, playerAction, enemyAction, isFreeTe
 
   const userMessages = buildUserMessages(history, actionContext);
 
+  // Add assistant prefill to force JSON output
+  const messagesWithPrefill = [
+    ...userMessages,
+    { role: 'assistant', content: '{' },
+  ];
+
   for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
     try {
       const response = await getClient().messages.create({
         model: MODEL,
-        max_tokens: 1024,
+        max_tokens: 1500,
         system: systemMessages,
-        messages: userMessages,
+        messages: messagesWithPrefill,
       });
 
       if (response.stop_reason === 'max_tokens') {
@@ -47,11 +53,13 @@ export async function callResolve(gameState, playerAction, enemyAction, isFreeTe
         return getFallbackResponse(gameState);
       }
 
-      const text = response.content[0]?.text || '';
+      // Prepend the '{' we used as prefill
+      const rawText = response.content[0]?.text || '';
+      const text = '{' + rawText;
       const parsed = extractJSON(text);
       if (parsed) return parsed;
 
-      console.warn(`[LLM] JSON parse failed (attempt ${attempt + 1})`);
+      console.warn(`[LLM] JSON parse failed (attempt ${attempt + 1}), raw:`, text.substring(0, 300));
     } catch (err) {
       if (err.status === 401 || err.status === 402 || err.status === 403) {
         console.error(`[LLM] Auth error: ${err.status}`);
