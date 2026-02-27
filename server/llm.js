@@ -1,7 +1,7 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { buildResolvePrompt } from './prompt.js';
 
-const MODEL = process.env.LLM_MODEL || 'claude-sonnet-4-6';
+const MODEL = process.env.LLM_MODEL || 'claude-sonnet-4-5-20250514';
 const MAX_RETRIES = 2;
 
 let client = null;
@@ -33,13 +33,19 @@ export async function callResolve(gameState, playerAction, enemyAction, isFreeTe
 
   const userMessages = buildUserMessages(history, actionContext);
 
+  // Assistant prefill to force JSON output
+  const messagesWithPrefill = [
+    ...userMessages,
+    { role: 'assistant', content: '{' },
+  ];
+
   for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
     try {
       const response = await getClient().messages.create({
         model: MODEL,
         max_tokens: 1500,
         system: systemMessages,
-        messages: userMessages,
+        messages: messagesWithPrefill,
       });
 
       if (response.stop_reason === 'max_tokens') {
@@ -47,7 +53,8 @@ export async function callResolve(gameState, playerAction, enemyAction, isFreeTe
         return getFallbackResponse(gameState);
       }
 
-      const text = response.content[0]?.text || '';
+      // Prepend the '{' we used as prefill
+      const text = '{' + (response.content[0]?.text || '');
       const parsed = extractJSON(text);
       if (parsed) return parsed;
 
