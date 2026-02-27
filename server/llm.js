@@ -1,7 +1,7 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { buildResolvePrompt } from './prompt.js';
 
-const MODEL = process.env.LLM_MODEL || 'claude-sonnet-4-5-20250514';
+const MODEL = process.env.LLM_MODEL || 'claude-3-5-sonnet-20241022';
 const MAX_RETRIES = 2;
 
 let client = null;
